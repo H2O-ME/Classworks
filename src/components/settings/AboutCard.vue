@@ -45,42 +45,6 @@
               作者：<strong>THW</strong>
             </p>
 
-            <div class="d-flex gap-2 flex-wrap mb-6">
-              <v-btn
-                color="red"
-                prepend-icon="mdi-bug"
-                variant="tonal"
-                @click="openReportDialog"
-              >
-                报告问题
-              </v-btn>
-              <v-btn
-                color="primary"
-                href="https://qm.qq.com/q/qNBX4ZZVeg"
-                prepend-icon="mdi-qqchat"
-                target="_blank"
-                variant="tonal"
-              >
-                QQ 群
-              </v-btn>
-              <v-btn
-                href="https://github.com/ClassworksDev/Classworks"
-                prepend-icon="mdi-github"
-                target="_blank"
-                variant="text"
-              >
-                前端
-              </v-btn>
-              <v-btn
-                href="https://github.com/ClassworksDev/ClassworksServer"
-                prepend-icon="mdi-github"
-                target="_blank"
-                variant="text"
-              >
-                后端
-              </v-btn>
-            </div>
-
             <v-btn
               class="mb-4"
               prepend-icon="mdi-package-variant"
