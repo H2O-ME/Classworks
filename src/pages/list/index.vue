@@ -137,7 +137,7 @@
 </template>
 
 <script>
-import dataProvider from "@/utils/dataProvider.js";
+import { getData, setData } from "@/utils/dataProvider.js";
 
 export default {
   data() {
@@ -163,23 +163,23 @@ export default {
   methods: {
     async loadLists() {
       try {
-        let listsInfo = await dataProvider.loadData("classworks-list-info");
+        let listsInfo = await getData("classworks-list-info");
         if (!listsInfo || !Array.isArray(listsInfo)) {
           listsInfo = [];
-          await dataProvider.saveData("classworks-list-info", listsInfo);
+          await setData("classworks-list-info", listsInfo);
         }
         this.lists = listsInfo;
       } catch (error) {
         console.error("Failed to load lists", error);
         this.lists = [];
-        await dataProvider.saveData("classworks-list-info", []);
+        await setData("classworks-list-info", []);
       }
     },
 
     async loadStudentList() {
       try {
         // 从classworks-list-main加载学生列表数据
-        const response = await dataProvider.loadData("classworks-list-main");
+        const response = await getData("classworks-list-main");
         if (response && Array.isArray(response)) {
           this.studentList = response;
         } else {
@@ -202,7 +202,7 @@ export default {
 
       // Add to lists info
       this.lists.push(newList);
-      await dataProvider.saveData("classworks-list-info", this.lists);
+      await setData("classworks-list-info", this.lists);
 
       // 创建列表数据，确保正确的数据结构
       const newListData = [];
@@ -218,7 +218,7 @@ export default {
         });
       }
 
-      await dataProvider.saveData(`classworks-list-${listId}`, newListData);
+      await setData(`classworks-list-${listId}`, newListData);
 
       this.newListName = "";
 
@@ -250,7 +250,7 @@ export default {
         if (listIndex !== -1) {
           this.lists[listIndex].name = this.editListName.trim();
           // 保存更新后的列表信息
-          await dataProvider.saveData("classworks-list-info", this.lists);
+          await setData("classworks-list-info", this.lists);
         }
         // 退出编辑模式
         this.editingListId = null;
@@ -280,7 +280,7 @@ export default {
 
     async deleteList(listId) {
       this.lists = this.lists.filter(list => list.id !== listId);
-      await dataProvider.saveData("classworks-list-info", this.lists);
+      await setData("classworks-list-info", this.lists);
       // We don't need to delete the actual list data as it will just remain unused
     }
   }

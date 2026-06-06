@@ -1,295 +1,90 @@
 <template>
-  <div
-    ref="gridContainer"
-    class="grid-masonry"
-  >
+  <div ref="gridContainer" class="grid-masonry">
     <TransitionGroup name="grid">
       <div
         v-for="item in sortedItems"
         :key="item.key"
         ref="items"
-        :data-key="item.key"
-        :style="{
-          order: item.order,
-        }"
         class="grid-item"
+        :style="{ order: item.order }"
       >
-        <!-- 考试卡片 -->
-        <div
-          v-if="item.type === 'exam'"
-          style="height: 100%"
-        >
-          <concise-exam-card
-            :exam-id="item.data.examId"
-            :content-style="contentStyle"
-            @click="$emit('open-exam-detail', item.data.examId)"
-          />
-        </div>
-
-        <!-- 出勤卡片 -->
         <v-card
-          v-else-if="item.type === 'attendance'"
-          :class="{ 'glow-highlight': highlightedCards[item.key], 'cursor-not-allowed': isEditingDisabled, 'cursor-pointer': !isEditingDisabled }"
+          class="modern-homework-card"
+          elevation="0"
           border
-          class="glow-track"
-          height="100%"
-          @click="handleCardClick('attendance', null)"
-          @mousemove="handleMouseMove"
+          @click="handleCardClick(item.key)"
+          @mousemove="handlePointerMove"
           @touchmove="handleTouchMove"
         >
-          <v-card-title class="d-flex align-center">
+          <div class="card-header-simple">
+            <h3 class="subject-title-simple">{{ item.name }}</h3>
             <v-icon
-              class="mr-2"
-              color="primary"
-              icon="mdi-account-group"
+              :icon="item.type === 'custom' ? 'mdi-card-text-outline' : 'mdi-pencil-outline'"
+              size="18"
+              class="edit-icon"
+              color="medium-emphasis"
             />
-            出勤统计
-          </v-card-title>
-          <v-card-text>
-            <div class="d-flex justify-space-between align-center mb-2">
-              <span>应到/实到</span>
-              <span class="text-h6">
-                {{ item.data.total - item.data.exclude.length }}/{{
-                  item.data.total -
-                    item.data.absent.length -
-                    (!getSetting("display.lateStudentsArePresent")) * item.data.late.length -
-                    item.data.exclude.length
-                }}
-              </span>
-            </div>
-            <v-divider class="mb-2" />
+          </div>
 
-            <div
-              v-if="item.data.absent.length > 0"
-              class="mb-2"
-            >
-              <div class="text-error text-caption mb-1">
-                请假 ({{ item.data.absent.length }})
-              </div>
+          <v-card-text :style="contentStyle" class="card-content-simple">
+            <div class="content-text">
               <div
-                class="d-flex flex-wrap"
-                style="gap: 4px"
+                v-for="(line, lineIndex) in formatContent(item.content)"
+                :key="`${item.key}-${lineIndex}`"
+                class="content-line"
               >
-                <v-chip
-                  v-for="name in item.data.absent"
-                  :key="name"
-                  color="error"
-                  size="x-small"
-                  variant="flat"
-                >
-                  {{ name }}
-                </v-chip>
+                {{ line }}
               </div>
             </div>
-
-            <div
-              v-if="item.data.late.length > 0"
-              class="mb-2"
-            >
-              <div class="text-warning text-caption mb-1">
-                迟到 ({{ item.data.late.length }})
-              </div>
-              <div
-                class="d-flex flex-wrap"
-                style="gap: 4px"
-              >
-                <v-chip
-                  v-for="name in item.data.late"
-                  :key="name"
-                  color="warning"
-                  size="x-small"
-                  variant="flat"
-                >
-                  {{ name }}
-                </v-chip>
-              </div>
-            </div>
-
-            <div
-              v-if="item.data.exclude.length > 0"
-              class="mb-2"
-            >
-              <div class="text-grey text-caption mb-1">
-                不参与 ({{ item.data.exclude.length }})
-              </div>
-              <div
-                class="d-flex flex-wrap"
-                style="gap: 4px"
-              >
-                <v-chip
-                  v-for="name in item.data.exclude"
-                  :key="name"
-                  color="grey"
-                  size="x-small"
-                  variant="flat"
-                >
-                  {{ name }}
-                </v-chip>
-              </div>
-            </div>
-
-            <div
-              v-if="
-                item.data.absent.length === 0 &&
-                  item.data.late.length === 0 &&
-                  item.data.exclude.length === 0
-              "
-              class="text-success text-center mt-2"
-            >
-              全勤
-            </div>
-          </v-card-text>
-        </v-card>
-
-        <!-- 自定义/测试卡片 -->
-        <v-card
-          v-else-if="item.type === 'custom'"
-          :class="{ 'glow-highlight': highlightedCards[item.key], 'cursor-not-allowed': isEditingDisabled, 'cursor-pointer': !isEditingDisabled }"
-          border
-          class="glow-track"
-          height="100%"
-          @click="handleCardClick('dialog', item.key)"
-          @mousemove="handleMouseMove"
-          @touchmove="handleTouchMove"
-        >
-          <v-card-title class="text-primary">
-            <v-icon
-              class="mr-2"
-              icon="mdi-card-text-outline"
-              size="small"
-            />
-            {{ item.name }}
-          </v-card-title>
-          <v-card-text :style="contentStyle">
-            {{ item.content }}
-          </v-card-text>
-        </v-card>
-
-        <!-- 普通作业卡片 -->
-        <v-card
-          v-else
-          :class="{ 'glow-highlight': highlightedCards[item.key], 'cursor-not-allowed': isEditingDisabled, 'cursor-pointer': !isEditingDisabled }"
-          border
-          class="glow-track"
-          height="100%"
-          rounded="xl"
-          @click="handleCardClick('dialog', item.key)"
-          @mousemove="handleMouseMove"
-          @touchmove="handleTouchMove"
-        >
-          <v-card-title>{{ item.name }}</v-card-title>
-          <v-card-text :style="contentStyle">
-            <v-list>
-              <v-list-item
-                v-for="text in splitPoint(item.content)"
-                :key="text"
-              >
-                {{ text }}
-              </v-list-item>
-            </v-list>
           </v-card-text>
         </v-card>
       </div>
     </TransitionGroup>
   </div>
 
-  <!-- 单独显示空科目 -->
-  <div class="empty-subjects mt-4">
-    <!-- 移动端优化视图 -->
-    <div
-      v-if="isMobile"
-      class="d-flex flex-wrap justify-center"
-    >
+  <div class="empty-subjects-modern">
+    <div class="empty-subjects-header">
+      <v-icon icon="mdi-plus-circle-outline" size="20" color="primary" class="mr-2" />
+      <span class="empty-subjects-title">添加更多学科</span>
+    </div>
+
+    <div v-if="isMobile" class="empty-subjects-mobile">
       <v-chip
         v-for="subject in unusedSubjects"
         :key="subject.name"
-        class="ma-1"
+        class="ma-1 modern-empty-chip"
         color="primary"
         variant="tonal"
-        @click="handleCardClick('dialog', subject.name)"
+        size="large"
+        @click="handleCardClick(subject.name)"
       >
-        <v-icon
-          start
-          size="small"
-        >
-          {{ isReadOnlyToken ? 'mdi-cancel' : 'mdi-plus' }}
-        </v-icon>
+        <v-icon start size="small">mdi-plus</v-icon>
         {{ subject.name }}
       </v-chip>
     </div>
 
     <template v-else-if="emptySubjectDisplay === 'button'">
-      <v-btn-group
-        divided
-        variant="tonal"
-      >
-        <v-btn
-          v-for="subject in unusedSubjects"
+      <div class="empty-subjects-buttons-grid">
+        <button
+          v-for="(subject, index) in unusedSubjects"
           :key="subject.name"
-          @click="handleCardClick('dialog', subject.name)"
+          type="button"
+          class="modern-empty-btn"
+          :class="`empty-btn-${index % 5}`"
+          @click="handleCardClick(subject.name)"
         >
-          <v-icon start>
-            {{ isReadOnlyToken ? 'mdi-cancel' : 'mdi-plus' }}
-          </v-icon>
-          {{ subject.name }}
-        </v-btn>
-      </v-btn-group>
+          <v-icon icon="mdi-plus" size="20" class="btn-icon" />
+          <span class="btn-text">{{ subject.name }}</span>
+          <span class="btn-hint">点击添加</span>
+        </button>
+      </div>
     </template>
-    <div
-      v-else
-      class="empty-subjects-grid"
-    >
-      <TransitionGroup name="v-list">
-        <v-card
-          v-for="subject in unusedSubjects"
-          :key="subject.name"
-          border
-          rounded="xl"
-          class="empty-subject-card"
-          @click="handleCardClick('dialog', subject.name)"
-        >
-          <v-card-title class="text-subtitle-1">
-            {{ subject.name }}
-          </v-card-title>
-          <v-card-text class="text-center">
-            <template v-if="isReadOnlyToken">
-              <v-icon
-                color="grey"
-                size="small"
-              >
-                mdi-cancel
-              </v-icon>
-              <div class="text-caption text-grey">
-                当日无作业
-              </div>
-            </template>
-            <template v-else>
-              <v-icon
-                color="grey"
-                size="small"
-              >
-                mdi-plus
-              </v-icon>
-              <div class="text-caption text-grey">
-                点击添加作业
-              </div>
-            </template>
-          </v-card-text>
-        </v-card>
-      </TransitionGroup>
-    </div>
   </div>
 </template>
 
 <script>
-import ConciseExamCard from "@/components/home/ConciseExamCard.vue";
-import {getSetting} from "@/utils/settings.js";
-
 export default {
   name: "HomeworkGrid",
-  components: {
-    ConciseExamCard,
-  },
   props: {
     sortedItems: {
       type: Array,
@@ -315,150 +110,232 @@ export default {
       type: Object,
       default: () => ({}),
     },
-    highlightedCards: {
-      type: Object,
-      default: () => ({}),
-    },
   },
-  emits: ["open-dialog", "open-attendance", "disabled-click", "open-exam-detail"],
-  data() {
-    return {
-      isReadOnlyToken: false,
-    }
-  },
-  computed: {
-    settings() {
-      return settings
-    }
-  },
-  async mounted() {
-    /* eslint-disable no-undef */
+  emits: ["open-dialog", "disabled-click"],
+  mounted() {
     this.resizeObserver = new ResizeObserver(() => {
       this.resizeAllGridItems();
     });
-    /* eslint-enable no-undef */
 
-    // Observe the grid container for width changes
     if (this.$refs.gridContainer) {
       this.resizeObserver.observe(this.$refs.gridContainer);
     }
 
-    // Initial resize
     this.$nextTick(() => {
       this.resizeAllGridItems();
-      // Observe all items
-      if (this.$refs.items) {
-        this.$refs.items.forEach(item => {
-          // Observe the content inside the grid item
-          if (item.firstElementChild) {
-            this.resizeObserver.observe(item.firstElementChild);
-          }
-        });
-      }
+      this.observeItems();
     });
-
-    // 检查只读状态
-    await this.checkReadOnlyStatus();
   },
   updated() {
-    // When items change, re-observe new items
     this.$nextTick(() => {
       this.resizeAllGridItems();
-      if (this.$refs.items) {
-        this.$refs.items.forEach(item => {
-          if (item.firstElementChild) {
-            this.resizeObserver.observe(item.firstElementChild);
-          }
-        });
-      }
+      this.observeItems();
     });
   },
   beforeUnmount() {
-    if (this.resizeObserver) {
-      this.resizeObserver.disconnect();
-    }
+    this.resizeObserver?.disconnect();
   },
   methods: {
-    getSetting,
-    async checkReadOnlyStatus() {
-      // 本地模式，默认非只读
-      this.isReadOnlyToken = false;
-    },
-    resizeGridItem(item) {
-      const grid = this.$refs.gridContainer;
-      if (!grid) return;
-
-      const rowHeight = parseInt(window.getComputedStyle(grid).getPropertyValue('grid-auto-rows'));
-      const rowGap = parseInt(window.getComputedStyle(grid).getPropertyValue('gap'));
-
-      // Find the content element (v-card or div)
-      const content = item.firstElementChild;
-      if (!content) return;
-
-      // Calculate required span
-      // We use scrollHeight to get the full height of content
-      // Add a small buffer to prevent scrollbars
-      const contentHeight = content.getBoundingClientRect().height;
-
-      // Formula: span = ceil((contentHeight + gap) / (rowHeight + gap))
-      const rowSpan = Math.ceil((contentHeight + rowGap) / (rowHeight + rowGap));
-
-      item.style.gridRowEnd = `span ${rowSpan}`;
-    },
-    resizeAllGridItems() {
-      const items = this.$refs.items;
-      if (items) {
-        items.forEach(item => this.resizeGridItem(item));
-      }
-    },
-    handleCardClick(type, key) {
-      if (this.isEditingDisabled) {
-        this.$emit('disabled-click');
+    observeItems() {
+      if (!this.$refs.items) {
         return;
       }
 
-      if (type === 'attendance') {
-        this.$emit('open-attendance');
-      } else if (type === 'dialog') {
-        this.$emit('open-dialog', key);
+      this.$refs.items.forEach((item) => {
+        if (item.firstElementChild) {
+          this.resizeObserver.observe(item.firstElementChild);
+        }
+      });
+    },
+    resizeGridItem(item) {
+      const grid = this.$refs.gridContainer;
+      const content = item?.firstElementChild;
+      if (!grid || !content) {
+        return;
       }
+
+      const rowHeight = parseInt(window.getComputedStyle(grid).getPropertyValue("grid-auto-rows"), 10);
+      const rowGap = parseInt(window.getComputedStyle(grid).getPropertyValue("gap"), 10);
+      const contentHeight = content.getBoundingClientRect().height;
+      const rowSpan = Math.ceil((contentHeight + rowGap) / (rowHeight + rowGap));
+      item.style.gridRowEnd = `span ${rowSpan}`;
     },
-    splitPoint(content) {
-      return content.split("\n").filter((text) => text.trim());
+    resizeAllGridItems() {
+      this.$refs.items?.forEach((item) => this.resizeGridItem(item));
     },
-    handleMouseMove(e) {
-      const card = e.currentTarget;
+    handleCardClick(key) {
+      if (this.isEditingDisabled) {
+        this.$emit("disabled-click");
+        return;
+      }
+
+      this.$emit("open-dialog", key);
+    },
+    formatContent(content) {
+      if (!content) {
+        return [];
+      }
+
+      return content
+        .split("\n")
+        .map((line) => line.trim())
+        .filter(Boolean);
+    },
+    handlePointerMove(event) {
+      const card = event.currentTarget;
       const rect = card.getBoundingClientRect();
-      const x = ((e.clientX - rect.left) / rect.width) * 100;
-      const y = ((e.clientY - rect.top) / rect.height) * 100;
+      const x = ((event.clientX - rect.left) / rect.width) * 100;
+      const y = ((event.clientY - rect.top) / rect.height) * 100;
       card.style.setProperty("--x", `${x}%`);
       card.style.setProperty("--y", `${y}%`);
     },
-    handleTouchMove(e) {
-      if (e.touches.length === 1) {
-        const touch = e.touches[0];
-        const card = e.currentTarget;
-        const rect = card.getBoundingClientRect();
-        const x = ((touch.clientX - rect.left) / rect.width) * 100;
-        const y = ((touch.clientY - rect.top) / rect.height) * 100;
-        card.style.setProperty("--x", `${x}%`);
-        card.style.setProperty("--y", `${y}%`);
+    handleTouchMove(event) {
+      if (event.touches.length !== 1) {
+        return;
       }
+
+      const touch = event.touches[0];
+      const card = event.currentTarget;
+      const rect = card.getBoundingClientRect();
+      const x = ((touch.clientX - rect.left) / rect.width) * 100;
+      const y = ((touch.clientY - rect.top) / rect.height) * 100;
+      card.style.setProperty("--x", `${x}%`);
+      card.style.setProperty("--y", `${y}%`);
     },
   },
 };
 </script>
 
 <style scoped>
-.cursor-not-allowed {
-  cursor: not-allowed !important;
+.modern-homework-card {
+  border-radius: 16px !important;
+  transition: all 0.3s ease !important;
+  overflow: hidden;
+  background: rgb(var(--v-theme-surface)) !important;
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.12) !important;
 }
 
-.cursor-pointer {
+.modern-homework-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15), 0 2px 8px rgba(0, 0, 0, 0.08) !important;
+  border-color: rgba(var(--v-theme-primary), 0.25) !important;
+}
+
+.card-header-simple {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px 8px;
+}
+
+.subject-title-simple {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.edit-icon {
+  opacity: 0.5;
+  transition: all 0.25s ease;
+}
+
+.modern-homework-card:hover .edit-icon {
+  opacity: 1;
+  color: rgb(var(--v-theme-primary)) !important;
+}
+
+.card-content-simple {
+  padding: 8px 16px 12px !important;
+}
+
+.content-text {
+  line-height: 1.65;
+}
+
+.content-line {
+  padding: 4px 0;
+  color: rgba(var(--v-theme-on-surface), 0.9);
+  word-break: break-word;
+}
+
+.content-line:not(:last-child) {
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.06);
+}
+
+.empty-subjects-modern {
+  margin-top: 32px;
+  padding-top: 24px;
+  border-top: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+}
+
+.empty-subjects-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 20px;
+  padding: 0 8px;
+}
+
+.empty-subjects-title {
+  font-size: 1.125rem;
+  font-weight: 700;
+}
+
+.empty-subjects-buttons-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 12px;
+  padding: 0 8px;
+}
+
+.modern-empty-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 18px 16px;
+  background: rgba(var(--v-theme-surface), 0.92);
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.1);
+  border-radius: 14px;
   cursor: pointer;
+  transition: all 0.25s ease;
 }
 
-.v-card.cursor-not-allowed:hover {
-  transform: none !important;
+.modern-empty-btn:hover {
+  transform: translateY(-3px);
+  border-color: rgba(var(--v-theme-primary), 0.3);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.1);
+}
+
+.btn-icon {
+  color: rgb(var(--v-theme-primary));
+}
+
+.btn-text {
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.btn-hint {
+  font-size: 0.75rem;
+  color: rgb(var(--v-theme-medium-emphasis));
+}
+
+.empty-subjects-mobile {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 8px;
+}
+
+@media (max-width: 768px) {
+  .card-header-simple {
+    padding: 10px 14px 6px;
+  }
+
+  .card-content-simple {
+    padding: 6px 14px 10px !important;
+  }
 }
 </style>

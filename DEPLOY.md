@@ -119,11 +119,11 @@ pnpm preview
 - ✅ **智能失效**：每次新部署后自动清除旧缓存
 - ✅ **全球加速**：内容分发到离用户最近的节点
 
-## 🗄️ Blob 存储（EdgeOne Pages Blob）
+## 💾 本地存储（IndexedDB）
 
 ### 概述
 
-项目已从本地 IndexedDB 存储迁移至 **EdgeOne Pages Blob** 云端分布式对象存储，实现数据持久化和多设备同步。
+项目使用浏览器本地 **IndexedDB** 存储所有数据，通过 `idb` 库进行操作，实现完全离线可用的数据持久化。
 
 ### 架构设计
 
@@ -137,19 +137,13 @@ pnpm preview
 │  dataProvider.js (统一数据访问层)                             │
 │        │                                                    │
 │        ▼                                                    │
-│  kvBlobProvider.js (Blob 存储封装层)                         │
+│  kvLocalProvider.js (IndexedDB 操作层)                       │
 │        │                                                    │
 │        ▼                                                    │
-│  /api/kv/* (HTTP API)                                       │
+│  idb 库 (openDB)                                            │
 │        │                                                    │
 │        ▼                                                    │
-│  cloud-functions/api/kv.js (Edge Functions)                  │
-│        │                                                    │
-│        ▼                                                    │
-│  @edgeone/pages-blob SDK                                    │
-│        │                                                    │
-│        ▼                                                    │
-│  EdgeOne Pages Blob Storage (云端分布式存储)                   │
+│  浏览器 IndexedDB (ClassworksDB)                             │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -157,50 +151,18 @@ pnpm preview
 
 | 文件 | 用途 | 说明 |
 |------|------|------|
-| `cloud-functions/api/kv.js` | Edge Functions API | 提供 CRUD RESTful 接口 |
-| `src/utils/providers/kvBlobProvider.js` | 前端封装层 | 封装 HTTP 调用，兼容原接口 |
-| `src/utils/dataProvider.js` | 数据访问层 | 统一接口，切换存储后端 |
+| `src/utils/providers/kvLocalProvider.js` | IndexedDB 操作封装 | 提供 CRUD 接口 |
+| `src/utils/dataProvider.js` | 数据访问层 | 统一接口，业务代码调用 |
 
-### API 接口文档
+### 数据库结构
 
-#### 基础路径: `/api/kv`
+- **数据库名称**: `ClassworksDB`
+- **版本**: `2`
+- **Object Store**: `kv`（主存储）、`system`（系统设置，预留）
 
-| 方法 | 路径 | 说明 | 请求体 |
-|------|------|------|--------|
-| GET | `/api/kv/{key}` | 读取数据 | - |
-| POST | `/api/kv/{key}` | 写入/更新数据 | `{ data, onlyIfNew? }` |
-| DELETE | `/api/kv/{key}` | 删除数据 | - |
-| GET | `/api/kv/keys?prefix=xxx&limit=100` | 列举键名 | - |
+### 数据模型
 
-#### 示例请求
-
-```javascript
-// 读取数据
-const response = await fetch('/api/kv/classworks-data-2026-05-14');
-const result = await response.json();
-// { success: true, data: { homework: {...}, attendance: {...} } }
-
-// 写入数据
-await fetch('/api/kv/classworks-data-2026-05-14', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({
-    data: {
-      homework: { "语文": "完成练习册", "数学": "P23-25" },
-      attendance: { absent: [], late: [], exclude: [] }
-    }
-  })
-});
-
-// 列举键名
-const response = await fetch('/api/kv/keys?prefix=classworks-data-&limit=30');
-const result = await response.json();
-// { success: true, data: [...], total_rows: N, cursor: null }
-```
-
-### 数据模型（与 IndexedDB 兼容）
-
-所有数据保持原有格式，无缝迁移：
+项目使用的全部存储 key：
 
 | Key 格式 | 说明 | 数据类型 |
 |----------|------|----------|
@@ -214,21 +176,13 @@ const result = await response.json();
 | `es_list` | 考试日程索引 | Array |
 | `es_{timestamp}` | 考试详情 | Object |
 
-### 一致性模式
+### 特性优势
 
-Blob 存储提供两种一致性模式：
-
-| 模式 | 读取行为 | 适用场景 | 当前使用 |
-|------|---------|---------|---------|
-| **最终一致**（默认） | 边缘缓存，速度最快 | 内容展示、缓存读取 | 列表查询 |
-| **强一致** | 直读主存储，保证最新 | 计数器、状态机 | 单条读写 |
-
-当前 API 使用 **强一致模式** (`consistency: "strong"`) 确保数据实时性。
-
-### 容量限制
-
-- ✅ **免费版**: 1GB 存储空间
-- ⚠️ **注意**: Blob 面向运行时数据，不建议作为公网图床使用
+- ✅ **完全离线可用** - 无需网络连接
+- ✅ **高性能读写** - 本地存储，毫秒级响应
+- ✅ **数据隐私** - 数据不离开用户设备
+- ✅ **无容量限制** - 取决于浏览器配额（通常 >100MB）
+- ✅ **自动序列化** - JSON 序列化/反序列化处理
 
 ## 🚢 部署方式
 

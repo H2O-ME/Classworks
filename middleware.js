@@ -1,10 +1,10 @@
 // EdgeOne Pages Middleware for SPA routing
 // Handles fallback to index.html for client-side routing
 
-// Middleware only runs on routes that don't match static files or API routes
+// Middleware only runs on routes that don't match static files
 export const config = {
   matcher: [
-    '/((?!assets|pwa|sounds|sw\\.js|sw-cache-manager\\.js|favicon|.*\\.png|.*\\.jpg|.*\\.svg|.*\\.ico|.*\\.woff|.*\\.woff2|.*\\.ttf|.*\\.mp3|.*\\.webmanifest|.*\\.js|.*\\.css|api).*)'
+    '/((?!assets|pwa|sounds|sw\\.js|sw-cache-manager\\.js|favicon|.*\\.png|.*\\.jpg|.*\\.svg|.*\\.ico|.*\\.woff|.*\\.woff2|.*\\.ttf|.*\\.mp3|.*\\.webmanifest|.*\\.js|.*\\.css).*)'
   ],
 };
 

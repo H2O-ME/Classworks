@@ -347,7 +347,7 @@
 </template>
 
 <script>
-import dataProvider from "@/utils/dataProvider.js";
+import { getData, setData } from "@/utils/dataProvider.js";
 
 export default {
   data() {
@@ -400,7 +400,7 @@ export default {
   methods: {
     async loadListInfo() {
       try {
-        const listsInfo = await dataProvider.loadData("classworks-list-info");
+        const listsInfo = await getData("classworks-list-info");
         if (listsInfo && Array.isArray(listsInfo)) {
           this.list = listsInfo.find((list) => list.id === this.listId);
         }
@@ -431,14 +431,14 @@ export default {
 
       try {
         // 加载所有列表信息
-        const listsInfo = await dataProvider.loadData("classworks-list-info");
+        const listsInfo = await getData("classworks-list-info");
         if (listsInfo && Array.isArray(listsInfo)) {
           // 找到当前列表并更新名称
           const listIndex = listsInfo.findIndex((list) => list.id === this.listId);
           if (listIndex !== -1) {
             listsInfo[listIndex].name = this.newListName.trim();
             // 保存更新后的列表信息
-            await dataProvider.saveData("classworks-list-info", listsInfo);
+            await setData("classworks-list-info", listsInfo);
             // 更新当前页面的列表信息
             this.list.name = this.newListName.trim();
           }
@@ -451,12 +451,12 @@ export default {
     },
     async loadItems() {
       try {
-        let items = await dataProvider.loadData(
+        let items = await getData(
           `classworks-list-${this.listId}`
         );
         if (!items || !Array.isArray(items)) {
           items = [];
-          await dataProvider.saveData(`classworks-list-${this.listId}`, items);
+          await setData(`classworks-list-${this.listId}`, items);
         }
 
         // 确保每个项目都有正确的数据结构
@@ -606,7 +606,7 @@ export default {
     },
     async saveItems() {
       try {
-        await dataProvider.saveData(
+        await setData(
           `classworks-list-${this.listId}`,
           this.items
         );
