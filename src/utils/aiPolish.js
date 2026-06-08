@@ -68,29 +68,11 @@ export async function polishGeographyHomework(content, secret, options = {}) {
   }
 
   const apiKey = await resolveAiKey(secret);
-  let response;
-
-  try {
-    response = await fetch(AI_POLISH_PROXY_ENDPOINT, {
-      method: "POST",
-      signal: options.signal,
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        apiKey,
-        model: AI_POLISH_MODEL,
-        content: source,
-        systemPrompt: SYSTEM_PROMPT,
-        userPrompt: `${USER_PROMPT_PREFIX}${source}`,
-      }),
-    });
-  } catch (error) {
-    if (error?.name === "AbortError") {
-      throw new Error("AI_POLISH_ABORTED");
-    }
-    throw error;
-  }
+  const response = await raceAiPolishRequests({
+    apiKey,
+    source,
+    signal: options.signal,
+  });
 
   const data = await parseJsonSafely(response);
 
@@ -114,6 +96,87 @@ export async function polishGeographyHomework(content, secret, options = {}) {
   }
 
   return normalizeGeographyHomework(polished);
+}
+
+async function raceAiPolishRequests({ apiKey, source, signal }) {
+  const controllers = [new AbortController(), new AbortController()];
+  const cleanup = linkAbortSignal(signal, controllers);
+
+  try {
+    return await Promise.any(
+      controllers.map((controller, index) =>
+        sendAiPolishRequest({
+          apiKey,
+          source,
+          signal: controller.signal,
+          requestTag: index + 1,
+        }).then((response) => {
+          controllers.forEach((item) => {
+            if (item !== controller) {
+              item.abort();
+            }
+          });
+          return response;
+        })
+      )
+    );
+  } catch (error) {
+    if (signal?.aborted) {
+      throw new Error("AI_POLISH_ABORTED");
+    }
+
+    const firstError = error?.errors?.find(Boolean) || error;
+    if (firstError?.name === "AbortError") {
+      throw new Error("AI_POLISH_ABORTED");
+    }
+    throw firstError;
+  } finally {
+    cleanup();
+    controllers.forEach((controller) => controller.abort());
+  }
+}
+
+async function sendAiPolishRequest({ apiKey, source, signal, requestTag }) {
+  try {
+    return await fetch(AI_POLISH_PROXY_ENDPOINT, {
+      method: "POST",
+      signal,
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        apiKey,
+        model: AI_POLISH_MODEL,
+        content: source,
+        systemPrompt: SYSTEM_PROMPT,
+        userPrompt: `${USER_PROMPT_PREFIX}${source}`,
+        requestTag,
+      }),
+    });
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      throw error;
+    }
+    throw error;
+  }
+}
+
+function linkAbortSignal(parentSignal, controllers) {
+  if (!parentSignal) {
+    return () => {};
+  }
+
+  if (parentSignal.aborted) {
+    controllers.forEach((controller) => controller.abort());
+    return () => {};
+  }
+
+  const abortHandler = () => {
+    controllers.forEach((controller) => controller.abort());
+  };
+
+  parentSignal.addEventListener("abort", abortHandler, { once: true });
+  return () => parentSignal.removeEventListener("abort", abortHandler);
 }
 
 async function resolveAiKey(secret) {

@@ -79,7 +79,7 @@
                     <span class="subject-tool-icon subject-tool-icon-ai">
                       <v-icon :icon="polishing ? 'mdi-loading' : 'mdi-auto-fix'" size="17" />
                     </span>
-                    <span>{{ polishing ? (polishRetryReady ? "整理" : copy.polishing) : "AI 整理" }}</span>
+                    <span>{{ polishing ? (polishRetryReady ? "重试" : copy.polishing) : "AI 整理" }}</span>
                   </span>
                 </button>
 
