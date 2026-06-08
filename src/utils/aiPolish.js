@@ -1,4 +1,4 @@
-import forge from "node-forge";
+﻿import forge from "node-forge";
 
 const AI_POLISH_PROXY_ENDPOINT = "/api/ai-polish";
 const AI_POLISH_MODEL = "GPT-OSS-120B";
@@ -61,26 +61,36 @@ export function clearSavedAiSecret() {
   localStorage.removeItem(AI_KEY_STORAGE);
 }
 
-export async function polishGeographyHomework(content, secret) {
+export async function polishGeographyHomework(content, secret, options = {}) {
   const source = normalizeInput(content);
   if (!source) {
     throw new Error("EMPTY_CONTENT");
   }
 
   const apiKey = await resolveAiKey(secret);
-  const response = await fetch(AI_POLISH_PROXY_ENDPOINT, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      apiKey,
-      model: AI_POLISH_MODEL,
-      content: source,
-      systemPrompt: SYSTEM_PROMPT,
-      userPrompt: `${USER_PROMPT_PREFIX}${source}`,
-    }),
-  });
+  let response;
+
+  try {
+    response = await fetch(AI_POLISH_PROXY_ENDPOINT, {
+      method: "POST",
+      signal: options.signal,
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        apiKey,
+        model: AI_POLISH_MODEL,
+        content: source,
+        systemPrompt: SYSTEM_PROMPT,
+        userPrompt: `${USER_PROMPT_PREFIX}${source}`,
+      }),
+    });
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      throw new Error("AI_POLISH_ABORTED");
+    }
+    throw error;
+  }
 
   const data = await parseJsonSafely(response);
 

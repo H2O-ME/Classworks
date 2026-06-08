@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <v-dialog
     v-model="dialogVisible"
     :fullscreen="isMobile"
@@ -72,14 +72,14 @@
                   type="button"
                   class="subject-tool subject-tool-ai"
                   :class="{ 'subject-tool-active': polishing }"
-                  :disabled="polishing"
+                  :disabled="polishing && !polishRetryReady"
                   @click="polishWithAi"
                 >
                   <span class="subject-tool-main">
                     <span class="subject-tool-icon subject-tool-icon-ai">
                       <v-icon :icon="polishing ? 'mdi-loading' : 'mdi-auto-fix'" size="17" />
                     </span>
-                    <span>{{ polishing ? copy.polishing : "AI 润色" }}</span>
+                    <span>{{ polishing ? (polishRetryReady ? "整理" : copy.polishing) : "AI 整理" }}</span>
                   </span>
                 </button>
 
@@ -109,27 +109,31 @@
             </div>
           </div>
 
-          <section v-if="pendingPolishContent" class="diff-panel">
-            <div class="diff-body">
-              <div
-                v-for="(row, index) in polishDiffRows"
-                :key="`${row.type}-${index}-${row.text}`"
-                class="diff-row"
-                :class="`diff-row-${row.type}`"
-              >
-                <span class="diff-mark">{{ row.mark }}</span>
-                <span class="diff-text">{{ row.text || " " }}</span>
+          <section v-if="pendingPolishContent" class="diff-column">
+            <div class="diff-panel">
+              <div class="diff-body">
+                <div
+                  v-for="(row, index) in polishDiffRows"
+                  :key="`${row.type}-${index}-${row.text}`"
+                  class="diff-row"
+                  :class="`diff-row-${row.type}`"
+                >
+                  <span class="diff-mark">{{ row.mark }}</span>
+                  <span class="diff-text">{{ row.text || " " }}</span>
+                </div>
               </div>
             </div>
 
-            <div class="diff-header diff-header-below">
-              <div>
-                <div class="diff-title">{{ copy.diffTitle }}</div>
-                <div class="diff-subtitle">{{ copy.diffSubtitle }}</div>
-              </div>
-              <div class="diff-actions">
-                <button type="button" class="diff-btn diff-btn-ghost" @click="rejectPolish">{{ copy.reject }}</button>
-                <button type="button" class="diff-btn diff-btn-solid" @click="applyPolish">{{ copy.apply }}</button>
+            <div class="diff-review-bar">
+              <div class="diff-header diff-header-below">
+                <div>
+                  <div class="diff-title">{{ copy.diffTitle }}</div>
+                  <div class="diff-subtitle">{{ copy.diffSubtitle }}</div>
+                </div>
+                <div class="diff-actions">
+                  <button type="button" class="diff-btn diff-btn-ghost" @click="rejectPolish">{{ copy.reject }}</button>
+                  <button type="button" class="diff-btn diff-btn-solid" @click="applyPolish">{{ copy.apply }}</button>
+                </div>
               </div>
             </div>
           </section>
@@ -169,6 +173,10 @@ export default {
       ...createEditorState(),
       saving: false,
       polishing: false,
+      polishRetryReady: false,
+      polishRunId: 0,
+      polishAbortController: null,
+      polishRetryTimer: null,
       contentUpdated: false,
       quickTexts: QUICK_INSERT_TEXTS,
       copy: EDITOR_COPY,
@@ -207,6 +215,8 @@ export default {
       if (value) {
         Object.assign(this, createEditorState(this.initialContent, this.initialOptions, this.showGeoHdrToggle));
         this.$nextTick(() => this.$refs.inputRef?.focus());
+      } else {
+        this.cancelActivePolish();
       }
     },
     content() {
@@ -253,6 +263,29 @@ export default {
     clearPolishError() {
       this.polishError = "";
     },
+    resetPolishRetryState() {
+      this.polishRetryReady = false;
+      if (this.polishRetryTimer) {
+        window.clearTimeout(this.polishRetryTimer);
+        this.polishRetryTimer = null;
+      }
+    },
+    armPolishRetry(runId) {
+      this.resetPolishRetryState();
+      this.polishRetryTimer = window.setTimeout(() => {
+        if (this.polishing && this.polishRunId === runId) {
+          this.polishRetryReady = true;
+        }
+      }, 4000);
+    },
+    cancelActivePolish() {
+      this.resetPolishRetryState();
+      if (this.polishAbortController) {
+        this.polishAbortController.abort();
+        this.polishAbortController = null;
+      }
+      this.polishing = false;
+    },
     rejectPolish() {
       this.pendingPolishContent = "";
     },
@@ -282,31 +315,51 @@ export default {
       }
     },
     async polishWithAi() {
-      if (this.polishing) return;
+      if (this.polishing && !this.polishRetryReady) return;
       if (!this.content.trim()) {
         this.polishError = getAiPolishError(new Error("EMPTY_CONTENT"));
         return;
       }
 
+      if (this.polishing && this.polishRetryReady) {
+        this.cancelActivePolish();
+      }
+
+      const runId = this.polishRunId + 1;
+      const abortController = new AbortController();
+
+      this.polishRunId = runId;
+      this.polishAbortController = abortController;
       this.polishing = true;
       this.polishError = "";
       this.pendingPolishContent = "";
+      this.armPolishRetry(runId);
 
       try {
-        const polished = await requestAiPolish(this.content, this.copy.askSecret);
+        const polished = await requestAiPolish(this.content, this.copy.askSecret, {
+          signal: abortController.signal,
+        });
+        if (this.polishRunId !== runId) return;
         if (polished === this.content.trim()) {
           this.polishError = "AI 没有发现需要修改的内容。";
           return;
         }
         this.pendingPolishContent = polished;
       } catch (error) {
+        if (this.polishRunId !== runId) return;
+        if (error?.name === "AbortError" || error?.message === "AI_POLISH_ABORTED") {
+          return;
+        }
         this.polishError = getAiPolishError(error);
         console.warn("AI 润色失败:", error);
       } finally {
-        this.polishing = false;
+        if (this.polishRunId === runId) {
+          this.resetPolishRetryState();
+          this.polishing = false;
+          this.polishAbortController = null;
+        }
       }
-    },
-    insertAtCursor(text) {
+    },    insertAtCursor(text) {
       const textarea = this.$refs.inputRef;
       this.clearPolishError();
       this.pendingPolishContent = "";
@@ -388,6 +441,7 @@ export default {
 
 .editor-review-layout-active {
   grid-template-columns: minmax(0, 1fr) minmax(390px, 0.78fr);
+  align-items: stretch;
 }
 
 .editor-column {
@@ -702,16 +756,31 @@ export default {
   color: #ffb7b7;
 }
 
+.diff-column {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 10px;
+}
+
 .diff-panel {
   display: flex;
   min-width: 0;
   height: clamp(300px, 45vh, 430px);
   overflow: hidden;
   flex-direction: column;
+  justify-content: stretch;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 9px;
   background: #181818;
   animation: diff-panel-in 0.22s ease-out;
+}
+
+.diff-review-bar {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 9px;
+  overflow: hidden;
+  background: #181818;
 }
 
 .diff-header {
@@ -725,7 +794,7 @@ export default {
 }
 
 .diff-header-below {
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 0;
   border-bottom: 0;
 }
 
@@ -769,6 +838,7 @@ export default {
 
 .diff-body {
   flex: 1 1 auto;
+  min-height: 0;
   overflow: auto;
   padding: 8px 0;
   font-family: Consolas, "SFMono-Regular", "Microsoft YaHei UI", monospace;
@@ -942,3 +1012,4 @@ export default {
 
 }
 </style>
+

@@ -20,9 +20,9 @@ export async function ensureAiSecret(promptText) {
   return normalizedSecret;
 }
 
-export async function requestAiPolish(content, promptText) {
+export async function requestAiPolish(content, promptText, options = {}) {
   const secret = await ensureAiSecret(promptText);
-  return polishGeographyHomework(content, secret);
+  return polishGeographyHomework(content, secret, options);
 }
 
 export function getAiPolishError(error) {
