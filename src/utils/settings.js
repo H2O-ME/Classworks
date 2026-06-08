@@ -11,62 +11,77 @@ const defaultConfig = {
   },
   display: {
     forceDesktopMode: false,
-    lateStudentsArePresent: false,
     showQuickTools: true,
-    showRandomPickerButton: false,
-    showFullscreenButton: true,
-    showAntiScreenBurnCard: false,
-    showTestCardButton: false,
+    fontSizeLevel: 0,
   },
   font: {
     family: "system",
   },
-  message: {
-    maxActiveMessages: 50,
-  },
-  server: {
-    classNumber: "1",
-    provider: "kv-local",
-    kvToken: "",
-  },
   theme: {
     mode: "dark",
-  },
-  device: {
-    uuid: "",
   },
 };
 
 let userConfig = loadUserConfig();
 
-function isPlainObject(value) {
-  return value && typeof value === "object" && !Array.isArray(value);
-}
+export function getSetting(key) {
+  const keys = key.split(".");
+  let value = getMergedConfig();
 
-function deepMerge(base, override) {
-  const result = {...base};
-
-  for (const [key, value] of Object.entries(override || {})) {
-    if (isPlainObject(value) && isPlainObject(base[key])) {
-      result[key] = deepMerge(base[key], value);
+  for (const part of keys) {
+    if (value && typeof value === "object" && part in value) {
+      value = value[part];
     } else {
-      result[key] = value;
+      return undefined;
     }
   }
 
-  return result;
+  return cloneValue(value);
 }
 
-function cloneValue(value) {
-  if (Array.isArray(value)) {
-    return value.map(cloneValue);
+export function setSetting(key, value) {
+  const keys = key.split(".");
+  let config = userConfig;
+
+  for (let index = 0; index < keys.length - 1; index += 1) {
+    const currentKey = keys[index];
+    if (!isPlainObject(config[currentKey])) {
+      config[currentKey] = {};
+    }
+    config = config[currentKey];
   }
-  if (isPlainObject(value)) {
-    return Object.fromEntries(
-      Object.entries(value).map(([key, nestedValue]) => [key, cloneValue(nestedValue)])
-    );
+
+  config[keys[keys.length - 1]] = cloneValue(value);
+  persistUserConfig();
+  emitSettingsChange(key, value);
+}
+
+export function watchSettings(callback) {
+  if (typeof window === "undefined") {
+    callback(getMergedConfig());
+    return () => {};
   }
-  return value;
+
+  const notify = (event) => {
+    if (event?.type === "storage" && event.key && event.key !== SETTINGS_STORAGE_KEY) {
+      return;
+    }
+
+    if (event?.type === "storage") {
+      userConfig = loadUserConfig();
+    }
+
+    callback(getMergedConfig(), event);
+  };
+
+  window.addEventListener(SETTINGS_EVENT, notify);
+  window.addEventListener("storage", notify);
+  callback(getMergedConfig());
+
+  return () => {
+    window.removeEventListener(SETTINGS_EVENT, notify);
+    window.removeEventListener("storage", notify);
+  };
 }
 
 function loadUserConfig() {
@@ -115,62 +130,30 @@ function emitSettingsChange(key, value) {
   );
 }
 
-export function getSetting(key) {
-  const keys = key.split(".");
-  let value = getMergedConfig();
-
-  for (const part of keys) {
-    if (value && typeof value === "object" && part in value) {
-      value = value[part];
-    } else {
-      return undefined;
-    }
-  }
-
-  return cloneValue(value);
+function isPlainObject(value) {
+  return value && typeof value === "object" && !Array.isArray(value);
 }
 
-export function setSetting(key, value) {
-  const keys = key.split(".");
-  let config = userConfig;
+function deepMerge(base, override) {
+  const result = { ...base };
 
-  for (let i = 0; i < keys.length - 1; i += 1) {
-    const currentKey = keys[i];
-    if (!isPlainObject(config[currentKey])) {
-      config[currentKey] = {};
+  for (const [key, value] of Object.entries(override || {})) {
+    if (isPlainObject(value) && isPlainObject(base[key])) {
+      result[key] = deepMerge(base[key], value);
+    } else if (key in base) {
+      result[key] = value;
     }
-    config = config[currentKey];
   }
 
-  config[keys[keys.length - 1]] = cloneValue(value);
-  persistUserConfig();
-  emitSettingsChange(key, value);
+  return result;
 }
 
-export function watchSettings(callback) {
-  if (typeof window === "undefined") {
-    callback(getMergedConfig());
-    return () => {};
+function cloneValue(value) {
+  if (Array.isArray(value)) {
+    return value.map(cloneValue);
   }
-
-  const notify = (event) => {
-    if (event?.type === "storage" && event.key && event.key !== SETTINGS_STORAGE_KEY) {
-      return;
-    }
-
-    if (event?.type === "storage") {
-      userConfig = loadUserConfig();
-    }
-
-    callback(getMergedConfig(), event);
-  };
-
-  window.addEventListener(SETTINGS_EVENT, notify);
-  window.addEventListener("storage", notify);
-  callback(getMergedConfig());
-
-  return () => {
-    window.removeEventListener(SETTINGS_EVENT, notify);
-    window.removeEventListener("storage", notify);
-  };
+  if (isPlainObject(value)) {
+    return Object.fromEntries(Object.entries(value).map(([key, nestedValue]) => [key, cloneValue(nestedValue)]));
+  }
+  return value;
 }

@@ -1,64 +1,26 @@
 # Classworks
 
-![GitHub](https://img.shields.io/github/license/ZeroCatDev/Classworks?style=flat-square)
-![GitHub stars](https://img.shields.io/github/stars/ZeroCatDev/Classworks?style=flat-square)
-![GitHub forks](https://img.shields.io/github/forks/ZeroCatDev/Classworks?style=flat-square)
-![GitHub issues](https://img.shields.io/github/issues/ZeroCatDev/Classworks?style=flat-square)
-![Classworks](./images/banner.png)
+面向班级电脑和大屏的作业看板。
 
-适用于班级大屏的作业板小工具
+## 当前功能
 
-请打开 [https://cs.houlangs.com](https://cs.houlang.cloud) 立刻使用
+- 按日期记录当天作业。
+- 保留常用学科：语文、数学、英语、物理、化学、地理。
+- 作业卡片按内容自由高度排布。
+- 编辑卡片关闭时自动保存。
+- 地理卡片支持 HDR 光扫效果和 AI 润色审批流程。
+- 支持字体大小、日期切换、复制到今天等基础操作。
 
-## 交流
-
-QQ：[964979747](https://qm.qq.com/q/4RX45b1Oac)
-
-## 📦 快速开始
-
-### 环境准备
-
-- Node.js 16+
-- pnpm
-
-### 安装步骤
+## 开发
 
 ```bash
-# 克隆项目
-git clone https://github.com/ZeroCatDev/Classworks.git
-cd Classworks
-
-# 安装依赖
 pnpm install
-
-# 启动开发服务器
-pnpm run dev
-
-# 构建生产版本
-pnpm run build
+pnpm dev
+pnpm build
 ```
 
+默认开发端口为 `3031`。
 
-## 🤝 参与贡献
+## 说明
 
-Classworks 非常欢迎你的加入！[提一个 Issue](https://github.com/ZeroCatDev/Classworks/issues/new) 或者提交一个 Pull Request。对于小白问题，最好在 qq 群里问，我们会尽量回答。
-
-ZeroCat 的项目 遵循 [Contributor Covenant](http://contributor-covenant.org/version/1/3/0/) 行为规范
-<br/>孙悟元 希望你遵循 [提问的智慧](https://github.com/ryanhanwu/How-To-Ask-Questions-The-Smart-Way/blob/main/README-zh_CN.md)
-
-## 👥 联系我们
-
-- QQ交流群：964979747
-- 开发者：[@SunWuyuan](https://github.com/Sunwuyuan)
-- 官网：[ZeroCat](https://zerocat.dev)
-
-## 🙏 致谢
-
-感谢所有为项目做出贡献的开发者！
-
-## 📄 开源协议
-
-ZeroCat 社区项目遵循 [AGPL-3.0 许可证](LICENSE)。
-
-
-Copyright (C) 2020-2026  Sunwuyuan.
+项目已移除考试编辑器、签到、旧调试授权页和脚手架示例组件。当前代码以作业看板主流程为核心。

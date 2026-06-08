@@ -1,6 +1,6 @@
 <template>
   <div class="floating-toolbar-container">
-    <v-card class="floating-toolbar" elevation="4" rounded="xl">
+    <v-card class="floating-toolbar" elevation="0">
       <div class="toolbar-buttons">
         <v-btn icon="mdi-chevron-left" variant="text" title="前一天" @click="$emit('prev-day')" />
         <v-btn
@@ -9,6 +9,7 @@
           :title="`缩小字体（当前 ${currentFontSize}px）`"
           @click="$emit('zoom', 'out')"
         />
+        <div class="font-size-indicator">{{ currentFontSize }}px</div>
         <v-btn
           icon="mdi-format-font-size-increase"
           variant="text"
@@ -16,20 +17,14 @@
           @click="$emit('zoom', 'up')"
         />
 
-        <v-menu v-model="fontMenuOpen" :close-on-content-click="false" location="top center" width="360">
+        <v-menu v-model="fontMenuOpen" :close-on-content-click="false" location="top center" width="320">
           <template #activator="{ props }">
-            <v-btn
-              icon="mdi-format-font"
-              variant="text"
-              :title="`字体：${currentFontName}`"
-              v-bind="props"
-            />
+            <v-btn icon="mdi-format-font" variant="text" :title="`字体：${currentFontName}`" v-bind="props" />
           </template>
 
           <div class="font-panel">
             <div class="font-panel-header">
               <div class="font-panel-title">选择字体</div>
-              <div class="font-current-label">{{ currentFontName }}</div>
             </div>
 
             <div v-for="(fonts, category) in fontCategories" :key="category" class="font-category">
@@ -44,10 +39,7 @@
                   @click="changeFont(font.id)"
                 >
                   <span class="font-card-preview" :style="{ fontFamily: font.fontFamily }">Aa</span>
-                  <span class="font-card-info">
-                    <span class="font-card-name">{{ font.name }}</span>
-                    <span class="font-card-desc">{{ font.description }}</span>
-                  </span>
+                  <span class="font-card-name">{{ font.name }}</span>
                 </button>
               </div>
             </div>
@@ -56,7 +48,7 @@
 
         <v-menu :close-on-content-click="false" location="top">
           <template #activator="{ props }">
-            <v-btn icon="mdi-calendar" variant="text" title="选择日期" v-bind="props" />
+            <v-btn icon="mdi-calendar-month-outline" variant="text" title="选择日期" v-bind="props" />
           </template>
           <v-card class="date-picker-card" border>
             <v-date-picker :model-value="selectedDate" color="primary" @update:model-value="handleDateSelect" />
@@ -70,10 +62,10 @@
     <v-btn
       v-if="!isToday"
       class="side-action-btn"
-      color="primary"
-      elevation="4"
+      color="grey-darken-3"
+      elevation="0"
       prepend-icon="mdi-content-copy"
-      rounded="xl"
+      rounded="lg"
       :loading="copyToTodayLoading"
       :disabled="copyToTodayLoading"
       @click="$emit('copy-to-today')"
@@ -92,6 +84,7 @@ export default {
     copyToTodayLoading: { type: Boolean, default: false },
     currentFontSize: { type: Number, default: 16 },
   },
+  emits: ["prev-day", "next-day", "zoom", "date-select", "copy-to-today"],
   data() {
     return {
       fontMenuOpen: false,
@@ -104,7 +97,6 @@ export default {
   async created() {
     const { getCurrentFont, getFontsByCategory, onFontChange } = await import("@/utils/fonts");
     const currentFont = getCurrentFont();
-
     this.fontCategories = getFontsByCategory();
     this.currentFontId = currentFont.id;
     this.currentFontName = currentFont.name;
@@ -150,68 +142,103 @@ export default {
 .floating-toolbar {
   position: absolute;
   left: 50%;
-  bottom: 24px;
+  bottom: 18px;
   transform: translateX(-50%);
-  padding: 4px 6px;
+  padding: 10px 12px;
+  border-radius: 8px !important;
   pointer-events: auto;
-  backdrop-filter: blur(14px);
-  background: rgba(255, 255, 255, 0.84) !important;
+  backdrop-filter: blur(10px);
+  background: rgba(20, 20, 20, 0.96) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.18);
+  animation: toolbar-rise 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+  transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.2s ease;
+}
+
+.floating-toolbar:hover {
+  transform: translateX(-50%) translateY(-1px);
+  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.22);
 }
 
 .toolbar-buttons {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
+}
+
+.toolbar-buttons :deep(.v-btn) {
+  min-width: 42px;
+  width: 42px;
+  height: 42px;
+  border-radius: 6px;
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.toolbar-buttons :deep(.v-btn:hover) {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.font-size-indicator {
+  min-width: 68px;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.76);
+  font-size: 14px;
+  font-weight: 700;
 }
 
 .side-action-btn {
   position: absolute;
-  right: 24px;
-  bottom: 24px;
+  right: 20px;
+  bottom: 20px;
   pointer-events: auto;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #f1f1f1 !important;
+  background: #1d1d1d !important;
+  border-radius: 8px !important;
+  min-height: 44px;
+  padding-inline: 16px !important;
+  animation: float-in 0.38s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .date-picker-card {
   overflow: hidden;
+  border-radius: 8px !important;
+  background: #181818 !important;
 }
 
 .font-panel {
-  background: rgb(var(--v-theme-surface));
-  padding: 16px;
-  border-radius: 16px;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  background: #181818;
+  box-shadow: 0 16px 30px rgba(0, 0, 0, 0.18);
 }
 
 .font-panel-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
   margin-bottom: 12px;
 }
 
 .font-panel-title {
-  font-size: 16px;
+  color: #f0f0f0;
+  font-size: 15px;
   font-weight: 700;
 }
 
-.font-current-label {
-  font-size: 12px;
-  color: rgb(var(--v-theme-primary));
-}
-
 .font-category + .font-category {
-  margin-top: 12px;
+  margin-top: 10px;
 }
 
 .category-label {
-  font-size: 12px;
   margin-bottom: 8px;
-  color: rgb(var(--v-theme-medium-emphasis));
+  color: rgba(255, 255, 255, 0.56);
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .font-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  gap: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .font-card {
@@ -219,50 +246,90 @@ export default {
   align-items: center;
   gap: 10px;
   width: 100%;
-  padding: 10px 12px;
-  border: 1px solid rgba(var(--v-theme-on-surface), 0.12);
-  border-radius: 12px;
-  background: rgba(var(--v-theme-surface-variant), 0.28);
-  cursor: pointer;
+  min-width: 0;
+  min-height: 42px;
+  padding: 7px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  background: #202020;
+  color: #ededed;
   text-align: left;
+  transition: border-color 0.18s ease, background-color 0.18s ease, transform 0.18s ease;
+}
+
+.font-card:hover {
+  transform: translateY(-1px);
+  border-color: rgba(255, 255, 255, 0.14);
+  background: #262626;
 }
 
 .font-card-active {
-  border-color: rgba(var(--v-theme-primary), 0.45);
-  background: rgba(var(--v-theme-primary), 0.08);
+  border-color: rgba(255, 255, 255, 0.18);
+  background: #2b2b2b;
 }
 
 .font-card-preview {
-  min-width: 32px;
-  font-size: 18px;
-  font-weight: 700;
-}
-
-.font-card-info {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
+  flex: 0 0 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  font-size: 16px;
 }
 
 .font-card-name {
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 700;
+  white-space: nowrap;
 }
 
-.font-card-desc {
-  font-size: 12px;
-  color: rgb(var(--v-theme-medium-emphasis));
+@keyframes toolbar-rise {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(16px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+@keyframes float-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .floating-toolbar,
+  .side-action-btn {
+    animation: none;
+  }
 }
 
 @media (max-width: 600px) {
   .floating-toolbar {
-    bottom: 16px;
-    max-width: calc(100vw - 24px);
+    bottom: 14px;
+    width: calc(100vw - 20px);
+    max-width: calc(100vw - 20px);
+  }
+
+  .toolbar-buttons {
+    justify-content: space-between;
   }
 
   .side-action-btn {
-    right: 16px;
-    bottom: 84px;
+    right: 14px;
+    bottom: 76px;
   }
 }
 </style>
