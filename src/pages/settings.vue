@@ -8,10 +8,13 @@
 
 <template>
   <div class="settings-rankings-page">
-    <button class="settings-back-button" type="button" :aria-label="copy.backHome" @click="goHome">
-      <v-icon icon="mdi-arrow-left" size="20" />
-      <span>{{ copy.back }}</span>
-    </button>
+    <div class="settings-top-actions">
+      <button class="settings-back-button" type="button" :aria-label="copy.backHome" @click="goHome">
+        <v-icon icon="mdi-arrow-left" size="20" />
+        <span>{{ copy.back }}</span>
+      </button>
+      <PwaInstallButton />
+    </div>
     <iframe
       class="settings-rankings-frame"
       title="AI API Rankings"
@@ -21,6 +24,8 @@
 </template>
 
 <script>
+import PwaInstallButton from "@/components/PwaInstallButton.vue";
+
 const copy = {
   backHome: "\u8fd4\u56de\u9996\u9875",
   back: "\u8fd4\u56de",
@@ -28,6 +33,9 @@ const copy = {
 
 export default {
   name: "SettingsPage",
+  components: {
+    PwaInstallButton,
+  },
   data() {
     return {
       copy,
@@ -58,11 +66,17 @@ body,
   background: #101010;
 }
 
-.settings-back-button {
+.settings-top-actions {
   position: absolute;
   top: 18px;
   left: 18px;
   z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.settings-back-button {
   display: inline-flex;
   align-items: center;
   gap: 8px;

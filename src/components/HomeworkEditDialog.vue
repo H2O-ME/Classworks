@@ -324,22 +324,23 @@ export default {
     },
     async ensureAiSecret() {
       if (hasSavedAiSecret()) return "";
-      const secret = window.prompt("首次使用 AI 润色请输入密钥");
-      if (!secret) throw new Error("AI_SECRET_REQUIRED");
-      await saveAiSecret(secret.trim());
-      return secret.trim();
+      const secret = window.prompt("首次使用请输入解密密钥（默认 tianhanwen）");
+      if (secret == null) throw new Error("AI_SECRET_REQUIRED");
+      const normalizedSecret = secret.trim();
+      await saveAiSecret(normalizedSecret || "tianhanwen");
+      return normalizedSecret || "tianhanwen";
     },
     getPolishErrorMessage(error) {
       const message = error?.message || "";
-      if (message === "AI_SECRET_REQUIRED") return "需要输入密钥后才能使用 AI 润色。";
-      if (message === "AI_SECRET_INVALID") return "密钥不正确，请重新输入。";
+      if (message === "AI_SECRET_REQUIRED") return "需要输入解密密钥后才能使用 AI 润色。";
+      if (message === "AI_SECRET_INVALID") return "解密密钥不正确，请输入 tianhanwen。";
       if (message === "EMPTY_CONTENT") return "先输入地理作业内容，再使用 AI 润色。";
       if (message === "EMPTY_AI_RESPONSE") return "AI 没有返回可用内容，请稍后再试。";
       if (message === "AI_OUTPUT_TRUNCATED") return "AI 输出不完整，请缩短原文或稍后再试。";
       if (message.startsWith("AI_POLISH_FAILED_")) {
         return `AI 润色请求失败（${message.replace("AI_POLISH_FAILED_", "")}），请稍后再试。`;
       }
-      return "AI 润色失败，请检查网络后再试。";
+      return message ? `AI 润色失败：${message}` : "AI 润色失败，请检查网络后再试。";
     },
     insertAtCursor(text) {
       const textarea = this.$refs.inputRef;

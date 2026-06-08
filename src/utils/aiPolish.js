@@ -1,3 +1,5 @@
+import forge from "node-forge";
+
 const AI_POLISH_ENDPOINT = "https://api.tianhw.top/v1/chat/completions";
 const AI_POLISH_MODEL = "GPT-OSS-120B";
 const AI_KEY_STORAGE = "classworks_ai_polish_secret";
@@ -51,8 +53,10 @@ export function hasSavedAiSecret() {
 }
 
 export async function saveAiSecret(secret) {
-  await decryptAiKey(secret);
-  localStorage.setItem(AI_KEY_STORAGE, secret);
+  const normalizedSecret = String(secret || "").trim();
+  if (!normalizedSecret) throw new Error("AI_SECRET_REQUIRED");
+  await decryptAiKey(normalizedSecret);
+  localStorage.setItem(AI_KEY_STORAGE, normalizedSecret);
 }
 
 export function clearSavedAiSecret() {
@@ -99,27 +103,57 @@ export async function polishGeographyHomework(content, secret) {
 }
 
 async function resolveAiKey(secret) {
-  const savedSecret = secret || readSavedSecret();
-  if (!savedSecret) throw new Error("AI_SECRET_REQUIRED");
+  const normalizedSecret = String(secret || "").trim();
+  const savedSecret = normalizedSecret || readSavedSecret();
+  if (!savedSecret) {
+    throw new Error("AI_SECRET_REQUIRED");
+  }
 
   try {
     return await decryptAiKey(savedSecret);
-  } catch (error) {
+  } catch {
     clearSavedAiSecret();
     throw new Error("AI_SECRET_INVALID");
   }
 }
 
 async function decryptAiKey(secret) {
-  const keyMaterial = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(secret));
-  const key = await crypto.subtle.importKey("raw", keyMaterial, "AES-GCM", false, ["decrypt"]);
-  const payload = concatBytes(base64ToBytes(ENCRYPTED_AI_KEY.data), base64ToBytes(ENCRYPTED_AI_KEY.tag));
-  const decrypted = await crypto.subtle.decrypt(
-    { name: "AES-GCM", iv: base64ToBytes(ENCRYPTED_AI_KEY.iv), tagLength: 128 },
-    key,
-    payload
-  );
-  return new TextDecoder().decode(decrypted);
+  if (globalThis.crypto?.subtle) {
+    const keyMaterial = await globalThis.crypto.subtle.digest("SHA-256", new TextEncoder().encode(secret));
+    const key = await globalThis.crypto.subtle.importKey("raw", keyMaterial, "AES-GCM", false, ["decrypt"]);
+    const payload = concatBytes(base64ToBytes(ENCRYPTED_AI_KEY.data), base64ToBytes(ENCRYPTED_AI_KEY.tag));
+    const decrypted = await globalThis.crypto.subtle.decrypt(
+      { name: "AES-GCM", iv: base64ToBytes(ENCRYPTED_AI_KEY.iv), tagLength: 128 },
+      key,
+      payload
+    );
+    return new TextDecoder().decode(decrypted);
+  }
+
+  return decryptAiKeyWithForge(secret);
+}
+
+async function decryptAiKeyWithForge(secret) {
+  const digest = forge.md.sha256.create();
+  digest.update(secret, "utf8");
+  const keyBytes = digest.digest().getBytes();
+  const decipher = forge.cipher.createDecipher("AES-GCM", keyBytes);
+  const ivBytes = forge.util.decode64(ENCRYPTED_AI_KEY.iv);
+  const encryptedBytes = forge.util.decode64(ENCRYPTED_AI_KEY.data);
+  const tagBytes = forge.util.decode64(ENCRYPTED_AI_KEY.tag);
+
+  decipher.start({
+    iv: ivBytes,
+    tag: forge.util.createBuffer(tagBytes),
+    tagLength: 128,
+  });
+  decipher.update(forge.util.createBuffer(encryptedBytes));
+
+  if (!decipher.finish()) {
+    throw new Error("AI_SECRET_INVALID");
+  }
+
+  return forge.util.decodeUtf8(decipher.output.getBytes());
 }
 
 function readSavedSecret() {

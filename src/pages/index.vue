@@ -4,6 +4,7 @@
       <div class="app-bar-title">{{ titleText }}</div>
       <div class="app-bar-actions">
         <div class="date-pill">{{ dateLabel }}</div>
+        <PwaInstallButton />
         <router-link class="settings-button" to="/settings" aria-label="打开设置">
           <v-icon icon="mdi-cog-outline" size="19" />
         </router-link>
@@ -101,6 +102,7 @@ import { defineAsyncComponent } from "vue";
 import FloatingICP from "@/components/FloatingICP.vue";
 import HomeSkeleton from "@/components/common/HomeSkeleton.vue";
 import HomeworkGrid from "@/components/home/HomeworkGrid.vue";
+import PwaInstallButton from "@/components/PwaInstallButton.vue";
 import { getData, setData } from "@/utils/dataProvider";
 import { getSetting, setSetting } from "@/utils/settings";
 
@@ -124,6 +126,7 @@ export default {
     HomeworkEditDialog,
     HomeworkGrid,
     HomeSkeleton,
+    PwaInstallButton,
   },
   data() {
     return {

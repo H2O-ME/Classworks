@@ -22,37 +22,23 @@ export default defineConfig({
       registerType: "autoUpdate",
       devOptions: {
         navigateFallback: "index.html",
-        enabled: false,
+        enabled: true,
         suppressWarnings: true,
       },
-      lang: "zh-CN",
       injectRegister: "auto",
+      includeAssets: ["favicon.ico", "banner.png", "pwa/image/apple-touch-icon-180x180.png", "pwa/image/favicon.ico"],
       strategies: "generateSW",
       workbox: {
-        globPatterns: ["*"],
+        globPatterns: ["**/*.{js,css,html,ico,png,svg,webmanifest,mp3,woff,woff2,ttf}"],
         navigateFallback: "index.html",
         runtimeCaching: [
           {
-            urlPattern: ({ url, sameOrigin }) => sameOrigin && url.pathname.endsWith("/assets/"),
-            handler: "CacheFirst",
-            options: {
-              cacheName: "assets-cache",
-              expiration: {
-                maxEntries: 200,
-                maxAgeSeconds: 60 * 60 * 24 * 60,
-              },
-              cacheableResponse: {
-                statuses: [0, 200],
-              },
-            },
-          },
-          {
-            urlPattern: ({ url, sameOrigin }) => sameOrigin && url.pathname.startsWith("/pwa/"),
+            urlPattern: ({ request, sameOrigin }) => sameOrigin && request.destination === "script",
             handler: "StaleWhileRevalidate",
             options: {
-              cacheName: "pwa-cache",
+              cacheName: "scripts-cache",
               expiration: {
-                maxEntries: 50,
+                maxEntries: 80,
                 maxAgeSeconds: 60 * 60 * 24 * 7,
               },
               cacheableResponse: {
@@ -61,59 +47,102 @@ export default defineConfig({
             },
           },
           {
-            urlPattern: ({ url, sameOrigin }) => {
-              if (!sameOrigin) return false;
-              const path = url.pathname;
-              return !(path.includes("/assets/") || path.includes("/pwa/"));
+            urlPattern: ({ request, sameOrigin }) => sameOrigin && request.destination === "style",
+            handler: "StaleWhileRevalidate",
+            options: {
+              cacheName: "styles-cache",
+              expiration: {
+                maxEntries: 60,
+                maxAgeSeconds: 60 * 60 * 24 * 7,
+              },
+              cacheableResponse: {
+                statuses: [0, 200],
+              },
             },
+          },
+          {
+            urlPattern: ({ request, sameOrigin }) => sameOrigin && request.destination === "image",
+            handler: "CacheFirst",
+            options: {
+              cacheName: "images-cache",
+              expiration: {
+                maxEntries: 120,
+                maxAgeSeconds: 60 * 60 * 24 * 30,
+              },
+              cacheableResponse: {
+                statuses: [0, 200],
+              },
+            },
+          },
+          {
+            urlPattern: ({ url, sameOrigin }) => sameOrigin && url.pathname.startsWith("/pwa/"),
+            handler: "CacheFirst",
+            options: {
+              cacheName: "pwa-assets-cache",
+              expiration: {
+                maxEntries: 40,
+                maxAgeSeconds: 60 * 60 * 24 * 30,
+              },
+              cacheableResponse: {
+                statuses: [0, 200],
+              },
+            },
+          },
+          {
+            urlPattern: ({ request, sameOrigin }) => sameOrigin && request.mode === "navigate",
             handler: "NetworkFirst",
             options: {
-              cacheName: "other-resources",
+              cacheName: "pages-cache",
+              networkTimeoutSeconds: 8,
               expiration: {
-                maxEntries: 100,
+                maxEntries: 20,
                 maxAgeSeconds: 60 * 60 * 24,
               },
-              networkTimeoutSeconds: 10,
               cacheableResponse: {
                 statuses: [0, 200],
               },
             },
           },
         ],
-        additionalManifestEntries: [],
         clientsClaim: true,
         skipWaiting: true,
         importScripts: ["/sw-cache-manager.js"],
       },
       manifest: {
-        name: "Classworks 作业板",
+        id: "/",
+        name: "Classworks \u4f5c\u4e1a\u677f",
         short_name: "Classworks",
-        description: "记录、查看并同步作业",
-        theme_color: "#212121",
-        background_color: "#212121",
+        description: "\u8bb0\u5f55\u3001\u67e5\u770b\u5e76\u540c\u6b65\u4f5c\u4e1a",
+        lang: "zh-CN",
+        theme_color: "#121212",
+        background_color: "#121212",
         display: "standalone",
         start_url: "./",
-        edge_side_panel: {
-          default_path: "./",
-        },
+        scope: "./",
         icons: [
           {
-            src: "./pwa/image/pwa-64x64.png",
+            src: "/pwa/image/pwa-64x64-v2.png",
             sizes: "64x64",
             type: "image/png",
           },
           {
-            src: "./pwa/image/pwa-192x192.png",
+            src: "/pwa/image/pwa-192x192-v2.png",
             sizes: "192x192",
             type: "image/png",
           },
           {
-            src: "./pwa/image/pwa-512x512.png",
-            sizes: "512x512",
+            src: "/pwa/image/pwa-256x256-v2.png",
+            sizes: "256x256",
             type: "image/png",
           },
           {
-            src: "./pwa/image/maskable-icon-512x512.png",
+            src: "/pwa/image/pwa-512x512-v2.png",
+            sizes: "512x512",
+            type: "image/png",
+            purpose: "any",
+          },
+          {
+            src: "/pwa/image/maskable-icon-512x512-v2.png",
             sizes: "512x512",
             type: "image/png",
             purpose: "maskable",
