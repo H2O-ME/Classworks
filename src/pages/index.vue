@@ -2,7 +2,12 @@
   <v-app-bar class="no-select board-app-bar" elevation="0">
     <div class="app-bar-inner">
       <div class="app-bar-title">{{ titleText }}</div>
-      <div class="date-pill">{{ dateLabel }}</div>
+      <div class="app-bar-actions">
+        <div class="date-pill">{{ dateLabel }}</div>
+        <router-link class="settings-button" to="/settings" aria-label="打开设置">
+          <v-icon icon="mdi-cog-outline" size="19" />
+        </router-link>
+      </div>
     </div>
   </v-app-bar>
 
@@ -364,6 +369,38 @@ export default {
   color: rgba(255, 255, 255, 0.88);
   font-size: 13px;
   font-weight: 600;
+}
+
+.app-bar-actions {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.settings-button {
+  display: inline-flex;
+  width: 36px;
+  height: 36px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.035);
+  color: rgba(255, 255, 255, 0.78);
+  text-decoration: none;
+  transition:
+    transform 180ms ease,
+    border-color 180ms ease,
+    background-color 180ms ease,
+    color 180ms ease;
+}
+
+.settings-button:hover {
+  transform: translateY(-1px);
+  border-color: rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.065);
+  color: rgba(255, 255, 255, 0.96);
 }
 
 .board-shell {

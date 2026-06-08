@@ -1,0 +1,101 @@
+<route lang="json">
+{
+  "meta": {
+    "layout": false
+  }
+}
+</route>
+
+<template>
+  <div class="settings-rankings-page">
+    <button class="settings-back-button" type="button" :aria-label="copy.backHome" @click="goHome">
+      <v-icon icon="mdi-arrow-left" size="20" />
+      <span>{{ copy.back }}</span>
+    </button>
+    <iframe
+      class="settings-rankings-frame"
+      title="AI API Rankings"
+      src="https://api.tianhw.top/rankings"
+    />
+  </div>
+</template>
+
+<script>
+const copy = {
+  backHome: "\u8fd4\u56de\u9996\u9875",
+  back: "\u8fd4\u56de",
+};
+
+export default {
+  name: "SettingsPage",
+  data() {
+    return {
+      copy,
+    };
+  },
+  methods: {
+    goHome() {
+      this.$router.push("/");
+    },
+  },
+};
+</script>
+
+<style>
+html,
+body,
+#app {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.settings-rankings-page {
+  position: relative;
+  width: 100vw;
+  height: 100dvh;
+  overflow: hidden;
+  background: #101010;
+}
+
+.settings-back-button {
+  position: absolute;
+  top: 18px;
+  left: 18px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 14px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  background: rgba(16, 16, 16, 0.72);
+  color: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(12px);
+  cursor: pointer;
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease,
+    transform 0.2s ease;
+}
+
+.settings-back-button:hover {
+  border-color: rgba(255, 255, 255, 0.24);
+  background: rgba(16, 16, 16, 0.84);
+  transform: translateY(-1px);
+}
+
+.settings-back-button span {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.settings-rankings-frame {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: #101010;
+}
+</style>
