@@ -13,9 +13,9 @@
       <div class="dialog-header">
         <div class="dialog-title">{{ title }}</div>
         <div class="dialog-actions">
-          <v-btn class="dialog-btn dialog-btn-ghost" variant="text" @click="handleClose">关闭</v-btn>
+          <v-btn class="dialog-btn dialog-btn-ghost" variant="text" @click="handleClose">{{ copy.close }}</v-btn>
           <v-btn class="dialog-btn dialog-btn-solid" :loading="saving" variant="flat" @click="handleSaveAndClose">
-            保存
+            {{ copy.save }}
           </v-btn>
         </div>
       </div>
@@ -31,7 +31,7 @@
                 ref="inputRef"
                 v-model="content"
                 class="editor-textarea"
-                placeholder="输入作业内容，每行一项会更清楚。"
+                :placeholder="copy.placeholder"
                 rows="10"
                 autofocus
                 @input="handleContentInput"
@@ -39,13 +39,13 @@
               <div v-if="polishing" class="polish-soft-mask" aria-hidden="true" />
               <div v-if="polishing" class="polish-sheen" aria-hidden="true" />
               <div v-if="contentUpdated" class="content-update-sheen" aria-hidden="true" />
-              <div v-if="polishing" class="polish-status" aria-live="polite">AI 正在整理</div>
+              <div v-if="polishing" class="polish-status" aria-live="polite">{{ copy.polishing }}</div>
             </div>
 
             <div class="editor-footer" :class="{ 'editor-footer-plain': !showGeoTools }">
               <div class="dialog-meta">
                 <span>{{ content.length }} 字</span>
-                <span>{{ dirty ? "有未保存修改" : "已同步到编辑草稿" }}</span>
+                <span>{{ dirty ? copy.dirty : copy.synced }}</span>
               </div>
 
               <div v-if="showGeoTools" class="subject-tools">
@@ -79,16 +79,12 @@
                     <span class="subject-tool-icon subject-tool-icon-ai">
                       <v-icon :icon="polishing ? 'mdi-loading' : 'mdi-auto-fix'" size="17" />
                     </span>
-                    <span>{{ polishing ? "正在整理" : "AI 润色" }}</span>
+                    <span>{{ polishing ? copy.polishing : "AI 润色" }}</span>
                   </span>
                 </button>
-                <a
-                  class="ai-provider-note"
-                  href="https://api.tianhw.top"
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  {{ aiProviderText }}
+
+                <a class="ai-provider-note" href="https://api.tianhw.top" target="_blank" rel="noreferrer">
+                  {{ copy.provider }}
                 </a>
               </div>
 
@@ -102,9 +98,9 @@
                 >
                   {{ text }}
                 </button>
-                <button type="button" class="tool-chip" @click="insertAtCursor('\n')">换行</button>
-                <button type="button" class="tool-chip" @click="pasteFromClipboard">粘贴</button>
-                <button type="button" class="tool-chip tool-chip-danger" @click="clearContent">清空</button>
+                <button type="button" class="tool-chip" @click="insertAtCursor('\n')">{{ copy.newline }}</button>
+                <button type="button" class="tool-chip" @click="pasteFromClipboard">{{ copy.paste }}</button>
+                <button type="button" class="tool-chip tool-chip-danger" @click="clearContent">{{ copy.clear }}</button>
               </div>
             </div>
 
@@ -114,17 +110,6 @@
           </div>
 
           <section v-if="pendingPolishContent" class="diff-panel">
-            <div class="diff-header">
-              <div>
-                <div class="diff-title">AI 建议</div>
-                <div class="diff-subtitle">检查后再应用</div>
-              </div>
-              <div class="diff-actions">
-                <button type="button" class="diff-btn diff-btn-ghost" @click="rejectPolish">放弃</button>
-                <button type="button" class="diff-btn diff-btn-solid" @click="applyPolish">应用</button>
-              </div>
-            </div>
-
             <div class="diff-body">
               <div
                 v-for="(row, index) in polishDiffRows"
@@ -136,6 +121,17 @@
                 <span class="diff-text">{{ row.text || " " }}</span>
               </div>
             </div>
+
+            <div class="diff-header diff-header-below">
+              <div>
+                <div class="diff-title">{{ copy.diffTitle }}</div>
+                <div class="diff-subtitle">{{ copy.diffSubtitle }}</div>
+              </div>
+              <div class="diff-actions">
+                <button type="button" class="diff-btn diff-btn-ghost" @click="rejectPolish">{{ copy.reject }}</button>
+                <button type="button" class="diff-btn diff-btn-solid" @click="applyPolish">{{ copy.apply }}</button>
+              </div>
+            </div>
           </section>
         </div>
       </v-card-text>
@@ -144,12 +140,15 @@
 </template>
 
 <script>
+import { requestAiPolish, getAiPolishError } from "@/utils/aiPolishState.js";
+import { buildLineDiff } from "@/utils/homeworkDiff";
 import {
-  hasSavedAiSecret,
-  polishGeographyHomework,
-  saveAiSecret,
-} from "@/utils/aiPolish";
-import { getSetting } from "@/utils/settings";
+  buildSavePayload,
+  createEditorState,
+  EDITOR_COPY,
+  isGeographySubject,
+  QUICK_INSERT_TEXTS,
+} from "@/utils/homeworkEditor";
 import { useDisplay } from "vuetify";
 
 export default {
@@ -167,20 +166,17 @@ export default {
   },
   data() {
     return {
-      content: "",
+      ...createEditorState(),
       saving: false,
-      dirty: false,
       polishing: false,
       contentUpdated: false,
-      pendingPolishContent: "",
-      polishError: "",
-      geoHdrEnabled: false,
-      quickTexts: ["预习", "订正", "背诵", "练习", "提交", "复习"],
+      quickTexts: QUICK_INSERT_TEXTS,
+      copy: EDITOR_COPY,
     };
   },
   computed: {
     isMobile() {
-      return !getSetting("display.forceDesktopMode") && this.mobile;
+      return this.mobile;
     },
     dialogVisible: {
       get() {
@@ -190,17 +186,14 @@ export default {
         this.$emit("update:modelValue", value);
       },
     },
-    aiProviderText() {
-      return "模型 API 由 api.tianhw.top 提供";
-    },
     showQuickTools() {
-      return getSetting("display.showQuickTools") !== false;
+      return true;
     },
     showGeoHdrToggle() {
-      return this.isGeographySubject(this.title);
+      return isGeographySubject(this.title);
     },
     showGeoPolish() {
-      return this.isGeographySubject(this.title);
+      return isGeographySubject(this.title);
     },
     showGeoTools() {
       return this.showGeoHdrToggle || this.showGeoPolish;
@@ -212,26 +205,21 @@ export default {
   watch: {
     modelValue(value) {
       if (value) {
-        this.content = this.initialContent;
-        this.geoHdrEnabled = this.showGeoHdrToggle ? this.initialOptions?.hdr !== false : false;
-        this.pendingPolishContent = "";
-        this.polishError = "";
-        this.dirty = false;
+        Object.assign(this, createEditorState(this.initialContent, this.initialOptions, this.showGeoHdrToggle));
         this.$nextTick(() => this.$refs.inputRef?.focus());
       }
     },
     content() {
-      this.dirty = this.content !== this.initialContent;
+      this.updateDirtyState();
     },
     geoHdrEnabled() {
-      if (this.showGeoHdrToggle) {
-        this.dirty = this.content !== this.initialContent || this.geoHdrEnabled !== (this.initialOptions?.hdr !== false);
-      }
+      this.updateDirtyState();
     },
   },
   methods: {
-    isGeographySubject(subjectName) {
-      return subjectName === "地理";
+    updateDirtyState() {
+      const hdrChanged = this.showGeoHdrToggle && this.geoHdrEnabled !== (this.initialOptions?.hdr !== false);
+      this.dirty = this.content !== this.initialContent || hdrChanged;
     },
     toggleGeoHdr() {
       this.geoHdrEnabled = !this.geoHdrEnabled;
@@ -250,10 +238,7 @@ export default {
       if (this.saving) return;
       this.saving = true;
       try {
-        await this.$emit("save", {
-          content: this.content.trim(),
-          options: { hdr: this.showGeoHdrToggle ? this.geoHdrEnabled : false },
-        });
+        await this.$emit("save", buildSavePayload(this.content, this.geoHdrEnabled, this.showGeoHdrToggle));
         this.dialogVisible = false;
       } finally {
         this.saving = false;
@@ -293,13 +278,13 @@ export default {
         if (text) this.insertAtCursor(text);
       } catch (error) {
         this.polishError = "读取剪贴板失败，请手动粘贴。";
-        console.warn("读取剪贴板失败", error);
+        console.warn("读取剪贴板失败:", error);
       }
     },
     async polishWithAi() {
       if (this.polishing) return;
       if (!this.content.trim()) {
-        this.polishError = "先输入地理作业内容，再使用 AI 润色。";
+        this.polishError = getAiPolishError(new Error("EMPTY_CONTENT"));
         return;
       }
 
@@ -308,39 +293,18 @@ export default {
       this.pendingPolishContent = "";
 
       try {
-        const secret = await this.ensureAiSecret();
-        const polished = await polishGeographyHomework(this.content, secret);
+        const polished = await requestAiPolish(this.content, this.copy.askSecret);
         if (polished === this.content.trim()) {
           this.polishError = "AI 没有发现需要修改的内容。";
           return;
         }
         this.pendingPolishContent = polished;
       } catch (error) {
-        this.polishError = this.getPolishErrorMessage(error);
+        this.polishError = getAiPolishError(error);
         console.warn("AI 润色失败:", error);
       } finally {
         this.polishing = false;
       }
-    },
-    async ensureAiSecret() {
-      if (hasSavedAiSecret()) return "";
-      const secret = window.prompt("首次使用请输入解密密钥（默认 tianhanwen）");
-      if (secret == null) throw new Error("AI_SECRET_REQUIRED");
-      const normalizedSecret = secret.trim();
-      await saveAiSecret(normalizedSecret || "tianhanwen");
-      return normalizedSecret || "tianhanwen";
-    },
-    getPolishErrorMessage(error) {
-      const message = error?.message || "";
-      if (message === "AI_SECRET_REQUIRED") return "需要输入解密密钥后才能使用 AI 润色。";
-      if (message === "AI_SECRET_INVALID") return "解密密钥不正确，请输入 tianhanwen。";
-      if (message === "EMPTY_CONTENT") return "先输入地理作业内容，再使用 AI 润色。";
-      if (message === "EMPTY_AI_RESPONSE") return "AI 没有返回可用内容，请稍后再试。";
-      if (message === "AI_OUTPUT_TRUNCATED") return "AI 输出不完整，请缩短原文或稍后再试。";
-      if (message.startsWith("AI_POLISH_FAILED_")) {
-        return `AI 润色请求失败（${message.replace("AI_POLISH_FAILED_", "")}），请稍后再试。`;
-      }
-      return message ? `AI 润色失败：${message}` : "AI 润色失败，请检查网络后再试。";
     },
     insertAtCursor(text) {
       const textarea = this.$refs.inputRef;
@@ -363,48 +327,6 @@ export default {
     },
   },
 };
-
-function buildLineDiff(before, after) {
-  const beforeLines = normalizeDiffLines(before);
-  const afterLines = normalizeDiffLines(after);
-  const table = buildLcsTable(beforeLines, afterLines);
-  const rows = [];
-  let i = beforeLines.length;
-  let j = afterLines.length;
-
-  while (i > 0 || j > 0) {
-    if (i > 0 && j > 0 && beforeLines[i - 1] === afterLines[j - 1]) {
-      rows.unshift({ type: "same", mark: " ", text: beforeLines[i - 1] });
-      i -= 1;
-      j -= 1;
-    } else if (j > 0 && (i === 0 || table[i][j - 1] >= table[i - 1][j])) {
-      rows.unshift({ type: "add", mark: "+", text: afterLines[j - 1] });
-      j -= 1;
-    } else {
-      rows.unshift({ type: "remove", mark: "-", text: beforeLines[i - 1] });
-      i -= 1;
-    }
-  }
-
-  return rows.length ? rows : [{ type: "same", mark: " ", text: after }];
-}
-
-function normalizeDiffLines(value) {
-  return String(value || "").replace(/\r\n?/g, "\n").split("\n");
-}
-
-function buildLcsTable(beforeLines, afterLines) {
-  const table = Array.from({ length: beforeLines.length + 1 }, () => Array(afterLines.length + 1).fill(0));
-  for (let i = 1; i <= beforeLines.length; i += 1) {
-    for (let j = 1; j <= afterLines.length; j += 1) {
-      table[i][j] =
-        beforeLines[i - 1] === afterLines[j - 1]
-          ? table[i - 1][j - 1] + 1
-          : Math.max(table[i - 1][j], table[i][j - 1]);
-    }
-  }
-  return table;
-}
 </script>
 
 <style scoped>
@@ -669,7 +591,7 @@ function buildLcsTable(beforeLines, afterLines) {
 }
 
 .subject-tool-ai {
-  min-width: 118px;
+  min-width: 124px;
   border-color: rgba(215, 224, 238, 0.2);
   background: linear-gradient(180deg, #282a2e, #1d1e21);
 }
@@ -689,9 +611,7 @@ function buildLcsTable(beforeLines, afterLines) {
   text-decoration: none;
   text-overflow: ellipsis;
   white-space: nowrap;
-  transition:
-    color 180ms ease,
-    opacity 180ms ease;
+  transition: color 180ms ease, opacity 180ms ease;
 }
 
 .ai-provider-note:hover {
@@ -804,6 +724,11 @@ function buildLcsTable(beforeLines, afterLines) {
   background: #1d1d1d;
 }
 
+.diff-header-below {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 0;
+}
+
 .diff-title {
   color: #f2f2f2;
   font-size: 15px;
@@ -843,6 +768,7 @@ function buildLcsTable(beforeLines, afterLines) {
 }
 
 .diff-body {
+  flex: 1 1 auto;
   overflow: auto;
   padding: 8px 0;
   font-family: Consolas, "SFMono-Regular", "Microsoft YaHei UI", monospace;
@@ -1013,5 +939,6 @@ function buildLcsTable(beforeLines, afterLines) {
   .diff-panel {
     height: 260px;
   }
+
 }
 </style>

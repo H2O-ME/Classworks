@@ -88,7 +88,9 @@ export default {
       for (const item of this.sortedItems) {
         let targetColumn = 0;
         for (let index = 1; index < columnHeights.length; index += 1) {
-          if (columnHeights[index] < columnHeights[targetColumn]) targetColumn = index;
+          if (columnHeights[index] < columnHeights[targetColumn]) {
+            targetColumn = index;
+          }
         }
         columns[targetColumn].push(item);
         columnHeights[targetColumn] += this.estimateCardHeight(item);
@@ -175,7 +177,11 @@ export default {
   transform: translateY(12px);
   animation: card-enter 0.42s cubic-bezier(0.22, 1, 0.36, 1) forwards;
   animation-delay: var(--card-delay, 0ms);
-  transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.22s ease, border-color 0.22s ease, background-color 0.22s ease;
+  transition:
+    transform 0.22s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.22s ease,
+    border-color 0.22s ease,
+    background-color 0.22s ease;
 }
 
 .homework-card:hover {
@@ -192,7 +198,14 @@ export default {
   bottom: -24%;
   left: 0;
   width: 42%;
-  background: linear-gradient(105deg, transparent 0%, rgba(255, 255, 255, 0.12) 22%, rgba(255, 255, 255, 0.72) 48%, rgba(255, 255, 255, 0.14) 74%, transparent 100%);
+  background: linear-gradient(
+    105deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.12) 22%,
+    rgba(255, 255, 255, 0.72) 48%,
+    rgba(255, 255, 255, 0.14) 74%,
+    transparent 100%
+  );
   opacity: 0;
   pointer-events: none;
   mix-blend-mode: screen;
@@ -376,6 +389,5 @@ export default {
   .masonry-board.columns-4 {
     grid-template-columns: 1fr;
   }
-
 }
 </style>

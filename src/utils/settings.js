@@ -2,23 +2,11 @@ const SETTINGS_STORAGE_KEY = "classworks:settings";
 const SETTINGS_EVENT = "classworks:settings-change";
 
 const defaultConfig = {
-  background: {
-    enabled: false,
-    imageData: "",
-    url: "",
-    blur: 10,
-    opacity: 30,
-  },
   display: {
-    forceDesktopMode: false,
-    showQuickTools: true,
     fontSizeLevel: 0,
   },
   font: {
     family: "system",
-  },
-  theme: {
-    mode: "dark",
   },
 };
 
@@ -91,7 +79,7 @@ function loadUserConfig() {
 
   try {
     const raw = window.localStorage.getItem(SETTINGS_STORAGE_KEY);
-    return raw ? JSON.parse(raw) : {};
+    return raw ? sanitizeConfig(JSON.parse(raw)) : {};
   } catch (error) {
     console.warn("读取设置失败:", error);
     return {};
@@ -126,8 +114,12 @@ function emitSettingsChange(key, value) {
         value: cloneValue(value),
         settings: getMergedConfig(),
       },
-    })
+    }),
   );
+}
+
+function sanitizeConfig(config) {
+  return deepMerge(defaultConfig, config);
 }
 
 function isPlainObject(value) {

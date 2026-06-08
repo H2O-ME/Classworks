@@ -39,7 +39,10 @@
                   @click="changeFont(font.id)"
                 >
                   <span class="font-card-preview" :style="{ fontFamily: font.fontFamily }">Aa</span>
-                  <span class="font-card-name">{{ font.name }}</span>
+                  <span class="font-card-copy">
+                    <span class="font-card-name">{{ font.name }}</span>
+                    <span class="font-card-desc">{{ font.description }}</span>
+                  </span>
                 </button>
               </div>
             </div>
@@ -76,6 +79,13 @@
 </template>
 
 <script>
+import {
+  applyFontSelection,
+  getFontCategoryLabel,
+  getFontToolbarState,
+  watchFontToolbarState,
+} from "@/utils/fontState";
+
 export default {
   name: "FloatingToolbar",
   props: {
@@ -94,35 +104,29 @@ export default {
       unsubscribeFontChange: null,
     };
   },
-  async created() {
-    const { getCurrentFont, getFontsByCategory, onFontChange } = await import("@/utils/fonts");
-    const currentFont = getCurrentFont();
-    this.fontCategories = getFontsByCategory();
-    this.currentFontId = currentFont.id;
-    this.currentFontName = currentFont.name;
-    this.unsubscribeFontChange = onFontChange((font) => {
-      this.currentFontId = font.id;
-      this.currentFontName = font.name;
+  created() {
+    this.syncFontState(getFontToolbarState());
+    this.unsubscribeFontChange = watchFontToolbarState((state) => {
+      this.syncFontState(state);
     });
   },
   beforeUnmount() {
     this.unsubscribeFontChange?.();
   },
   methods: {
+    syncFontState(state) {
+      this.fontCategories = state.fontCategories;
+      this.currentFontId = state.currentFontId;
+      this.currentFontName = state.currentFontName;
+    },
     handleDateSelect(date) {
       this.$emit("date-select", date);
     },
     getCategoryLabel(category) {
-      return {
-        system: "系统",
-        modern: "现代",
-        serif: "衬线",
-        mono: "等宽",
-      }[category] || category;
+      return getFontCategoryLabel(category);
     },
     async changeFont(fontId) {
-      const { setFont } = await import("@/utils/fonts");
-      await setFont(fontId);
+      await applyFontSelection(fontId);
       this.fontMenuOpen = false;
     },
   },
@@ -264,33 +268,40 @@ export default {
 }
 
 .font-card-active {
-  border-color: rgba(255, 255, 255, 0.18);
-  background: #2b2b2b;
+  border-color: rgba(176, 192, 222, 0.38);
+  background: #262a31;
 }
 
 .font-card-preview {
-  flex: 0 0 38px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 30px;
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.05);
+  width: 30px;
+  flex: 0 0 auto;
+  color: #f4f4f4;
   font-size: 16px;
+  font-weight: 700;
+}
+
+.font-card-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
 }
 
 .font-card-name {
+  color: #f1f1f1;
   font-size: 13px;
   font-weight: 700;
-  white-space: nowrap;
+}
+
+.font-card-desc {
+  color: rgba(255, 255, 255, 0.48);
+  font-size: 11px;
 }
 
 @keyframes toolbar-rise {
   from {
     opacity: 0;
-    transform: translateX(-50%) translateY(16px);
+    transform: translateX(-50%) translateY(8px);
   }
-
   to {
     opacity: 1;
     transform: translateX(-50%) translateY(0);
@@ -300,36 +311,38 @@ export default {
 @keyframes float-in {
   from {
     opacity: 0;
-    transform: translateY(10px);
+    transform: translateY(8px);
   }
-
   to {
     opacity: 1;
     transform: translateY(0);
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .floating-toolbar,
-  .side-action-btn {
-    animation: none;
-  }
-}
-
-@media (max-width: 600px) {
+@media (max-width: 700px) {
   .floating-toolbar {
-    bottom: 14px;
-    width: calc(100vw - 20px);
+    bottom: 12px;
     max-width: calc(100vw - 20px);
   }
 
   .toolbar-buttons {
-    justify-content: space-between;
+    gap: 4px;
+  }
+
+  .toolbar-buttons :deep(.v-btn) {
+    min-width: 38px;
+    width: 38px;
+    height: 38px;
+  }
+
+  .font-size-indicator {
+    min-width: 56px;
+    font-size: 13px;
   }
 
   .side-action-btn {
     right: 14px;
-    bottom: 76px;
+    bottom: 70px;
   }
 }
 </style>

@@ -13,7 +13,6 @@
         <v-icon icon="mdi-arrow-left" size="20" />
         <span>{{ copy.back }}</span>
       </button>
-      <PwaInstallButton />
     </div>
     <iframe
       class="settings-rankings-frame"
@@ -24,18 +23,13 @@
 </template>
 
 <script>
-import PwaInstallButton from "@/components/PwaInstallButton.vue";
-
 const copy = {
-  backHome: "\u8fd4\u56de\u9996\u9875",
-  back: "\u8fd4\u56de",
+  backHome: "返回首页",
+  back: "返回",
 };
 
 export default {
   name: "SettingsPage",
-  components: {
-    PwaInstallButton,
-  },
   data() {
     return {
       copy,

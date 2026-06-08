@@ -9,6 +9,103 @@ import { defineConfig } from "vite";
 import { fileURLToPath, URL } from "node:url";
 import vueDevTools from "vite-plugin-vue-devtools";
 
+const AI_POLISH_PROXY_PATH = "/api/ai-polish";
+const AI_POLISH_UPSTREAM_ENDPOINT = "https://api.tianhw.top/v1/chat/completions";
+
+function aiPolishDevProxy() {
+  return {
+    name: "classworks-ai-polish-dev-proxy",
+    configureServer(server) {
+      server.middlewares.use(async (req, res, next) => {
+        if (req.url !== AI_POLISH_PROXY_PATH) {
+          next();
+          return;
+        }
+
+        if (req.method === "OPTIONS") {
+          res.statusCode = 204;
+          res.setHeader("Allow", "POST, OPTIONS");
+          res.end();
+          return;
+        }
+
+        if (req.method !== "POST") {
+          res.statusCode = 405;
+          res.setHeader("Content-Type", "application/json; charset=utf-8");
+          res.end(JSON.stringify({ error: { code: "METHOD_NOT_ALLOWED" } }));
+          return;
+        }
+
+        try {
+          const body = await readRequestBody(req);
+          const payload = JSON.parse(body || "{}");
+          const apiKey = String(payload?.apiKey || "").trim();
+          const model = String(payload?.model || "").trim();
+          const systemPrompt = String(payload?.systemPrompt || "").trim();
+          const userPrompt = String(payload?.userPrompt || "").trim();
+
+          if (!apiKey || !model || !systemPrompt || !userPrompt) {
+            res.statusCode = 400;
+            res.setHeader("Content-Type", "application/json; charset=utf-8");
+            res.end(JSON.stringify({ error: { code: "AI_POLISH_PROXY_REQUEST_INVALID" } }));
+            return;
+          }
+
+          const upstreamResponse = await fetch(AI_POLISH_UPSTREAM_ENDPOINT, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${apiKey}`,
+            },
+            body: JSON.stringify({
+              model,
+              temperature: 0,
+              chat_template_kwargs: { enable_thinking: false },
+              reasoning_effort: "low",
+              messages: [
+                { role: "system", content: systemPrompt },
+                { role: "user", content: userPrompt },
+              ],
+            }),
+          });
+
+          const responseText = await upstreamResponse.text();
+          res.statusCode = upstreamResponse.status;
+          res.setHeader(
+            "Content-Type",
+            upstreamResponse.headers.get("content-type") || "application/json; charset=utf-8"
+          );
+          res.setHeader("Cache-Control", "no-store");
+          res.end(responseText);
+        } catch (error) {
+          res.statusCode = 502;
+          res.setHeader("Content-Type", "application/json; charset=utf-8");
+          res.end(
+            JSON.stringify({
+              error: {
+                code: "AI_POLISH_NETWORK_ERROR",
+                message: error instanceof Error ? error.message : "Unknown proxy error",
+              },
+            })
+          );
+        }
+      });
+    },
+  };
+}
+
+function readRequestBody(req) {
+  return new Promise((resolve, reject) => {
+    let raw = "";
+    req.setEncoding("utf8");
+    req.on("data", (chunk) => {
+      raw += chunk;
+    });
+    req.on("end", () => resolve(raw));
+    req.on("error", reject);
+  });
+}
+
 export default defineConfig({
   base: "./",
   plugins: [
@@ -18,6 +115,7 @@ export default defineConfig({
     Vue({
       template: { transformAssetUrls },
     }),
+    aiPolishDevProxy(),
     VitePWA({
       registerType: "autoUpdate",
       devOptions: {
@@ -29,7 +127,7 @@ export default defineConfig({
       includeAssets: ["favicon.ico", "banner.png", "pwa/image/apple-touch-icon-180x180.png", "pwa/image/favicon.ico"],
       strategies: "generateSW",
       workbox: {
-        globPatterns: ["**/*.{js,css,html,ico,png,svg,webmanifest,mp3,woff,woff2,ttf}"],
+        globPatterns: ["**/*.{js,css,html,ico,png,svg,webmanifest,woff,woff2,ttf}"],
         navigateFallback: "index.html",
         runtimeCaching: [
           {
@@ -67,20 +165,6 @@ export default defineConfig({
               cacheName: "images-cache",
               expiration: {
                 maxEntries: 120,
-                maxAgeSeconds: 60 * 60 * 24 * 30,
-              },
-              cacheableResponse: {
-                statuses: [0, 200],
-              },
-            },
-          },
-          {
-            urlPattern: ({ url, sameOrigin }) => sameOrigin && url.pathname.startsWith("/pwa/"),
-            handler: "CacheFirst",
-            options: {
-              cacheName: "pwa-assets-cache",
-              expiration: {
-                maxEntries: 40,
                 maxAgeSeconds: 60 * 60 * 24 * 30,
               },
               cacheableResponse: {

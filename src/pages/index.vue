@@ -4,7 +4,6 @@
       <div class="app-bar-title">{{ titleText }}</div>
       <div class="app-bar-actions">
         <div class="date-pill">{{ dateLabel }}</div>
-        <PwaInstallButton />
         <router-link class="settings-button" to="/settings" aria-label="打开设置">
           <v-icon icon="mdi-cog-outline" size="19" />
         </router-link>
@@ -21,7 +20,7 @@
           <div class="empty-commandbar">
             <div class="commandbar-copy">
               <div class="commandbar-label">作业看板</div>
-              <div class="commandbar-title">{{ isToday ? "今天还没有作业记录" : "这一天暂时没有作业记录" }}</div>
+              <div class="commandbar-title">{{ emptyTitle }}</div>
             </div>
 
             <div class="commandbar-stats">
@@ -35,7 +34,7 @@
               </div>
               <div class="commandbar-stat">
                 <span>入口</span>
-                <strong>{{ availableSubjects.length }} 个</strong>
+                <strong>{{ availableSubjects.length }} 科</strong>
               </div>
             </div>
           </div>
@@ -102,21 +101,18 @@ import { defineAsyncComponent } from "vue";
 import FloatingICP from "@/components/FloatingICP.vue";
 import HomeSkeleton from "@/components/common/HomeSkeleton.vue";
 import HomeworkGrid from "@/components/home/HomeworkGrid.vue";
-import PwaInstallButton from "@/components/PwaInstallButton.vue";
+import {
+  formatDateKey,
+  getSortedHomeworkItems,
+  getUnusedSubjects,
+  normalizeBoardData,
+  resolveAvailableSubjects,
+} from "@/utils/board";
 import { getData, setData } from "@/utils/dataProvider";
 import { getSetting, setSetting } from "@/utils/settings";
 
 const FloatingToolbar = defineAsyncComponent(() => import("@/components/FloatingToolbar.vue"));
 const HomeworkEditDialog = defineAsyncComponent(() => import("@/components/HomeworkEditDialog.vue"));
-
-const DEFAULT_SUBJECTS = [
-  { name: "语文", order: 0 },
-  { name: "数学", order: 1 },
-  { name: "英语", order: 2 },
-  { name: "物理", order: 3 },
-  { name: "化学", order: 4 },
-  { name: "地理", order: 5 },
-];
 
 export default {
   name: "ClassworksBoard",
@@ -126,14 +122,13 @@ export default {
     HomeworkEditDialog,
     HomeworkGrid,
     HomeSkeleton,
-    PwaInstallButton,
   },
   data() {
     return {
       dateString: "",
       selectedDateObj: new Date(),
       isToday: true,
-      boardData: { homework: {} },
+      boardData: normalizeBoardData(),
       dialogVisible: false,
       dialogTitle: "",
       textareaContent: "",
@@ -149,49 +144,18 @@ export default {
     titleText() {
       return this.isToday ? "今天的作业" : `${this.dateLabel} 的作业`;
     },
+    emptyTitle() {
+      return this.isToday ? "今天还没有作业记录" : "这一天暂时没有作业记录";
+    },
     dateLabel() {
       const date = this.selectedDateObj;
       return `${date.getMonth() + 1} 月 ${date.getDate()} 日`;
     },
     sortedItems() {
-      const items = [];
-
-      for (const subject of this.availableSubjects) {
-        const subjectData = this.boardData.homework[subject.name];
-        if (subjectData?.content?.trim()) {
-          items.push({
-            key: subject.name,
-            name: subject.name,
-            type: "homework",
-            content: subjectData.content,
-            options: subjectData.options || {},
-            order: subject.order,
-          });
-        }
-      }
-
-      for (const [key, value] of Object.entries(this.boardData.homework)) {
-        if (key.startsWith("custom-") && value?.content?.trim()) {
-          items.push({
-            key,
-            name: value.name || "自定义",
-            type: "custom",
-            content: value.content,
-            options: value.options || {},
-            order: 1000,
-          });
-        }
-      }
-
-      return items.sort((a, b) => a.order - b.order);
+      return getSortedHomeworkItems(this.boardData, this.availableSubjects);
     },
     unusedSubjects() {
-      const usedKeys = new Set(
-        Object.entries(this.boardData.homework)
-          .filter(([, value]) => value?.content?.trim())
-          .map(([key]) => key)
-      );
-      return this.availableSubjects.filter((subject) => !usedKeys.has(subject.name));
+      return getUnusedSubjects(this.boardData, this.availableSubjects);
     },
     homeworkCount() {
       return this.sortedItems.length;
@@ -208,17 +172,10 @@ export default {
       await this.initializeData();
       this.dataReady = true;
     } catch (error) {
-      console.error("初始化失败", error);
+      console.error("初始化失败:", error);
     }
   },
   methods: {
-    formatDate(dateInput) {
-      const date = dateInput instanceof Date ? dateInput : new Date(dateInput);
-      const year = date.getFullYear();
-      const month = String(date.getMonth() + 1).padStart(2, "0");
-      const day = String(date.getDate()).padStart(2, "0");
-      return `${year}${month}${day}`;
-    },
     async initializeData() {
       const urlParams = new URLSearchParams(window.location.search);
       const dateFromUrl = urlParams.get("date");
@@ -233,37 +190,27 @@ export default {
       }
 
       this.selectedDateObj = currentDate;
-      this.dateString = this.formatDate(currentDate);
-      this.isToday = this.dateString === this.formatDate(today);
+      this.dateString = formatDateKey(currentDate);
+      this.isToday = this.dateString === formatDateKey(today);
+
       await Promise.all([this.downloadData(), this.loadConfig()]);
     },
     async loadConfig() {
       try {
         const subjectsResponse = await getData("classworks-config-subject");
-        if (Array.isArray(subjectsResponse) && subjectsResponse.length) {
-          const allowedSubjects = new Set(DEFAULT_SUBJECTS.map((subject) => subject.name));
-          const orderMap = new Map(DEFAULT_SUBJECTS.map((subject) => [subject.name, subject.order]));
-          const filteredSubjects = subjectsResponse
-            .filter((subject) => allowedSubjects.has(subject.name))
-            .map((subject) => ({ ...subject, order: orderMap.get(subject.name) ?? 999 }))
-            .sort((a, b) => a.order - b.order);
-          this.availableSubjects = filteredSubjects.length ? filteredSubjects : [...DEFAULT_SUBJECTS];
-        } else {
-          this.availableSubjects = [...DEFAULT_SUBJECTS];
-        }
+        this.availableSubjects = resolveAvailableSubjects(subjectsResponse);
       } catch (error) {
         console.warn("加载学科配置失败:", error);
-        this.availableSubjects = [...DEFAULT_SUBJECTS];
+        this.availableSubjects = resolveAvailableSubjects([]);
       }
     },
     async downloadData() {
       try {
-        const dataKey = `classworks-data-${this.dateString}`;
-        const response = await getData(dataKey);
-        this.boardData = { homework: response?.homework || {} };
+        const response = await getData(`classworks-data-${this.dateString}`);
+        this.boardData = normalizeBoardData(response);
       } catch (error) {
         console.error("加载作业失败:", error);
-        this.boardData = { homework: {} };
+        this.boardData = normalizeBoardData();
       }
     },
     async uploadData() {
@@ -279,6 +226,7 @@ export default {
     },
     async handleHomeworkSave(payload) {
       if (!this.currentEditSubject) return;
+
       const existing = this.boardData.homework[this.currentEditSubject] || {};
       const normalizedPayload =
         typeof payload === "string"
@@ -294,6 +242,7 @@ export default {
           options: normalizedPayload.options,
         };
       }
+
       await this.uploadData();
     },
     zoom(direction) {
@@ -302,12 +251,14 @@ export default {
     },
     async handleDateSelect(dateValue) {
       if (!dateValue) return;
+
       const selectedDate = new Date(dateValue);
-      const nextDateString = this.formatDate(selectedDate);
+      const nextDateString = formatDateKey(selectedDate);
       if (nextDateString === this.dateString) return;
+
       this.selectedDateObj = selectedDate;
       this.dateString = nextDateString;
-      this.isToday = nextDateString === this.formatDate(new Date());
+      this.isToday = nextDateString === formatDateKey(new Date());
       await this.downloadData();
     },
     navigateDay(offset) {
@@ -318,18 +269,19 @@ export default {
     async copyHomeworkToToday() {
       if (this.loading.copyToToday) return;
       this.loading.copyToToday = true;
+
       try {
         const sourceHomework = JSON.parse(JSON.stringify(this.boardData.homework));
         const today = new Date();
         this.selectedDateObj = today;
-        this.dateString = this.formatDate(today);
+        this.dateString = formatDateKey(today);
         this.isToday = true;
         this.boardData.homework = Object.fromEntries(
-          Object.entries(sourceHomework).filter(([, value]) => value?.content?.trim())
+          Object.entries(sourceHomework).filter(([, value]) => value?.content?.trim()),
         );
         await this.uploadData();
       } catch (error) {
-        console.error("复制到今天失败", error);
+        console.error("复制到今天失败:", error);
       } finally {
         this.loading.copyToToday = false;
       }

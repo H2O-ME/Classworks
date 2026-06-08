@@ -44,13 +44,11 @@ export default {
       return "当前环境不能直接安装";
     },
     hintBody() {
-      if (this.isReady) {
-        return "点击后可把今天的作业安装成桌面应用。";
-      }
+      if (this.isReady) return "点击后可将作业看板安装成桌面应用。";
       if (!this.isSecureOrigin) {
-        return "请改用 HTTPS，或直接用 localhost 打开；像 192.168.x.x 这样的 HTTP 局域网地址，Edge 不会给安装提示。";
+        return "请改用 HTTPS 或 localhost 打开；像 192.168.x.x 这样的 HTTP 局域网地址通常不会显示安装提示。";
       }
-      return "请用 Chrome 或 Edge 打开当前地址，再从浏览器菜单安装。";
+      return "请使用 Chrome 或 Edge 打开当前地址，再从浏览器菜单中安装。";
     },
   },
   mounted() {
