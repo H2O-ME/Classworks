@@ -14,7 +14,7 @@ export const AI_POLISH_PROVIDER_LABEL = "api.tianhw.top";
 export const AI_POLISH_MODEL_LABEL = AI_POLISH_MODEL;
 
 const SYSTEM_PROMPT = [
-  "你是地理作业卡片的格式整理助手，只做删减和整理，不扩写，不解释。",
+  "你是课程作业卡片的格式整理助手，只做删减和整理，不扩写，不解释。",
   "只输出最终能显示在作业卡片上的文本，不要标题、Markdown、引号或说明。",
   "保留作业任务、编号、题名、页码、范围、收交时间、检查时间。",
   "删除学生名单、背诵名单、背诵内容、课堂闲话、讲话、情绪提醒和无关句子。",
@@ -22,7 +22,7 @@ const SYSTEM_PROMPT = [
   "多项作业逐行输出，不要把不同编号合并成一行。",
 ].join("\n");
 
-const USER_PROMPT_PREFIX = `按规则整理下面的地理作业文本。
+const USER_PROMPT_PREFIX = `按规则整理下面的课程作业文本。
 示例1
 原文：整理错题【明天收】大题还没讲，不要顾前不顾后！应该尽改！
 输出：整理错题【明天收】
@@ -61,7 +61,7 @@ export function clearSavedAiSecret() {
   localStorage.removeItem(AI_KEY_STORAGE);
 }
 
-export async function polishGeographyHomework(content, secret, options = {}) {
+export async function polishHomework(content, secret, options = {}) {
   const source = normalizeInput(content);
   if (!source) {
     throw new Error("EMPTY_CONTENT");
@@ -74,28 +74,24 @@ export async function polishGeographyHomework(content, secret, options = {}) {
     signal: options.signal,
   });
 
-  const data = await parseJsonSafely(response);
+  const data = await parseResponseSafely(response);
 
   if (!response.ok) {
     const code = data?.error?.code || `AI_POLISH_FAILED_${response.status}`;
     throw new Error(code);
   }
 
-  const choice = data?.choices?.[0];
-  const polished = extractAiMessageText(choice?.message);
+  const polished = extractPolishedText(data) || extractRawTextResponse(data);
 
   if (!polished) {
-    const fallback = formatGeographyHomeworkLocally(source);
+    const fallback = formatHomeworkLocally(source);
     if (fallback) {
       return fallback;
     }
-    if (choice?.finish_reason === "length") {
-      throw new Error("AI_OUTPUT_TRUNCATED");
-    }
-    throw new Error("EMPTY_AI_RESPONSE");
+    return numberHomeworkLines(source);
   }
 
-  return normalizeGeographyHomework(polished);
+  return normalizeHomework(polished);
 }
 
 async function raceAiPolishRequests({ apiKey, source, signal }) {
@@ -255,9 +251,30 @@ function concatBytes(left, right) {
   return result;
 }
 
-async function parseJsonSafely(response) {
+async function parseResponseSafely(response) {
   try {
-    return await response.json();
+    const rawText = await response.text();
+    if (!rawText.trim()) {
+      return {};
+    }
+
+    try {
+      const parsed = JSON.parse(rawText);
+      if (parsed && typeof parsed === "object") {
+        return {
+          ...parsed,
+          __rawText: rawText,
+        };
+      }
+      return {
+        __rawText: rawText,
+        value: parsed,
+      };
+    } catch {
+      return {
+        __rawText: rawText,
+      };
+    }
   } catch {
     return {};
   }
@@ -272,7 +289,7 @@ function normalizeInput(content) {
     .join("\n");
 }
 
-function normalizeGeographyHomework(content) {
+function normalizeHomework(content) {
   return normalizeInput(content)
     .split("\n")
     .map((line) => removeNonTaskBrackets(line).trim())
@@ -282,13 +299,77 @@ function normalizeGeographyHomework(content) {
     .join("\n");
 }
 
+function extractPolishedText(data) {
+  const choice = data?.choices?.[0];
+  const candidateValues = [
+    choice?.message,
+    choice?.delta,
+    data?.message,
+    data?.output_text,
+    data?.output?.text,
+    data?.response,
+    data?.text,
+    data?.content,
+  ];
+
+  for (const candidate of candidateValues) {
+    const text = extractAiMessageText(candidate);
+    if (text) {
+      return text;
+    }
+  }
+
+  if (Array.isArray(data?.output)) {
+    for (const item of data.output) {
+      const text = extractAiMessageText(item);
+      if (text) {
+        return text;
+      }
+    }
+  }
+
+  return "";
+}
+
+function extractRawTextResponse(data) {
+  const rawText = String(data?.__rawText || "").trim();
+  if (!rawText) {
+    return "";
+  }
+
+  if (rawText.startsWith("{") || rawText.startsWith("[")) {
+    return "";
+  }
+
+  return rawText;
+}
+
 function extractAiMessageText(message) {
+  if (typeof message === "string" || Array.isArray(message)) {
+    const directText = readContentText(message);
+    if (directText) {
+      return directText;
+    }
+  }
+
   const contentText = readContentText(message?.content);
   if (contentText) {
     return contentText;
   }
 
-  return extractFinalAnswerFromReasoning(readContentText(message?.reasoning_content || message?.reasoning));
+  const directText = readContentText(message?.text || message?.output_text);
+  if (directText) {
+    return directText;
+  }
+
+  const nestedOutputText = readOutputText(message?.output);
+  if (nestedOutputText) {
+    return nestedOutputText;
+  }
+
+  return extractFinalAnswerFromReasoning(
+    readContentText(message?.reasoning_content || message?.reasoning || message?.output?.reasoning)
+  );
 }
 
 function readContentText(content) {
@@ -301,6 +382,37 @@ function readContentText(content) {
       .map((part) => (typeof part === "string" ? part : part?.text || part?.content || ""))
       .join("")
       .trim();
+  }
+
+  return "";
+}
+
+function readOutputText(output) {
+  if (!Array.isArray(output)) {
+    return "";
+  }
+
+  return output
+    .flatMap((item) => {
+      if (typeof item === "string") {
+        return [item];
+      }
+      if (Array.isArray(item?.content)) {
+        return item.content.map((part) => part?.text || part?.content || "");
+      }
+      return [item?.text || item?.content || outputItemText(item)];
+    })
+    .join("")
+    .trim();
+}
+
+function outputItemText(item) {
+  if (!item || typeof item !== "object") {
+    return "";
+  }
+
+  if (Array.isArray(item.output)) {
+    return readOutputText(item.output);
   }
 
   return "";
@@ -331,9 +443,10 @@ function cleanupExtractedAnswer(text) {
   return (numbered.length ? numbered : lines).join("\n");
 }
 
-function formatGeographyHomeworkLocally(content) {
+function formatHomeworkLocally(content) {
   const lines = normalizeInput(content).split("\n");
   const tasks = [];
+  const plainTasks = [];
 
   for (const line of lines) {
     const taskMatch = line.match(/^(\d+[、.)）])\s*(.+)$/u);
@@ -347,7 +460,15 @@ function formatGeographyHomeworkLocally(content) {
     }
 
     const current = tasks[tasks.length - 1];
-    if (!current || isNonTaskLine(line)) {
+    if (isNonTaskLine(line)) {
+      continue;
+    }
+
+    if (!current) {
+      const normalizedLine = normalizePlainTaskLine(line);
+      if (normalizedLine) {
+        plainTasks.push(normalizedLine);
+      }
       continue;
     }
 
@@ -364,9 +485,15 @@ function formatGeographyHomeworkLocally(content) {
     applyGlobalNote(tasks, line);
   }
 
-  return tasks
+  const numberedTasks = tasks
     .map((task) => `${task.prefix}${task.text}${task.notes.map((note) => `（${note}）`).join("")}`)
-    .join("\n");
+    .filter(Boolean);
+
+  if (numberedTasks.length) {
+    return numberedTasks.join("\n");
+  }
+
+  return numberPlainTasks(plainTasks).join("\n");
 }
 
 function applyGlobalNote(tasks, line) {
@@ -393,6 +520,47 @@ function removeNonTaskBrackets(line) {
   return line.replace(/[【\[]([^【】\[\]]+)[】\]]/g, (match, inner) => {
     return /(收|交|截止|明天|今天|早读|周|星期|课前|检查)/u.test(inner) ? match : "";
   });
+}
+
+function normalizePlainTaskLine(line) {
+  const cleaned = removeNonTaskBrackets(String(line || ""))
+    .replace(/[！!。；;]+$/gu, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!cleaned) {
+    return "";
+  }
+
+  if (isNonTaskLine(cleaned)) {
+    return "";
+  }
+
+  if (/^(贴好|抓紧时间买|统一贴本子上|有些人不贴|不要浪费我的心血)/u.test(cleaned)) {
+    return "";
+  }
+
+  return cleaned;
+}
+
+function numberHomeworkLines(content) {
+  const lines = normalizeInput(content)
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  if (!lines.length) {
+    return "";
+  }
+
+  return lines.map((line, index) => `${index + 1}、${line}`).join("\n");
+}
+
+function numberPlainTasks(tasks) {
+  return tasks
+    .map((task) => String(task || "").trim())
+    .filter(Boolean)
+    .map((task, index) => `${index + 1}、${task}`);
 }
 
 function isNonTaskLine(line) {

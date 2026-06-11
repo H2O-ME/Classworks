@@ -110,7 +110,7 @@ export default {
       return subjectName === "地理";
     },
     isGeoHdrEnabled(item) {
-      return this.isGeographySubject(item.name) && item.options?.hdr !== false;
+      return this.isGeographySubject(item.name);
     },
     handleResize() {
       this.viewportWidth = window.innerWidth;

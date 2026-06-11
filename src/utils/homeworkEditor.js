@@ -1,4 +1,4 @@
-export const QUICK_INSERT_TEXTS = ["预习", "订正", "背诵", "练习", "提交", "复习"];
+export const QUICK_INSERT_TEXTS = ["预习练", "小题组", "背诵", "抄写", "同步", "学案"];
 
 export const EDITOR_COPY = {
   close: "关闭",
@@ -21,7 +21,7 @@ export const EDITOR_COPY = {
 const POLISH_ERROR_MESSAGES = {
   AI_SECRET_REQUIRED: "需要先输入密钥才能使用 AI 润色。",
   AI_SECRET_INVALID: "密钥不正确，请重新输入。",
-  EMPTY_CONTENT: "先输入地理作业内容，再使用 AI 润色。",
+  EMPTY_CONTENT: "先输入作业内容，再使用 AI 润色。",
   EMPTY_AI_RESPONSE: "AI 没有返回可用内容，请稍后再试。",
   AI_OUTPUT_TRUNCATED: "AI 输出不完整，请稍后再试。",
   AI_POLISH_UPSTREAM_FORBIDDEN: "AI 服务拒绝访问，请检查接口状态或密钥。",
@@ -40,14 +40,14 @@ export function createEditorState(initialContent = "", initialOptions = {}, isGe
     dirty: false,
     pendingPolishContent: "",
     polishError: "",
-    geoHdrEnabled: isGeography ? initialOptions?.hdr !== false : false,
+    polishNotice: "",
   };
 }
 
-export function buildSavePayload(content, geoHdrEnabled, showGeoHdrToggle) {
+export function buildSavePayload(content) {
   return {
     content: String(content || "").trim(),
-    options: { hdr: showGeoHdrToggle ? geoHdrEnabled : false },
+    options: {},
   };
 }
 

@@ -23,6 +23,13 @@
       <v-card-text class="dialog-body">
         <div class="editor-review-layout" :class="{ 'editor-review-layout-active': pendingPolishContent }">
           <div class="editor-column">
+            <div class="panel-header">
+              <div>
+                <div class="panel-eyebrow">编辑内容</div>
+              </div>
+              <div class="panel-badge">{{ content.length }} 字</div>
+            </div>
+
             <div
               class="editor-field"
               :class="{ 'editor-field-polishing': polishing, 'editor-field-updated': contentUpdated }"
@@ -33,7 +40,6 @@
                 class="editor-textarea"
                 :placeholder="copy.placeholder"
                 rows="10"
-                autofocus
                 @input="handleContentInput"
               />
               <div v-if="polishing" class="polish-soft-mask" aria-hidden="true" />
@@ -42,53 +48,9 @@
               <div v-if="polishing" class="polish-status" aria-live="polite">{{ copy.polishing }}</div>
             </div>
 
-            <div class="editor-footer" :class="{ 'editor-footer-plain': !showGeoTools }">
-              <div class="dialog-meta">
-                <span>{{ content.length }} 字</span>
-                <span>{{ dirty ? copy.dirty : copy.synced }}</span>
-              </div>
-
-              <div v-if="showGeoTools" class="subject-tools">
-                <button
-                  v-if="showGeoHdrToggle"
-                  type="button"
-                  class="subject-tool"
-                  :class="{ 'subject-tool-active': geoHdrEnabled }"
-                  @click="toggleGeoHdr"
-                >
-                  <span class="subject-tool-main">
-                    <span class="subject-tool-icon">
-                      <v-icon icon="mdi-brightness-6" size="17" />
-                    </span>
-                    <span>HDR</span>
-                  </span>
-                  <span class="subject-toggle" :class="{ 'subject-toggle-on': geoHdrEnabled }" aria-hidden="true">
-                    <span class="subject-toggle-thumb" />
-                  </span>
-                </button>
-
-                <button
-                  v-if="showGeoPolish"
-                  type="button"
-                  class="subject-tool subject-tool-ai"
-                  :class="{ 'subject-tool-active': polishing }"
-                  :disabled="polishing && !polishRetryReady"
-                  @click="polishWithAi"
-                >
-                  <span class="subject-tool-main">
-                    <span class="subject-tool-icon subject-tool-icon-ai">
-                      <v-icon :icon="polishing ? 'mdi-loading' : 'mdi-auto-fix'" size="17" />
-                    </span>
-                    <span>{{ polishing ? (polishRetryReady ? "重试" : copy.polishing) : "AI 整理" }}</span>
-                  </span>
-                </button>
-
-                <a class="ai-provider-note" href="https://api.tianhw.top" target="_blank" rel="noreferrer">
-                  {{ copy.provider }}
-                </a>
-              </div>
-
-              <div v-if="showQuickTools" class="tools-grid">
+            <div class="editor-footer">
+              <div v-if="showQuickTools" class="tools-row">
+                <div class="tools-grid">
                 <button
                   v-for="text in quickTexts"
                   :key="text"
@@ -98,18 +60,48 @@
                 >
                   {{ text }}
                 </button>
-                <button type="button" class="tool-chip" @click="insertAtCursor('\n')">{{ copy.newline }}</button>
-                <button type="button" class="tool-chip" @click="pasteFromClipboard">{{ copy.paste }}</button>
-                <button type="button" class="tool-chip tool-chip-danger" @click="clearContent">{{ copy.clear }}</button>
+                <button type="button" class="tool-chip tool-chip-utility" @click="insertAtCursor('\n')">{{ copy.newline }}</button>
+                <button type="button" class="tool-chip tool-chip-utility" @click="pasteFromClipboard">{{ copy.paste }}</button>
+                <button type="button" class="tool-chip tool-chip-utility tool-chip-danger" @click="clearContent">{{ copy.clear }}</button>
+                <button
+                  type="button"
+                  class="tool-chip tool-chip-ai"
+                  :class="{ 'tool-chip-active': polishing }"
+                  :disabled="polishing && !polishRetryReady"
+                  @click="polishWithAi"
+                >
+                  <span class="tool-chip-ai-inner">
+                    <span class="tool-chip-ai-icon">
+                      <v-icon :icon="polishing ? 'mdi-loading' : 'mdi-auto-fix'" size="15" />
+                    </span>
+                    <span>{{ polishing ? (polishRetryReady ? "重试" : copy.polishing) : "AI 整理" }}</span>
+                  </span>
+                </button>
+                </div>
+
+                <div class="dialog-meta">
+                  <span>{{ dirty ? copy.dirty : copy.synced }}</span>
+                </div>
               </div>
             </div>
 
             <div v-if="polishError" class="dialog-error" role="alert" aria-live="polite">
               {{ polishError }}
             </div>
+
+            <div v-if="polishNotice" class="dialog-notice" aria-live="polite">
+              {{ polishNotice }}
+            </div>
           </div>
 
           <section v-if="pendingPolishContent" class="diff-column">
+            <div class="panel-header panel-header-compact">
+              <div>
+                <div class="panel-eyebrow">AI 审核</div>
+                <div class="panel-caption">确认差异后再应用到作业内容</div>
+              </div>
+            </div>
+
             <div class="diff-panel">
               <div class="diff-body">
                 <div
@@ -150,7 +142,6 @@ import {
   buildSavePayload,
   createEditorState,
   EDITOR_COPY,
-  isGeographySubject,
   QUICK_INSERT_TEXTS,
 } from "@/utils/homeworkEditor";
 import { useDisplay } from "vuetify";
@@ -197,15 +188,6 @@ export default {
     showQuickTools() {
       return true;
     },
-    showGeoHdrToggle() {
-      return isGeographySubject(this.title);
-    },
-    showGeoPolish() {
-      return isGeographySubject(this.title);
-    },
-    showGeoTools() {
-      return this.showGeoHdrToggle || this.showGeoPolish;
-    },
     polishDiffRows() {
       return buildLineDiff(this.content, this.pendingPolishContent);
     },
@@ -213,7 +195,7 @@ export default {
   watch: {
     modelValue(value) {
       if (value) {
-        Object.assign(this, createEditorState(this.initialContent, this.initialOptions, this.showGeoHdrToggle));
+        Object.assign(this, createEditorState(this.initialContent, this.initialOptions));
         this.$nextTick(() => this.$refs.inputRef?.focus());
       } else {
         this.cancelActivePolish();
@@ -222,20 +204,14 @@ export default {
     content() {
       this.updateDirtyState();
     },
-    geoHdrEnabled() {
-      this.updateDirtyState();
-    },
   },
   methods: {
     updateDirtyState() {
-      const hdrChanged = this.showGeoHdrToggle && this.geoHdrEnabled !== (this.initialOptions?.hdr !== false);
-      this.dirty = this.content !== this.initialContent || hdrChanged;
-    },
-    toggleGeoHdr() {
-      this.geoHdrEnabled = !this.geoHdrEnabled;
+      this.dirty = this.content !== this.initialContent;
     },
     handleContentInput() {
       this.clearPolishError();
+      this.clearPolishNotice();
       this.pendingPolishContent = "";
     },
     async handleSaveAndClose() {
@@ -248,7 +224,7 @@ export default {
       if (this.saving) return;
       this.saving = true;
       try {
-        await this.$emit("save", buildSavePayload(this.content, this.geoHdrEnabled, this.showGeoHdrToggle));
+        await this.$emit("save", buildSavePayload(this.content));
         this.dialogVisible = false;
       } finally {
         this.saving = false;
@@ -258,10 +234,14 @@ export default {
       this.content = "";
       this.pendingPolishContent = "";
       this.clearPolishError();
+      this.clearPolishNotice();
       this.$nextTick(() => this.$refs.inputRef?.focus());
     },
     clearPolishError() {
       this.polishError = "";
+    },
+    clearPolishNotice() {
+      this.polishNotice = "";
     },
     resetPolishRetryState() {
       this.polishRetryReady = false;
@@ -332,6 +312,7 @@ export default {
       this.polishAbortController = abortController;
       this.polishing = true;
       this.polishError = "";
+      this.polishNotice = "";
       this.pendingPolishContent = "";
       this.armPolishRetry(runId);
 
@@ -341,7 +322,7 @@ export default {
         });
         if (this.polishRunId !== runId) return;
         if (polished === this.content.trim()) {
-          this.polishError = "AI 没有发现需要修改的内容。";
+          this.polishNotice = "已经很规整了，这次没有需要调整的地方。";
           return;
         }
         this.pendingPolishContent = polished;
@@ -429,18 +410,18 @@ export default {
 
 .dialog-body {
   background: #171717;
-  padding: 16px !important;
+  padding: 14px !important;
 }
 
 .editor-review-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 14px;
+  gap: 12px;
   align-items: stretch;
 }
 
 .editor-review-layout-active {
-  grid-template-columns: minmax(0, 1fr) minmax(390px, 0.78fr);
+  grid-template-columns: minmax(0, 1.08fr) minmax(360px, 0.82fr);
   align-items: stretch;
 }
 
@@ -448,6 +429,44 @@ export default {
   display: flex;
   min-width: 0;
   flex-direction: column;
+}
+
+.panel-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+  padding: 0 2px;
+}
+
+.panel-header-compact {
+  margin-bottom: 8px;
+}
+
+.panel-eyebrow {
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.panel-caption {
+  margin-top: 4px;
+  color: rgba(255, 255, 255, 0.42);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.panel-badge {
+  flex: 0 0 auto;
+  padding: 6px 9px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.03);
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .editor-field {
@@ -461,17 +480,22 @@ export default {
   position: relative;
   z-index: 1;
   width: 100%;
-  height: clamp(300px, 45vh, 430px);
+  height: clamp(280px, 42vh, 390px);
   resize: vertical;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 9px;
-  padding: 16px 17px;
+  padding: 14px 16px;
   background: #1d1d1d;
   color: #f2f2f2;
   font: inherit;
   line-height: 1.75;
   outline: none;
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.editor-textarea:focus {
+  border-color: rgba(196, 211, 238, 0.28);
+  box-shadow: 0 0 0 1px rgba(196, 211, 238, 0.14);
 }
 
 .editor-field-polishing {
@@ -536,25 +560,31 @@ export default {
 }
 
 .editor-footer {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 10px 14px;
-  align-items: start;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   margin-top: 10px;
+  padding: 10px 12px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.tools-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
 }
 
 .dialog-meta {
   display: flex;
-  grid-column: 2;
-  grid-row: 1;
-  flex-direction: column;
-  align-items: flex-end;
-  justify-content: flex-start;
-  gap: 4px;
-  min-width: 150px;
-  padding-top: 4px;
-  color: rgba(255, 255, 255, 0.52);
-  font-size: 13px;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+  padding-top: 6px;
+  white-space: nowrap;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 12px;
   text-align: right;
 }
 
@@ -569,174 +599,31 @@ export default {
   line-height: 1.5;
 }
 
-.subject-tools {
-  display: flex;
-  grid-column: 1;
-  grid-row: 1;
-  flex-wrap: wrap;
-  gap: 10px;
-  align-items: center;
-}
-
-.subject-tool {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  width: auto;
-  min-width: 146px;
-  min-height: 44px;
-  padding: 0 11px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 8px;
-  background: linear-gradient(180deg, #242424, #1d1d1d);
-  color: #f2f2f2;
-  font-size: 14px;
-  font-weight: 800;
-  text-align: left;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.05),
-    0 8px 18px rgba(0, 0, 0, 0.14);
-  cursor: pointer;
-  transition:
-    border-color 0.18s ease,
-    background-color 0.18s ease,
-    box-shadow 0.18s ease,
-    transform 0.18s ease;
-}
-
-.subject-tool:hover:not(:disabled) {
-  transform: translateY(-1px);
-  border-color: rgba(255, 255, 255, 0.24);
-  background: linear-gradient(180deg, #2a2a2a, #202020);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.07),
-    0 12px 22px rgba(0, 0, 0, 0.18);
-}
-
-.subject-tool:active:not(:disabled) {
-  transform: translateY(0);
-  box-shadow: inset 0 1px 4px rgba(0, 0, 0, 0.26);
-}
-
-.subject-tool:disabled {
-  cursor: wait;
-  opacity: 0.78;
-}
-
-.subject-tool-main {
-  display: inline-flex;
-  min-width: 0;
-  align-items: center;
-  gap: 10px;
-}
-
-.subject-tool-icon {
-  display: inline-flex;
-  width: 30px;
-  height: 30px;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+.dialog-notice {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid rgba(120, 168, 255, 0.18);
   border-radius: 7px;
-  background: rgba(255, 255, 255, 0.055);
-  color: rgba(255, 255, 255, 0.84);
-}
-
-.subject-tool-ai {
-  min-width: 124px;
-  border-color: rgba(215, 224, 238, 0.2);
-  background: linear-gradient(180deg, #282a2e, #1d1e21);
-}
-
-.subject-tool-icon-ai {
-  background: rgba(230, 236, 248, 0.09);
-}
-
-.ai-provider-note {
-  max-width: 220px;
-  overflow: hidden;
-  align-self: center;
-  color: rgba(255, 255, 255, 0.36);
-  font-size: 11px;
-  font-weight: 650;
-  line-height: 1.2;
-  text-decoration: none;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  transition: color 180ms ease, opacity 180ms ease;
-}
-
-.ai-provider-note:hover {
-  color: rgba(255, 255, 255, 0.62);
-}
-
-.subject-tool-active {
-  border-color: rgba(176, 192, 222, 0.38);
-  background: linear-gradient(180deg, #29303a, #202226);
-}
-
-.subject-toggle {
-  position: relative;
-  width: 40px;
-  height: 23px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 999px;
-  background: #2a2a2a;
-  transition: background-color 0.18s ease, border-color 0.18s ease;
-}
-
-.subject-toggle-on {
-  border-color: rgba(170, 194, 230, 0.3);
-  background: #3b5d8f;
-}
-
-.subject-toggle-thumb {
-  position: absolute;
-  top: 3px;
-  left: 3px;
-  width: 15px;
-  height: 15px;
-  border-radius: 999px;
-  background: #d8d8d8;
-  transition: transform 0.18s ease, background-color 0.18s ease;
-}
-
-.subject-toggle-on .subject-toggle-thumb {
-  transform: translateX(17px);
-  background: #f1f1f1;
+  background: rgba(70, 110, 190, 0.1);
+  color: rgba(214, 228, 255, 0.9);
+  font-size: 13px;
+  line-height: 1.5;
 }
 
 .tools-grid {
   display: flex;
-  grid-column: 1 / -1;
-  grid-row: 2;
   flex-wrap: wrap;
   gap: 7px;
   align-items: center;
   justify-content: flex-start;
-  padding-top: 2px;
-}
-
-.editor-footer-plain {
-  grid-template-columns: minmax(0, 1fr) auto;
-}
-
-.editor-footer-plain .tools-grid {
-  grid-column: 1;
-  grid-row: 1;
-  padding-top: 0;
-}
-
-.editor-footer-plain .dialog-meta {
-  grid-column: 2;
-  grid-row: 1;
+  min-width: 0;
+  flex: 1 1 auto;
 }
 
 .tool-chip {
-  min-height: 32px;
-  padding: 0 10px;
+  flex: 0 0 auto;
+  min-height: 36px;
+  padding: 0 12px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 7px;
   background: #202020;
@@ -756,6 +643,53 @@ export default {
   color: #ffb7b7;
 }
 
+.tool-chip-utility {
+  border-color: rgba(160, 186, 230, 0.18);
+  background: linear-gradient(180deg, #242832, #1d2028);
+  color: rgba(235, 242, 255, 0.96);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.tool-chip-utility:hover {
+  border-color: rgba(182, 206, 247, 0.3);
+  background: linear-gradient(180deg, #2a3040, #222734);
+}
+
+.tool-chip-ai {
+  display: inline-flex;
+  align-items: center;
+  border-color: rgba(215, 224, 238, 0.2);
+  background: linear-gradient(180deg, #282a2e, #1d1e21);
+}
+
+.tool-chip-ai:disabled {
+  cursor: wait;
+  opacity: 0.78;
+}
+
+.tool-chip-ai-inner {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tool-chip-ai-icon {
+  display: inline-flex;
+  width: 18px;
+  height: 18px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 5px;
+  background: rgba(230, 236, 248, 0.09);
+  color: rgba(255, 255, 255, 0.84);
+}
+
+.tool-chip-active {
+  border-color: rgba(176, 192, 222, 0.38);
+  background: linear-gradient(180deg, #29303a, #202226);
+}
+
 .diff-column {
   display: flex;
   min-width: 0;
@@ -766,7 +700,7 @@ export default {
 .diff-panel {
   display: flex;
   min-width: 0;
-  height: clamp(300px, 45vh, 430px);
+  height: clamp(280px, 42vh, 390px);
   overflow: hidden;
   flex-direction: column;
   justify-content: stretch;
@@ -774,6 +708,7 @@ export default {
   border-radius: 9px;
   background: #181818;
   animation: diff-panel-in 0.22s ease-out;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
 }
 
 .diff-review-bar {
@@ -781,6 +716,7 @@ export default {
   border-radius: 9px;
   overflow: hidden;
   background: #181818;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.14);
 }
 
 .diff-header {
@@ -788,7 +724,7 @@ export default {
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
-  padding: 12px 14px;
+  padding: 14px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   background: #1d1d1d;
 }
@@ -800,13 +736,13 @@ export default {
 
 .diff-title {
   color: #f2f2f2;
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 800;
 }
 
 .diff-subtitle {
-  margin-top: 2px;
-  color: rgba(255, 255, 255, 0.48);
+  margin-top: 3px;
+  color: rgba(255, 255, 255, 0.42);
   font-size: 12px;
 }
 
@@ -814,11 +750,12 @@ export default {
   display: flex;
   flex: 0 0 auto;
   gap: 8px;
+  align-items: center;
 }
 
 .diff-btn {
-  min-height: 32px;
-  padding: 0 11px;
+  min-height: 36px;
+  padding: 0 14px;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 7px;
   font-size: 13px;
@@ -840,7 +777,7 @@ export default {
   flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
-  padding: 8px 0;
+  padding: 10px 0;
   font-family: Consolas, "SFMono-Regular", "Microsoft YaHei UI", monospace;
   font-size: 13px;
   line-height: 1.7;
@@ -850,7 +787,7 @@ export default {
   display: grid;
   grid-template-columns: 34px minmax(0, 1fr);
   min-height: 24px;
-  padding-right: 12px;
+  padding: 0 12px 0 0;
   white-space: pre-wrap;
 }
 
@@ -981,33 +918,34 @@ export default {
   }
 
   .editor-footer {
-    grid-template-columns: 1fr;
+    gap: 12px;
   }
 
-  .subject-tools,
+  .tools-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
   .tools-grid,
   .dialog-meta {
-    grid-column: 1;
-    grid-row: auto;
+    width: 100%;
   }
 
   .dialog-meta {
     align-items: flex-start;
+    justify-content: flex-start;
+    padding-top: 0;
     gap: 4px;
     text-align: left;
   }
 
-  .subject-tool-ai {
-    min-width: 118px;
-  }
-
-  .ai-provider-note {
-    max-width: 100%;
+  .tool-chip-ai {
+    order: 999;
   }
 
   .editor-textarea,
   .diff-panel {
-    height: 260px;
+    height: 250px;
   }
 
 }

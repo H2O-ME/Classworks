@@ -1,4 +1,4 @@
-import { polishGeographyHomework, saveAiSecret, hasSavedAiSecret } from "./aiPolish";
+import { polishHomework, saveAiSecret, hasSavedAiSecret } from "./aiPolish";
 import { resolvePolishErrorMessage } from "./homeworkEditor";
 
 export async function ensureAiSecret(promptText) {
@@ -22,7 +22,7 @@ export async function ensureAiSecret(promptText) {
 
 export async function requestAiPolish(content, promptText, options = {}) {
   const secret = await ensureAiSecret(promptText);
-  return polishGeographyHomework(content, secret, options);
+  return polishHomework(content, secret, options);
 }
 
 export function getAiPolishError(error) {
