@@ -1,8 +1,15 @@
 <template>
   <div class="board-section">
     <div class="board-main-pane">
-      <div class="masonry-board" :class="`columns-${columnCount}`">
-        <div v-for="(column, columnIndex) in columns" :key="`column-${columnIndex}`" class="masonry-column">
+      <div
+        class="masonry-board"
+        :class="`columns-${columnCount}`"
+      >
+        <div
+          v-for="(column, columnIndex) in columns"
+          :key="`column-${columnIndex}`"
+          class="masonry-column"
+        >
           <div class="masonry-column-inner">
             <article
               v-for="(item, itemIndex) in column"
@@ -13,11 +20,19 @@
               @click="handleCardClick(item.key)"
             >
               <header class="homework-card-header">
-                <div class="homework-card-subject">{{ item.name }}</div>
-                <v-icon :icon="item.type === 'custom' ? 'mdi-card-text-outline' : 'mdi-pencil-outline'" size="15" />
+                <div class="homework-card-subject">
+                  {{ item.name }}
+                </div>
+                <v-icon
+                  :icon="item.type === 'custom' ? 'mdi-card-text-outline' : 'mdi-pencil-outline'"
+                  size="15"
+                />
               </header>
 
-              <div class="homework-card-content" :style="contentStyle">
+              <div
+                class="homework-card-content"
+                :style="contentStyle"
+              >
                 <div
                   v-for="(line, lineIndex) in formatContent(item.content)"
                   :key="`${item.key}-${lineIndex}`"
@@ -32,14 +47,24 @@
       </div>
     </div>
 
-    <section v-if="unusedSubjects.length" class="subject-quick-add">
+    <section
+      v-if="unusedSubjects.length"
+      class="subject-quick-add"
+    >
       <div class="subject-quick-add-surface">
         <div class="subject-quick-add-header">
           <div class="subject-quick-add-mark">
-            <v-icon icon="mdi-plus" size="16" />
+            <v-icon
+              icon="mdi-plus"
+              size="16"
+            />
           </div>
-          <div class="subject-quick-add-title">继续添加</div>
-          <div class="subject-quick-add-count">{{ unusedSubjects.length }} 科</div>
+          <div class="subject-quick-add-title">
+            继续添加
+          </div>
+          <div class="subject-quick-add-count">
+            {{ unusedSubjects.length }} 科
+          </div>
         </div>
 
         <div class="subject-quick-add-list">
@@ -52,7 +77,10 @@
             @click="handleCardClick(subject.name)"
           >
             <span>{{ subject.name }}</span>
-            <v-icon icon="mdi-plus" size="15" />
+            <v-icon
+              icon="mdi-plus"
+              size="15"
+            />
           </button>
         </div>
       </div>

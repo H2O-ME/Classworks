@@ -9,25 +9,49 @@
     @click:outside="handleClose"
     @keydown.esc="handleClose"
   >
-    <v-card class="editor-card" border rounded="lg">
+    <v-card
+      class="editor-card"
+      border
+      rounded="lg"
+    >
       <div class="dialog-header">
-        <div class="dialog-title">{{ title }}</div>
+        <div class="dialog-title">
+          {{ title }}
+        </div>
         <div class="dialog-actions">
-          <v-btn class="dialog-btn dialog-btn-ghost" variant="text" @click="handleClose">{{ copy.close }}</v-btn>
-          <v-btn class="dialog-btn dialog-btn-solid" :loading="saving" variant="flat" @click="handleSaveAndClose">
+          <v-btn
+            class="dialog-btn dialog-btn-ghost"
+            variant="text"
+            @click="handleClose"
+          >
+            {{ copy.close }}
+          </v-btn>
+          <v-btn
+            class="dialog-btn dialog-btn-solid"
+            :loading="saving"
+            variant="flat"
+            @click="handleSaveAndClose"
+          >
             {{ copy.save }}
           </v-btn>
         </div>
       </div>
 
       <v-card-text class="dialog-body">
-        <div class="editor-review-layout" :class="{ 'editor-review-layout-active': pendingPolishContent }">
+        <div
+          class="editor-review-layout"
+          :class="{ 'editor-review-layout-active': pendingPolishContent }"
+        >
           <div class="editor-column">
             <div class="panel-header">
               <div>
-                <div class="panel-eyebrow">编辑内容</div>
+                <div class="panel-eyebrow">
+                  编辑内容
+                </div>
               </div>
-              <div class="panel-badge">{{ content.length }} 字</div>
+              <div class="panel-badge">
+                {{ content.length }} 字
+              </div>
             </div>
 
             <div
@@ -42,41 +66,83 @@
                 rows="10"
                 @input="handleContentInput"
               />
-              <div v-if="polishing" class="polish-soft-mask" aria-hidden="true" />
-              <div v-if="polishing" class="polish-sheen" aria-hidden="true" />
-              <div v-if="contentUpdated" class="content-update-sheen" aria-hidden="true" />
-              <div v-if="polishing" class="polish-status" aria-live="polite">{{ copy.polishing }}</div>
+              <div
+                v-if="polishing"
+                class="polish-soft-mask"
+                aria-hidden="true"
+              />
+              <div
+                v-if="polishing"
+                class="polish-sheen"
+                aria-hidden="true"
+              />
+              <div
+                v-if="contentUpdated"
+                class="content-update-sheen"
+                aria-hidden="true"
+              />
+              <div
+                v-if="polishing"
+                class="polish-status"
+                aria-live="polite"
+              >
+                {{ copy.polishing }}
+              </div>
             </div>
 
             <div class="editor-footer">
-              <div v-if="showQuickTools" class="tools-row">
+              <div
+                v-if="showQuickTools"
+                class="tools-row"
+              >
                 <div class="tools-grid">
-                <button
-                  v-for="text in quickTexts"
-                  :key="text"
-                  type="button"
-                  class="tool-chip"
-                  @click="insertAtCursor(text)"
-                >
-                  {{ text }}
-                </button>
-                <button type="button" class="tool-chip tool-chip-utility" @click="insertAtCursor('\n')">{{ copy.newline }}</button>
-                <button type="button" class="tool-chip tool-chip-utility" @click="pasteFromClipboard">{{ copy.paste }}</button>
-                <button type="button" class="tool-chip tool-chip-utility tool-chip-danger" @click="clearContent">{{ copy.clear }}</button>
-                <button
-                  type="button"
-                  class="tool-chip tool-chip-ai"
-                  :class="{ 'tool-chip-active': polishing }"
-                  :disabled="polishing && !polishRetryReady"
-                  @click="polishWithAi"
-                >
-                  <span class="tool-chip-ai-inner">
-                    <span class="tool-chip-ai-icon">
-                      <v-icon :icon="polishing ? 'mdi-loading' : 'mdi-auto-fix'" size="15" />
+                  <button
+                    v-for="text in quickTexts"
+                    :key="text"
+                    type="button"
+                    class="tool-chip"
+                    @click="insertAtCursor(text)"
+                  >
+                    {{ text }}
+                  </button>
+                  <button
+                    type="button"
+                    class="tool-chip tool-chip-utility"
+                    @click="insertAtCursor('\n')"
+                  >
+                    {{ copy.newline }}
+                  </button>
+                  <button
+                    type="button"
+                    class="tool-chip tool-chip-utility"
+                    @click="pasteFromClipboard"
+                  >
+                    {{ copy.paste }}
+                  </button>
+                  <button
+                    type="button"
+                    class="tool-chip tool-chip-utility tool-chip-danger"
+                    @click="clearContent"
+                  >
+                    {{ copy.clear }}
+                  </button>
+                  <button
+                    type="button"
+                    class="tool-chip tool-chip-ai"
+                    :class="{ 'tool-chip-active': polishing }"
+                    :disabled="polishing && !polishRetryReady"
+                    @click="polishWithAi"
+                  >
+                    <span class="tool-chip-ai-inner">
+                      <span class="tool-chip-ai-icon">
+                        <v-icon
+                          :icon="polishing ? 'mdi-loading' : 'mdi-auto-fix'"
+                          size="15"
+                        />
+                      </span>
+                      <span>{{ polishing ? (polishRetryReady ? "重试" : copy.polishing) : "AI 整理" }}</span>
                     </span>
-                    <span>{{ polishing ? (polishRetryReady ? "重试" : copy.polishing) : "AI 整理" }}</span>
-                  </span>
-                </button>
+                  </button>
                 </div>
 
                 <div class="dialog-meta">
@@ -85,20 +151,36 @@
               </div>
             </div>
 
-            <div v-if="polishError" class="dialog-error" role="alert" aria-live="polite">
+            <div
+              v-if="polishError"
+              class="dialog-error"
+              role="alert"
+              aria-live="polite"
+            >
               {{ polishError }}
             </div>
 
-            <div v-if="polishNotice" class="dialog-notice" aria-live="polite">
+            <div
+              v-if="polishNotice"
+              class="dialog-notice"
+              aria-live="polite"
+            >
               {{ polishNotice }}
             </div>
           </div>
 
-          <section v-if="pendingPolishContent" class="diff-column">
+          <section
+            v-if="pendingPolishContent"
+            class="diff-column"
+          >
             <div class="panel-header panel-header-compact">
               <div>
-                <div class="panel-eyebrow">AI 审核</div>
-                <div class="panel-caption">确认差异后再应用到作业内容</div>
+                <div class="panel-eyebrow">
+                  AI 审核
+                </div>
+                <div class="panel-caption">
+                  确认差异后再应用到作业内容
+                </div>
               </div>
             </div>
 
@@ -119,12 +201,28 @@
             <div class="diff-review-bar">
               <div class="diff-header diff-header-below">
                 <div>
-                  <div class="diff-title">{{ copy.diffTitle }}</div>
-                  <div class="diff-subtitle">{{ copy.diffSubtitle }}</div>
+                  <div class="diff-title">
+                    {{ copy.diffTitle }}
+                  </div>
+                  <div class="diff-subtitle">
+                    {{ copy.diffSubtitle }}
+                  </div>
                 </div>
                 <div class="diff-actions">
-                  <button type="button" class="diff-btn diff-btn-ghost" @click="rejectPolish">{{ copy.reject }}</button>
-                  <button type="button" class="diff-btn diff-btn-solid" @click="applyPolish">{{ copy.apply }}</button>
+                  <button
+                    type="button"
+                    class="diff-btn diff-btn-ghost"
+                    @click="rejectPolish"
+                  >
+                    {{ copy.reject }}
+                  </button>
+                  <button
+                    type="button"
+                    class="diff-btn diff-btn-solid"
+                    @click="applyPolish"
+                  >
+                    {{ copy.apply }}
+                  </button>
                 </div>
               </div>
             </div>

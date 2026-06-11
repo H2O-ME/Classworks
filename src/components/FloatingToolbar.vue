@@ -1,15 +1,25 @@
 <template>
   <div class="floating-toolbar-container">
-    <v-card class="floating-toolbar" elevation="0">
+    <v-card
+      class="floating-toolbar"
+      elevation="0"
+    >
       <div class="toolbar-buttons">
-        <v-btn icon="mdi-chevron-left" variant="text" title="前一天" @click="$emit('prev-day')" />
+        <v-btn
+          icon="mdi-chevron-left"
+          variant="text"
+          title="前一天"
+          @click="$emit('prev-day')"
+        />
         <v-btn
           icon="mdi-format-font-size-decrease"
           variant="text"
           :title="`缩小字体（当前 ${currentFontSize}px）`"
           @click="$emit('zoom', 'out')"
         />
-        <div class="font-size-indicator">{{ currentFontSize }}px</div>
+        <div class="font-size-indicator">
+          {{ currentFontSize }}px
+        </div>
         <v-btn
           icon="mdi-format-font-size-increase"
           variant="text"
@@ -17,18 +27,36 @@
           @click="$emit('zoom', 'up')"
         />
 
-        <v-menu v-model="fontMenuOpen" :close-on-content-click="false" location="top center" width="320">
+        <v-menu
+          v-model="fontMenuOpen"
+          :close-on-content-click="false"
+          location="top center"
+          width="320"
+        >
           <template #activator="{ props }">
-            <v-btn icon="mdi-format-font" variant="text" :title="`字体：${currentFontName}`" v-bind="props" />
+            <v-btn
+              icon="mdi-format-font"
+              variant="text"
+              :title="`字体：${currentFontName}`"
+              v-bind="props"
+            />
           </template>
 
           <div class="font-panel">
             <div class="font-panel-header">
-              <div class="font-panel-title">选择字体</div>
+              <div class="font-panel-title">
+                选择字体
+              </div>
             </div>
 
-            <div v-for="(fonts, category) in fontCategories" :key="category" class="font-category">
-              <div class="category-label">{{ getCategoryLabel(category) }}</div>
+            <div
+              v-for="(fonts, category) in fontCategories"
+              :key="category"
+              class="font-category"
+            >
+              <div class="category-label">
+                {{ getCategoryLabel(category) }}
+              </div>
               <div class="font-grid">
                 <button
                   v-for="font in fonts"
@@ -38,7 +66,10 @@
                   :class="{ 'font-card-active': currentFontId === font.id }"
                   @click="changeFont(font.id)"
                 >
-                  <span class="font-card-preview" :style="{ fontFamily: font.fontFamily }">Aa</span>
+                  <span
+                    class="font-card-preview"
+                    :style="{ fontFamily: font.fontFamily }"
+                  >Aa</span>
                   <span class="font-card-copy">
                     <span class="font-card-name">{{ font.name }}</span>
                     <span class="font-card-desc">{{ font.description }}</span>
@@ -49,16 +80,37 @@
           </div>
         </v-menu>
 
-        <v-menu :close-on-content-click="false" location="top">
+        <v-menu
+          :close-on-content-click="false"
+          location="top"
+        >
           <template #activator="{ props }">
-            <v-btn icon="mdi-calendar-month-outline" variant="text" title="选择日期" v-bind="props" />
+            <v-btn
+              icon="mdi-calendar-month-outline"
+              variant="text"
+              title="选择日期"
+              v-bind="props"
+            />
           </template>
-          <v-card class="date-picker-card" border>
-            <v-date-picker :model-value="selectedDate" color="primary" @update:model-value="handleDateSelect" />
+          <v-card
+            class="date-picker-card"
+            border
+          >
+            <v-date-picker
+              :model-value="selectedDate"
+              color="primary"
+              @update:model-value="handleDateSelect"
+            />
           </v-card>
         </v-menu>
 
-        <v-btn v-if="!isToday" icon="mdi-chevron-right" variant="text" title="后一天" @click="$emit('next-day')" />
+        <v-btn
+          v-if="!isToday"
+          icon="mdi-chevron-right"
+          variant="text"
+          title="后一天"
+          @click="$emit('next-day')"
+        />
       </div>
     </v-card>
 

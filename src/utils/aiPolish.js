@@ -1,6 +1,6 @@
 ﻿import forge from "node-forge";
 
-const AI_POLISH_PROXY_ENDPOINT = "/api/ai-polish";
+const AI_POLISH_ENDPOINT = "https://api.tianhw.top/v1/chat/completions";
 const AI_POLISH_MODEL = "GPT-OSS-120B";
 const AI_KEY_STORAGE = "classworks_ai_polish_secret";
 
@@ -68,111 +68,60 @@ export async function polishHomework(content, secret, options = {}) {
   }
 
   const apiKey = await resolveAiKey(secret);
-  const response = await raceAiPolishRequests({
+  const polished = await sendAiPolishRequest({
     apiKey,
     source,
     signal: options.signal,
   });
 
-  const data = await parseResponseSafely(response);
-
-  if (!response.ok) {
-    const code = data?.error?.code || `AI_POLISH_FAILED_${response.status}`;
-    throw new Error(code);
-  }
-
-  const polished = extractPolishedText(data) || extractRawTextResponse(data);
-
   if (!polished) {
-    const fallback = formatHomeworkLocally(source);
-    if (fallback) {
-      return fallback;
-    }
-    return numberHomeworkLines(source);
+    throw new Error("EMPTY_AI_RESPONSE");
   }
 
   return normalizeHomework(polished);
 }
 
-async function raceAiPolishRequests({ apiKey, source, signal }) {
-  const controllers = [new AbortController(), new AbortController()];
-  const cleanup = linkAbortSignal(signal, controllers);
-
+async function sendAiPolishRequest({ apiKey, source, signal }) {
   try {
-    return await Promise.any(
-      controllers.map((controller, index) =>
-        sendAiPolishRequest({
-          apiKey,
-          source,
-          signal: controller.signal,
-          requestTag: index + 1,
-        }).then((response) => {
-          controllers.forEach((item) => {
-            if (item !== controller) {
-              item.abort();
-            }
-          });
-          return response;
-        })
-      )
-    );
-  } catch (error) {
-    if (signal?.aborted) {
-      throw new Error("AI_POLISH_ABORTED");
-    }
-
-    const firstError = error?.errors?.find(Boolean) || error;
-    if (firstError?.name === "AbortError") {
-      throw new Error("AI_POLISH_ABORTED");
-    }
-    throw firstError;
-  } finally {
-    cleanup();
-    controllers.forEach((controller) => controller.abort());
-  }
-}
-
-async function sendAiPolishRequest({ apiKey, source, signal, requestTag }) {
-  try {
-    return await fetch(AI_POLISH_PROXY_ENDPOINT, {
+    const response = await fetch(AI_POLISH_ENDPOINT, {
       method: "POST",
       signal,
       headers: {
         "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        apiKey,
         model: AI_POLISH_MODEL,
-        content: source,
-        systemPrompt: SYSTEM_PROMPT,
-        userPrompt: `${USER_PROMPT_PREFIX}${source}`,
-        requestTag,
+        stream: true,
+        temperature: 0,
+        chat_template_kwargs: { enable_thinking: false },
+        reasoning_effort: "low",
+        messages: [
+          { role: "system", content: SYSTEM_PROMPT },
+          { role: "user", content: `${USER_PROMPT_PREFIX}${source}` },
+        ],
       }),
     });
+
+    if (!response.ok) {
+      const data = await parseResponseSafely(response);
+      const code = data?.error?.code || `AI_POLISH_FAILED_${response.status}`;
+      throw new Error(code);
+    }
+
+    const streamedText = await readSseCompletion(response);
+    if (streamedText) {
+      return streamedText;
+    }
+
+    const data = await parseResponseSafely(response);
+    return extractPolishedText(data) || extractRawTextResponse(data);
   } catch (error) {
     if (error?.name === "AbortError") {
-      throw error;
+      throw new Error("AI_POLISH_ABORTED");
     }
     throw error;
   }
-}
-
-function linkAbortSignal(parentSignal, controllers) {
-  if (!parentSignal) {
-    return () => {};
-  }
-
-  if (parentSignal.aborted) {
-    controllers.forEach((controller) => controller.abort());
-    return () => {};
-  }
-
-  const abortHandler = () => {
-    controllers.forEach((controller) => controller.abort());
-  };
-
-  parentSignal.addEventListener("abort", abortHandler, { once: true });
-  return () => parentSignal.removeEventListener("abort", abortHandler);
 }
 
 async function resolveAiKey(secret) {
@@ -280,6 +229,76 @@ async function parseResponseSafely(response) {
   }
 }
 
+async function readSseCompletion(response) {
+  if (!response.body) {
+    return "";
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let result = "";
+  let rawText = "";
+  let hasSseData = false;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    const chunk = decoder.decode(value || new Uint8Array(), { stream: !done });
+    rawText += chunk;
+    buffer += chunk;
+
+    const lines = buffer.split(/\r?\n/u);
+    buffer = lines.pop() || "";
+
+    for (const line of lines) {
+      const text = readSseDataLine(line);
+      if (!text) {
+        continue;
+      }
+
+      hasSseData = true;
+      if (text === "[DONE]") {
+        await reader.cancel().catch(() => {});
+        return result.trim();
+      }
+
+      result += extractPolishedText(parseSseJson(text));
+    }
+
+    if (done) {
+      break;
+    }
+  }
+
+  const tailText = readSseDataLine(buffer);
+  if (tailText) {
+    hasSseData = true;
+    if (tailText !== "[DONE]") {
+      result += extractPolishedText(parseSseJson(tailText));
+    }
+  }
+
+  if (result.trim() || hasSseData) {
+    return result.trim();
+  }
+
+  return extractPolishedText(parseSseJson(rawText.trim())) || extractRawTextResponse({ __rawText: rawText });
+}
+
+function readSseDataLine(line) {
+  const trimmed = String(line || "").trim();
+  return trimmed.startsWith("data:") ? trimmed.slice(5).trim() : "";
+}
+
+function parseSseJson(text) {
+  try {
+    const parsed = JSON.parse(text);
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return { text };
+  }
+}
+
 function normalizeInput(content) {
   return String(content || "")
     .replace(/\r\n?/g, "\n")
@@ -300,10 +319,8 @@ function normalizeHomework(content) {
 }
 
 function extractPolishedText(data) {
-  const choice = data?.choices?.[0];
   const candidateValues = [
-    choice?.message,
-    choice?.delta,
+    data?.choices,
     data?.message,
     data?.output_text,
     data?.output?.text,
@@ -317,6 +334,20 @@ function extractPolishedText(data) {
     if (text) {
       return text;
     }
+  }
+
+  if (Array.isArray(data?.choices)) {
+    return data.choices
+      .map((choice) => {
+        return (
+          extractAiMessageText(choice?.message) ||
+          extractAiMessageText(choice?.delta) ||
+          extractAiMessageText(choice?.text) ||
+          extractAiMessageText(choice)
+        );
+      })
+      .filter(Boolean)
+      .join("");
   }
 
   if (Array.isArray(data?.output)) {
@@ -443,124 +474,10 @@ function cleanupExtractedAnswer(text) {
   return (numbered.length ? numbered : lines).join("\n");
 }
 
-function formatHomeworkLocally(content) {
-  const lines = normalizeInput(content).split("\n");
-  const tasks = [];
-  const plainTasks = [];
-
-  for (const line of lines) {
-    const taskMatch = line.match(/^(\d+[、.)）])\s*(.+)$/u);
-    if (taskMatch) {
-      tasks.push({
-        prefix: taskMatch[1].replace(/[.)）]/u, "、"),
-        text: taskMatch[2].trim(),
-        notes: [],
-      });
-      continue;
-    }
-
-    const current = tasks[tasks.length - 1];
-    if (isNonTaskLine(line)) {
-      continue;
-    }
-
-    if (!current) {
-      const normalizedLine = normalizePlainTaskLine(line);
-      if (normalizedLine) {
-        plainTasks.push(normalizedLine);
-      }
-      continue;
-    }
-
-    if (/^(共\s*[\d+＋+]+|第?\d+题)/u.test(line) || /大题|选择|填空|问答/u.test(line)) {
-      current.text = `${current.text}${line}`.replace(/\s+/g, " ").trim();
-      continue;
-    }
-
-    if (/^共\s*[\d+＋+]+/u.test(line)) {
-      addNote(current, line.replace(/\s+/g, ""));
-      continue;
-    }
-
-    applyGlobalNote(tasks, line);
-  }
-
-  const numberedTasks = tasks
-    .map((task) => `${task.prefix}${task.text}${task.notes.map((note) => `（${note}）`).join("")}`)
-    .filter(Boolean);
-
-  if (numberedTasks.length) {
-    return numberedTasks.join("\n");
-  }
-
-  return numberPlainTasks(plainTasks).join("\n");
-}
-
-function applyGlobalNote(tasks, line) {
-  const compact = line.replace(/\s+/g, "");
-
-  if (/早读收.*同步|同步.*早读收/u.test(compact)) {
-    const task = tasks.find((item) => /同步/u.test(item.text)) || tasks[tasks.length - 1];
-    addNote(task, compact.includes("明天") ? "明天下早读收" : "早读收");
-  }
-
-  if (/课前检查.*学案|检查学案|学案.*课前检查/u.test(compact)) {
-    const task = tasks.find((item) => /学案/u.test(item.text)) || tasks[0];
-    addNote(task, "课前检查");
-  }
-}
-
-function addNote(task, note) {
-  if (task && note && !task.notes.includes(note)) {
-    task.notes.push(note);
-  }
-}
-
 function removeNonTaskBrackets(line) {
-  return line.replace(/[【\[]([^【】\[\]]+)[】\]]/g, (match, inner) => {
+  return line.replace(/[【[]([^【】[\]]+)[】\]]/g, (match, inner) => {
     return /(收|交|截止|明天|今天|早读|周|星期|课前|检查)/u.test(inner) ? match : "";
   });
-}
-
-function normalizePlainTaskLine(line) {
-  const cleaned = removeNonTaskBrackets(String(line || ""))
-    .replace(/[！!。；;]+$/gu, "")
-    .replace(/\s+/g, " ")
-    .trim();
-
-  if (!cleaned) {
-    return "";
-  }
-
-  if (isNonTaskLine(cleaned)) {
-    return "";
-  }
-
-  if (/^(贴好|抓紧时间买|统一贴本子上|有些人不贴|不要浪费我的心血)/u.test(cleaned)) {
-    return "";
-  }
-
-  return cleaned;
-}
-
-function numberHomeworkLines(content) {
-  const lines = normalizeInput(content)
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean);
-
-  if (!lines.length) {
-    return "";
-  }
-
-  return lines.map((line, index) => `${index + 1}、${line}`).join("\n");
-}
-
-function numberPlainTasks(tasks) {
-  return tasks
-    .map((task) => String(task || "").trim())
-    .filter(Boolean)
-    .map((task, index) => `${index + 1}、${task}`);
 }
 
 function isNonTaskLine(line) {

@@ -1,11 +1,25 @@
 <template>
-  <v-app-bar class="no-select board-app-bar" elevation="0">
+  <v-app-bar
+    class="no-select board-app-bar"
+    elevation="0"
+  >
     <div class="app-bar-inner">
-      <div class="app-bar-title">{{ titleText }}</div>
+      <div class="app-bar-title">
+        {{ titleText }}
+      </div>
       <div class="app-bar-actions">
-        <div class="date-pill">{{ dateLabel }}</div>
-        <router-link class="settings-button" to="/settings" aria-label="打开设置">
-          <v-icon icon="mdi-cog-outline" size="19" />
+        <div class="date-pill">
+          {{ dateLabel }}
+        </div>
+        <router-link
+          class="settings-button"
+          to="/settings"
+          aria-label="打开设置"
+        >
+          <v-icon
+            icon="mdi-cog-outline"
+            size="19"
+          />
         </router-link>
       </div>
     </div>
@@ -13,14 +27,27 @@
 
   <HomeSkeleton v-if="!dataReady" />
 
-  <div v-else class="board-shell board-shell-ready">
-    <v-container class="main-window board-container no-select" fluid>
-      <section v-if="sortedItems.length === 0" class="empty-state">
+  <div
+    v-else
+    class="board-shell board-shell-ready"
+  >
+    <v-container
+      class="main-window board-container no-select"
+      fluid
+    >
+      <section
+        v-if="sortedItems.length === 0"
+        class="empty-state"
+      >
         <div class="empty-stage">
           <div class="empty-commandbar">
             <div class="commandbar-copy">
-              <div class="commandbar-label">作业看板</div>
-              <div class="commandbar-title">{{ emptyTitle }}</div>
+              <div class="commandbar-label">
+                作业看板
+              </div>
+              <div class="commandbar-title">
+                {{ emptyTitle }}
+              </div>
             </div>
 
             <div class="commandbar-stats">
@@ -41,8 +68,12 @@
 
           <div class="subject-dock">
             <div class="subject-dock-header">
-              <div class="subject-dock-title">快速开始</div>
-              <div class="subject-dock-meta">{{ availableSubjects.length }} 个学科</div>
+              <div class="subject-dock-title">
+                快速开始
+              </div>
+              <div class="subject-dock-meta">
+                {{ availableSubjects.length }} 个学科
+              </div>
             </div>
 
             <div class="subject-dock-list">
@@ -55,14 +86,20 @@
                 @click="openDialog(subject.name)"
               >
                 <span class="subject-dock-name">{{ subject.name }}</span>
-                <v-icon icon="mdi-plus" size="18" />
+                <v-icon
+                  icon="mdi-plus"
+                  size="18"
+                />
               </button>
             </div>
           </div>
         </div>
       </section>
 
-      <section v-else class="populated-board">
+      <section
+        v-else
+        class="populated-board"
+      >
         <HomeworkGrid
           :sorted-items="sortedItems"
           :unused-subjects="unusedSubjects"

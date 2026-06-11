@@ -1,12 +1,25 @@
 <template>
   <v-container class="not-found-page">
     <section class="not-found-panel">
-      <div class="not-found-code">404</div>
+      <div class="not-found-code">
+        404
+      </div>
       <h1>页面不存在</h1>
       <p>这个地址没有可用页面，可能是旧功能已经被移除。</p>
       <div class="not-found-actions">
-        <v-btn color="primary" variant="flat" to="/">返回首页</v-btn>
-        <v-btn variant="tonal" @click="$router.back()">返回上一页</v-btn>
+        <v-btn
+          color="primary"
+          variant="flat"
+          to="/"
+        >
+          返回首页
+        </v-btn>
+        <v-btn
+          variant="tonal"
+          @click="$router.back()"
+        >
+          返回上一页
+        </v-btn>
       </div>
     </section>
   </v-container>

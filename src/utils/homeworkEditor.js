@@ -26,7 +26,7 @@ const POLISH_ERROR_MESSAGES = {
   AI_OUTPUT_TRUNCATED: "AI 输出不完整，请稍后再试。",
   AI_POLISH_UPSTREAM_FORBIDDEN: "AI 服务拒绝访问，请检查接口状态或密钥。",
   AI_POLISH_UPSTREAM_BAD_RESPONSE: "AI 服务返回异常，请稍后再试。",
-  AI_POLISH_PROXY_REQUEST_INVALID: "AI 请求内容不完整，请重新操作一次。",
+  AI_POLISH_REQUEST_INVALID: "AI 请求内容不完整，请重新操作一次。",
   AI_POLISH_NETWORK_ERROR: "AI 请求失败，请检查网络或稍后再试。",
 };
 

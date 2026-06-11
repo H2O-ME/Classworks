@@ -9,8 +9,16 @@
 <template>
   <div class="settings-rankings-page">
     <div class="settings-top-actions">
-      <button class="settings-back-button" type="button" :aria-label="copy.backHome" @click="goHome">
-        <v-icon icon="mdi-arrow-left" size="20" />
+      <button
+        class="settings-back-button"
+        type="button"
+        :aria-label="copy.backHome"
+        @click="goHome"
+      >
+        <v-icon
+          icon="mdi-arrow-left"
+          size="20"
+        />
         <span>{{ copy.back }}</span>
       </button>
     </div>

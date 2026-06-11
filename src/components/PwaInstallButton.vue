@@ -1,5 +1,8 @@
 <template>
-  <div v-if="isSupported && !isStandalone" class="pwa-install-wrap">
+  <div
+    v-if="isSupported && !isStandalone"
+    class="pwa-install-wrap"
+  >
     <button
       type="button"
       class="pwa-install-button"
@@ -7,13 +10,23 @@
       :title="buttonTitle"
       @click="installApp"
     >
-      <v-icon :icon="isReady ? 'mdi-download-box-outline' : 'mdi-cellphone-arrow-down'" size="18" />
+      <v-icon
+        :icon="isReady ? 'mdi-download-box-outline' : 'mdi-cellphone-arrow-down'"
+        size="18"
+      />
     </button>
 
     <transition name="pwa-tip">
-      <div v-if="showHint" class="pwa-install-hint">
-        <div class="pwa-install-hint-title">{{ hintTitle }}</div>
-        <div class="pwa-install-hint-body">{{ hintBody }}</div>
+      <div
+        v-if="showHint"
+        class="pwa-install-hint"
+      >
+        <div class="pwa-install-hint-title">
+          {{ hintTitle }}
+        </div>
+        <div class="pwa-install-hint-body">
+          {{ hintBody }}
+        </div>
       </div>
     </transition>
   </div>
