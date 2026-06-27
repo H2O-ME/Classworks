@@ -132,11 +132,13 @@
 
 <script>
 import {
-  applyFontSelection,
-  getFontCategoryLabel,
-  getFontToolbarState,
-  watchFontToolbarState,
-} from "@/utils/fontState";
+  getCurrentFont,
+  getFontsByCategory,
+  onFontChange,
+  setFont,
+} from "@/utils/fonts";
+
+const FONT_CATEGORY_LABELS = { system: "系统", modern: "现代", serif: "衬线", mono: "等宽" };
 
 export default {
   name: "FloatingToolbar",
@@ -157,9 +159,18 @@ export default {
     };
   },
   created() {
-    this.syncFontState(getFontToolbarState());
-    this.unsubscribeFontChange = watchFontToolbarState((state) => {
-      this.syncFontState(state);
+    const font = getCurrentFont();
+    this.syncFontState({
+      currentFontId: font.id,
+      currentFontName: font.name,
+      fontCategories: getFontsByCategory(),
+    });
+    this.unsubscribeFontChange = onFontChange((font) => {
+      this.syncFontState({
+        currentFontId: font.id,
+        currentFontName: font.name,
+        fontCategories: getFontsByCategory(),
+      });
     });
   },
   beforeUnmount() {
@@ -175,10 +186,10 @@ export default {
       this.$emit("date-select", date);
     },
     getCategoryLabel(category) {
-      return getFontCategoryLabel(category);
+      return FONT_CATEGORY_LABELS[category] || category;
     },
     async changeFont(fontId) {
-      await applyFontSelection(fontId);
+      await setFont(fontId);
       this.fontMenuOpen = false;
     },
   },

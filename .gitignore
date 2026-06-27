@@ -180,6 +180,7 @@ typed-router.d.ts
 # Package lock files (using pnpm)
 package-lock.json
 
-# 本地技能目录（不随仓库共享）
-.agents/skills/cloudy-tech-diagrams/
+# 本地技能目录和 agent 文档（不随仓库共享）
+.agents/
+AGENTS.md
 

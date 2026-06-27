@@ -28,8 +28,6 @@ onMounted(() => {
 
 <style>
 @import "@/styles/index.scss";
-@import "@/styles/transitions.scss";
-@import "@/styles/global.scss";
 
 .app-shell {
   background: #111111;

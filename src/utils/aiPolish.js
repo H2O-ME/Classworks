@@ -1,5 +1,3 @@
-﻿import forge from "node-forge";
-
 const AI_POLISH_ENDPOINT = "https://api.tianhw.top/v1/chat/completions";
 const AI_POLISH_MODEL = "GPT-OSS-120B";
 const AI_KEY_STORAGE = "classworks_ai_polish_secret";
@@ -110,12 +108,7 @@ async function sendAiPolishRequest({ apiKey, source, signal }) {
     }
 
     const streamedText = await readSseCompletion(response);
-    if (streamedText) {
-      return streamedText;
-    }
-
-    const data = await parseResponseSafely(response);
-    return extractPolishedText(data) || extractRawTextResponse(data);
+    return streamedText || "";
   } catch (error) {
     if (error?.name === "AbortError") {
       throw new Error("AI_POLISH_ABORTED");
@@ -141,39 +134,19 @@ async function resolveAiKey(secret) {
 
 async function decryptAiKey(secret) {
   const subtle = globalThis.crypto?.subtle;
-  if (subtle) {
-    const keyMaterial = await subtle.digest("SHA-256", new TextEncoder().encode(secret));
-    const key = await subtle.importKey("raw", keyMaterial, "AES-GCM", false, ["decrypt"]);
-    const payload = concatBytes(base64ToBytes(ENCRYPTED_AI_KEY.data), base64ToBytes(ENCRYPTED_AI_KEY.tag));
-    const decrypted = await subtle.decrypt(
-      { name: "AES-GCM", iv: base64ToBytes(ENCRYPTED_AI_KEY.iv), tagLength: 128 },
-      key,
-      payload
-    );
-    return new TextDecoder().decode(decrypted);
-  }
-
-  return decryptAiKeyWithForge(secret);
-}
-
-async function decryptAiKeyWithForge(secret) {
-  const digest = forge.md.sha256.create();
-  digest.update(secret, "utf8");
-  const keyBytes = digest.digest().getBytes();
-  const decipher = forge.cipher.createDecipher("AES-GCM", keyBytes);
-
-  decipher.start({
-    iv: forge.util.decode64(ENCRYPTED_AI_KEY.iv),
-    tag: forge.util.createBuffer(forge.util.decode64(ENCRYPTED_AI_KEY.tag)),
-    tagLength: 128,
-  });
-  decipher.update(forge.util.createBuffer(forge.util.decode64(ENCRYPTED_AI_KEY.data)));
-
-  if (!decipher.finish()) {
+  if (!subtle) {
     throw new Error("AI_SECRET_INVALID");
   }
 
-  return forge.util.decodeUtf8(decipher.output.getBytes());
+  const keyMaterial = await subtle.digest("SHA-256", new TextEncoder().encode(secret));
+  const key = await subtle.importKey("raw", keyMaterial, "AES-GCM", false, ["decrypt"]);
+  const payload = concatBytes(base64ToBytes(ENCRYPTED_AI_KEY.data), base64ToBytes(ENCRYPTED_AI_KEY.tag));
+  const decrypted = await subtle.decrypt(
+    { name: "AES-GCM", iv: base64ToBytes(ENCRYPTED_AI_KEY.iv), tagLength: 128 },
+    key,
+    payload
+  );
+  return new TextDecoder().decode(decrypted);
 }
 
 function readSavedSecret() {

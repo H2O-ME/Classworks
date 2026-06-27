@@ -145,7 +145,7 @@ import {
   normalizeBoardData,
   resolveAvailableSubjects,
 } from "@/utils/board";
-import { getData, setData } from "@/utils/dataProvider";
+import { getData, setData } from "@/utils/storage";
 import { getSetting, setSetting } from "@/utils/settings";
 
 const FloatingToolbar = defineAsyncComponent(() => import("@/components/FloatingToolbar.vue"));

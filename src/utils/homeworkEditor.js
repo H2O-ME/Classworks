@@ -30,11 +30,7 @@ const POLISH_ERROR_MESSAGES = {
   AI_POLISH_NETWORK_ERROR: "AI 请求失败，请检查网络或稍后再试。",
 };
 
-export function isGeographySubject(subjectName) {
-  return String(subjectName || "").trim() === "地理";
-}
-
-export function createEditorState(initialContent = "", initialOptions = {}, isGeography = false) {
+export function createEditorState(initialContent = "") {
   return {
     content: initialContent,
     dirty: false,

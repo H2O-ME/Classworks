@@ -141,6 +141,9 @@ export default defineConfig({
       autoImport: true,
       styles: {
         configFile: "src/styles/settings.scss",
+       sass: {
+          api: "modern",
+        },
       },
     }),
     Components({
@@ -151,7 +154,7 @@ export default defineConfig({
     AutoImport({
       imports: ["vue", "vue-router"],
       eslintrc: {
-        enabled: true,
+        enabled: false,
       },
       vueTemplate: true,
     }),
@@ -161,7 +164,7 @@ export default defineConfig({
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),
     },
-    extensions: [".js", ".json", ".jsx", ".mjs", ".ts", ".tsx", ".vue"],
+    extensions: [".js", ".json", ".mjs", ".vue"],
   },
   build: {
     chunkSizeWarningLimit: 500,

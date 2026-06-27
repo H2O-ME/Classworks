@@ -40,27 +40,3 @@ export async function setData(key, data) {
     return false;
   }
 }
-
-export async function deleteData(key) {
-  try {
-    const db = await getDB();
-    await db.delete(STORE_NAME, key);
-    return true;
-  } catch (error) {
-    console.error("deleteData error:", error);
-    return false;
-  }
-}
-
-export async function getAllKeys() {
-  try {
-    const db = await getDB();
-    const tx = db.transaction(STORE_NAME, "readonly");
-    const store = tx.objectStore(STORE_NAME);
-    const keys = await store.getAllKeys();
-    return keys.sort();
-  } catch (error) {
-    console.error("getAllKeys error:", error);
-    return [];
-  }
-}

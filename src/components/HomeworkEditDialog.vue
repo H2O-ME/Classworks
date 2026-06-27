@@ -89,7 +89,6 @@
 
             <div class="editor-footer">
               <div
-                v-if="showQuickTools"
                 class="tools-row"
               >
                 <div class="tools-grid">
@@ -264,9 +263,6 @@ export default {
       set(value) {
         this.$emit("update:modelValue", value);
       },
-    },
-    showQuickTools() {
-      return true;
     },
     polishDiffRows() {
       return buildLineDiff(this.content, this.pendingPolishContent);

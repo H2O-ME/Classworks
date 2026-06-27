@@ -9,7 +9,7 @@ export default [
 
   {
     name: 'app/files-to-ignore',
-    ignores: ['**/dist/**', '**/dist-ssr/**', '**/coverage/**'],
+    ignores: ['**/dist/**', '**/dist-ssr/**', '**/coverage/**', '**/dev-dist/**'],
   },
 
   js.configs.recommended,
@@ -64,6 +64,11 @@ export default [
         SharedWorker: 'readonly',
         // Fetch API
         AbortController: 'readonly',
+        TextEncoder: 'readonly',
+        TextDecoder: 'readonly',
+        globalThis: 'readonly',
+        // DOM
+        location: 'readonly',
       },
     },
   }
