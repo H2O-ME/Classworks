@@ -38,10 +38,7 @@
       </div>
 
       <v-card-text class="dialog-body">
-        <div
-          class="editor-review-layout"
-          :class="{ 'editor-review-layout-active': pendingPolishContent }"
-        >
+        <div class="editor-review-layout">
           <div class="editor-column">
             <div class="panel-header">
               <div>
@@ -169,64 +166,49 @@
             </div>
           </div>
 
-          <section
-            v-if="pendingPolishContent"
-            class="diff-column"
-          >
-            <div class="panel-header panel-header-compact">
-              <div>
-                <div class="panel-eyebrow">
-                  AI 审核
-                </div>
-                <div class="panel-caption">
-                  确认差异后再应用到作业内容
-                </div>
-              </div>
-            </div>
-
-            <div class="diff-panel">
-              <div class="diff-body">
-                <div
-                  v-for="(row, index) in polishDiffRows"
-                  :key="`${row.type}-${index}-${row.text}`"
-                  class="diff-row"
-                  :class="`diff-row-${row.type}`"
-                >
-                  <span class="diff-mark">{{ row.mark }}</span>
-                  <span class="diff-text">{{ row.text || " " }}</span>
-                </div>
-              </div>
-            </div>
-
-            <div class="diff-review-bar">
-              <div class="diff-header diff-header-below">
-                <div>
-                  <div class="diff-title">
-                    {{ copy.diffTitle }}
+          <transition name="diff">
+            <section
+              v-if="pendingPolishContent"
+              class="diff-column"
+            >
+              <div class="diff-card">
+                <header class="diff-card-head">
+                  <div class="diff-card-titles">
+                    <span class="diff-card-title">AI 审核</span>
+                    <span class="diff-card-caption">确认差异后再应用</span>
                   </div>
-                  <div class="diff-subtitle">
-                    {{ copy.diffSubtitle }}
+                  <div class="diff-actions">
+                    <button
+                      type="button"
+                      class="diff-btn diff-btn-ghost"
+                      @click="rejectPolish"
+                    >
+                      {{ copy.reject }}
+                    </button>
+                    <button
+                      type="button"
+                      class="diff-btn diff-btn-solid"
+                      @click="applyPolish"
+                    >
+                      {{ copy.apply }}
+                    </button>
+                  </div>
+                </header>
+
+                <div class="diff-body">
+                  <div
+                    v-for="(row, index) in polishDiffRows"
+                    :key="`${row.type}-${index}-${row.text}`"
+                    class="diff-row"
+                    :class="`diff-row-${row.type}`"
+                  >
+                    <span class="diff-mark">{{ row.mark }}</span>
+                    <span class="diff-text">{{ row.text || " " }}</span>
                   </div>
                 </div>
-                <div class="diff-actions">
-                  <button
-                    type="button"
-                    class="diff-btn diff-btn-ghost"
-                    @click="rejectPolish"
-                  >
-                    {{ copy.reject }}
-                  </button>
-                  <button
-                    type="button"
-                    class="diff-btn diff-btn-solid"
-                    @click="applyPolish"
-                  >
-                    {{ copy.apply }}
-                  </button>
-                </div>
               </div>
-            </div>
-          </section>
+            </section>
+          </transition>
         </div>
       </v-card-text>
     </v-card>
@@ -512,19 +494,15 @@ export default {
 }
 
 .editor-review-layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  display: flex;
+  flex-wrap: nowrap;
   gap: 12px;
-  align-items: stretch;
-}
-
-.editor-review-layout-active {
-  grid-template-columns: minmax(0, 1.08fr) minmax(360px, 0.82fr);
   align-items: stretch;
 }
 
 .editor-column {
   display: flex;
+  flex: 1 1 auto;
   min-width: 0;
   flex-direction: column;
 }
@@ -538,22 +516,11 @@ export default {
   padding: 0 2px;
 }
 
-.panel-header-compact {
-  margin-bottom: 8px;
-}
-
 .panel-eyebrow {
   color: rgba(255, 255, 255, 0.92);
   font-size: 15px;
   font-weight: 800;
   line-height: 1.2;
-}
-
-.panel-caption {
-  margin-top: 4px;
-  color: rgba(255, 255, 255, 0.42);
-  font-size: 12px;
-  line-height: 1.4;
 }
 
 .panel-badge {
@@ -790,58 +757,67 @@ export default {
 
 .diff-column {
   display: flex;
+  flex: 0 0 340px;
   min-width: 0;
   flex-direction: column;
-  gap: 10px;
 }
 
-.diff-panel {
+.diff-enter-active,
+.diff-leave-active {
+  overflow: hidden;
+  transition:
+    flex-basis 0.26s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.22s ease;
+}
+
+.diff-enter-from,
+.diff-leave-to {
+  flex: 0 0 0;
+  opacity: 0;
+}
+
+.diff-card {
   display: flex;
-  min-width: 0;
-  height: clamp(280px, 42vh, 390px);
-  overflow: hidden;
+  width: 340px;
+  box-sizing: border-box;
+  flex: 1 1 auto;
+  min-height: 0;
   flex-direction: column;
-  justify-content: stretch;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 9px;
-  background: #181818;
-  animation: diff-panel-in 0.22s ease-out;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
-}
-
-.diff-review-bar {
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 9px;
   overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 9px;
   background: #181818;
   box-shadow: 0 10px 24px rgba(0, 0, 0, 0.14);
 }
 
-.diff-header {
+.diff-card-head {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 12px;
-  padding: 14px;
+  gap: 10px;
+  padding: 12px 14px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   background: #1d1d1d;
 }
 
-.diff-header-below {
-  border-top: 0;
-  border-bottom: 0;
+.diff-card-titles {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
 }
 
-.diff-title {
+.diff-card-title {
   color: #f2f2f2;
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 800;
+  line-height: 1.2;
 }
 
-.diff-subtitle {
-  margin-top: 3px;
+.diff-card-caption {
   color: rgba(255, 255, 255, 0.42);
   font-size: 12px;
+  line-height: 1.4;
 }
 
 .diff-actions {
@@ -930,17 +906,6 @@ export default {
   }
 }
 
-@keyframes diff-panel-in {
-  from {
-    opacity: 0;
-    transform: translateX(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
-}
-
 @keyframes polish-soft-drift {
   from {
     transform: scale(1.02) translate3d(-1.6%, -1.1%, 0);
@@ -993,11 +958,36 @@ export default {
 
 @media (prefers-reduced-motion: reduce) {
   .editor-card,
-  .diff-panel,
   .polish-soft-mask,
   .polish-sheen,
   .content-update-sheen {
     animation: none;
+  }
+
+  .diff-enter-active,
+  .diff-leave-active {
+    transition: none;
+  }
+}
+
+@media (max-width: 1000px) {
+  .editor-review-layout {
+    flex-direction: column;
+  }
+
+  .diff-column,
+  .diff-enter-from,
+  .diff-leave-to {
+    flex: 0 0 auto;
+  }
+
+  .diff-card {
+    width: 100%;
+  }
+
+  .diff-enter-active,
+  .diff-leave-active {
+    transition: opacity 0.18s ease;
   }
 }
 
@@ -1009,10 +999,6 @@ export default {
 
   .dialog-actions {
     justify-content: flex-end;
-  }
-
-  .editor-review-layout-active {
-    grid-template-columns: 1fr;
   }
 
   .editor-footer {
@@ -1041,9 +1027,12 @@ export default {
     order: 999;
   }
 
-  .editor-textarea,
-  .diff-panel {
+  .editor-textarea {
     height: 250px;
+  }
+
+  .diff-body {
+    max-height: 240px;
   }
 
 }
