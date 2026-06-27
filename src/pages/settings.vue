@@ -24,8 +24,8 @@
     </div>
     <iframe
       class="settings-rankings-frame"
-      title="AI API Rankings"
-      src="https://api.tianhw.top/rankings"
+      title="Classworks 技术架构"
+      src="/classworks-architecture.html"
     />
   </div>
 </template>
@@ -34,6 +34,7 @@
 const copy = {
   backHome: "返回首页",
   back: "返回",
+  pageTitle: "技术架构",
 };
 
 export default {
@@ -41,7 +42,15 @@ export default {
   data() {
     return {
       copy,
+      previousTitle: null,
     };
+  },
+  mounted() {
+    this.previousTitle = document.title;
+    document.title = copy.pageTitle;
+  },
+  beforeUnmount() {
+    document.title = this.previousTitle;
   },
   methods: {
     goHome() {
