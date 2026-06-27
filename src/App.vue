@@ -17,25 +17,13 @@
 </template>
 
 <script setup>
-import { onMounted, onUnmounted } from "vue";
+import { onMounted } from "vue";
 
 onMounted(() => {
   import("@/utils/fonts")
     .then(({ initFont }) => initFont())
     .catch((error) => console.warn("字体模块加载失败:", error));
-
-  window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
 });
-
-onUnmounted(() => {
-  window.removeEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
-});
-
-function handleBeforeInstallPrompt(event) {
-  event.preventDefault();
-  window.deferredPwaPrompt = event;
-  window.dispatchEvent(new Event("pwa-prompt-ready"));
-}
 </script>
 
 <style>

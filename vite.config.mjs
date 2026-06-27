@@ -20,10 +20,11 @@ export default defineConfig({
     }),
     VitePWA({
       registerType: "autoUpdate",
+      // dev SW 关闭：开启时 dev service worker 会拦截 .vue/.sass 等模块请求，
+      // 缓存错乱时回退 index.html(text/html)，触发 "Expected JavaScript-or-Wasm module but got text/html" 严格 MIME 报错。
+      // 需要测试 PWA 时用 `pnpm build && pnpm preview`。
       devOptions: {
-        navigateFallback: "index.html",
-        enabled: true,
-        suppressWarnings: true,
+        enabled: false,
       },
       injectRegister: "auto",
       includeAssets: ["favicon.ico", "banner.png", "pwa/image/apple-touch-icon-180x180.png", "pwa/image/favicon.ico"],
