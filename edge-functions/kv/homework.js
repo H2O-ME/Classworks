@@ -56,7 +56,7 @@ export async function onRequestPut(context) {
 
   const current = await homework_kv.get(KV_KEY, "json");
   const mergedDates = isValidDates(current?.dates) ? { ...current.dates } : {};
-  // Merge against the latest whole document so a stale client cannot erase newer dates.
+  // ponytail: KV has no compare-and-swap; per-date merge limits stale overwrites. Use a transactional store if simultaneous writes become common.
   for (const [date, incoming] of Object.entries(body.dates)) {
     const existing = mergedDates[date];
     if (!existing || Date.parse(incoming.updatedAt) >= Date.parse(existing.updatedAt)) {
