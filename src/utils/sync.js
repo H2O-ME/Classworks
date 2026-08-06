@@ -151,6 +151,7 @@ export function scheduleSyncNow({ onPulled } = {}) {
 export function startPeriodicSync({ onPulled } = {}) {
   stopPeriodicSync();
   if (!getSyncSecret()) return;
+  syncNow({ onPulled }).catch((error) => console.warn("首次同步失败:", error));
   timerId = setInterval(() => {
     syncNow({ onPulled }).catch((error) => console.warn("定时同步失败:", error));
   }, SYNC_INTERVAL_MS);

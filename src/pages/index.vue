@@ -290,15 +290,15 @@ export default {
     },
   },
   async mounted() {
-    this.unsubscribeSyncSecret = watchSyncSecret((secret) => {
-      stopPeriodicSync();
-      if (secret) {
-        startPeriodicSync({ onPulled: (pulledDates) => this.handlePulledDates(pulledDates) });
-      }
-    });
     try {
       await this.initializeData();
       this.dataReady = true;
+      this.unsubscribeSyncSecret = watchSyncSecret((secret) => {
+        stopPeriodicSync();
+        if (secret) {
+          startPeriodicSync({ onPulled: (pulledDates) => this.handlePulledDates(pulledDates) });
+        }
+      });
     } catch (error) {
       console.error("初始化失败:", error);
     }
