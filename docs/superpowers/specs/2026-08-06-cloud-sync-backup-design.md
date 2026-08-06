@@ -47,20 +47,34 @@ Classworks 作业看板当前为**纯本地**应用：作业按天存于浏览�
 └──────────────┬────────────────────────────┘
                │
         ┌──────▼──────┐
-        │ KV Storage  │  hw:{date} → { homework, updatedAt }
+        │ KV Storage  │  单一键 classworks_homework
         └─────────────┘
 ```
+
+**KV 数据模型（单一键，存全部作业）**：
+```
+键: classworks_homework
+值: {
+  "savedAt": "2026-08-07T10:30:00.000Z",          // 服务端盖章：整包最后写入时间
+  "dates": {
+    "20260806": { "homework": {...}, "updatedAt": "2026-08-06T09:00:00.000Z" },
+    "20260807": { "homework": {...}, "updatedAt": "2026-08-07T10:30:00.000Z" }
+  }
+}
+```
+- `dates` 内每个日期各自带 `updatedAt`，用于**日期级** last-write-wins 合并（单键但日期粒度不丢）
+- 整包 `savedAt` 仅用于服务端写入时间记录，判定不依赖它
 
 ### 数据流
 
 **保存作业时**（`handleHomeworkSave` 成功后）：
 1. 写 IndexedDB（现有逻辑不动）
-2. `sync.js.syncAfterSave()` → 800ms 防抖 → 若本地有密钥 → `PUT` 推送云端；无密钥则跳过（本地照常保存）
+2. `sync.js.syncNow()`（800ms 防抖）→ 完整 tick：GET 云端整包 → 逐日期合并 → 有需要推的才 PUT
 
 **定时同步**（每 5 分钟，代码常量 `SYNC_INTERVAL_MS = 5 * 60 * 1000`）：
 1. **无密钥时不启动**（纯本地模式，连定时器都不跑）
-2. `GET` 拉取云端当天数据
-3. 按「同步判定表」比较 → 拉 / 推 / 跳过
+2. `GET` 拉取云端**整包**（全部日期）
+3. 按「同步判定表」对每个日期做 last-write-wins 合并 → 拉 / 推 / 跳过
 4. 断网/API 失败 → 静默降级，下次再试（不打扰用户）
 
 ### 本地同步元数据
@@ -68,28 +82,35 @@ Classworks 作业看板当前为**纯本地**应用：作业按天存于浏览�
 本地数据本身没有时间戳，需为每日期补一份元数据：IndexedDB 键 `classworks-meta-{date}` → `{ updatedAt: number }`（epoch ms）。
 
 - 本地保存作业成功时：`meta.updatedAt = Date.now()`
-- 拉取云端成功后：`meta.updatedAt = 云端 updatedAt 的 epoch 值`
+- 拉取云端该日期成功后：`meta.updatedAt = 云端该日期 updatedAt 的 epoch 值`
 - 无 meta = 该日期从未同步过
 
-### 同步判定表（last-write-wins）
+**时间戳归属约定**：每日期 `updatedAt` 由**客户端**在推送时带上（= 本地最后编辑时间），服务端只盖章整包 `savedAt`（仅记录用途，判定不依赖）。这样 A 设备推送的合并包不会把 B 设备已同步过的日期重新标成"最新"。
 
-| 条件 | 动作 |
+### 同步判定表（日期级 last-write-wins，整包读写）
+
+同步 tick = GET 整包 → 逐日期比较 → 合并 → 有需要才 PUT 整包。
+
+| 条件（对每个日期） | 动作 |
 |---|---|
 | 无密钥（`getSyncSecret()` 为空） | 跳过全部（本地模式） |
-| 云端有数据且 `云端.updatedAt > meta.updatedAt` | 快照本地 → 覆写本地 → 更新 meta → **弹提示框** |
-| 云端有数据、`云端.updatedAt <= meta.updatedAt`、本地有改动 | `PUT` 推送（服务端重新盖章时间戳） |
-| 云端无数据、本地有作业内容 | `PUT` 推送（首次备份） |
-| 云端无数据、本地无作业内容 | 跳过 |
-| 无 meta（首次）且云端有数据 | 按上述比较时视 `meta.updatedAt = 0`，即云端必新 → 拉取 |
+| 云端有该日期且 `云端.updatedAt > meta.updatedAt` | 快照本地该日期 → 用云端覆写 → 更新 meta → 标记"拉取了" |
+| 本地有该日期且 `meta.updatedAt > 云端.updatedAt`（或云端无此日期） | 保留本地，标记"待推送" |
+| 两端一致 | 跳过 |
+
+tick 收尾：
+- 有任何"拉取了" → **弹提示框**「检测到云端更新，本地已自动同步」
+- 有"待推送"日期 → 构造合并整包（每日期取较新者，保留各自 updatedAt）→ `PUT`
+- 云端无数据（首次）且本地有作业 → 直接 PUT 本地整包（首次备份）
 
 **回退**（提示框按钮 / 工具栏入口）：
 1. 列出该日期本地快照（`classworks-data-{date}-bk-{ts}`，最近 5 份）
 2. 选一份恢复 → 写回 IndexedDB 主键
-3. **自动覆写云端**（`PUT`，需密钥；无密钥则仅本地回退并提示）
+3. 调 `syncNow()` 自动覆写云端（整包合并后 PUT；无密钥则仅本地回退并提示）
 
 ## 后端 API（`edge-functions/kv/homework.js`）
 
-路径 `/kv/homework`，方法 `GET` / `PUT`，参数 `date=YYYYMMDD`。
+路径 `/kv/homework`，方法 `GET` / `PUT`，**无 date 参数**（整包读写）。
 
 **GET** / **PUT**（均需 `x-sync-secret` 头）：
 ```
@@ -98,22 +119,23 @@ Classworks 作业看板当前为**纯本地**应用：作业按天存于浏览�
 
 **GET**：
 ```
-响应 200: { homework: {...}, updatedAt: "2026-08-06T10:30:00.000Z" }
+响应 200: 整包 { savedAt, dates: { "20260806": { homework, updatedAt }, ... } }
 无数据:   { empty: true }
 ```
 
 **PUT**：
 ```
-请求体: { homework: {...} }
-行为: 服务端盖章 updatedAt = new Date().toISOString()
-响应 200: { updatedAt }
+请求体: 整包 { savedAt?, dates: { date: { homework, updatedAt } } }
+行为: 覆盖存储单一键 classworks_homework；服务端重写 savedAt = new Date().toISOString()
+响应 200: { savedAt }
 ```
 
 技术要点（来自 edgeone-pages-dev 技能）：
-- V8 运行时，无 npm、无 Node 内置模块；`Response.json()` 不可用，用 `new Response(JSON.stringify(...), { headers: { 'Content-Type': 'application/json' } })`
-- KV 是**全局变量** `homework_kv`（控制台绑定 namespace 时设的变量名），不是 `context.env.homework_kv`
-- KV key：`hw:20260806`（前缀 `hw:` + 8 位日期）
-- KV value ≤ 25 MB，作业文本远小于此；eventual consistency ≤ 60s，可接受
+- V8 运行时，无 npm、无 Node 内置模块；`Response.json()` 不可用，用 `new Response(JSON.stringify(...), { headers: { 'Content-Type': 'application/json; charset=UTF-8' } })`
+- KV 是**全局变量** `homework_kv`（控制台绑定 namespace 时设的变量名，你的已绑定为 `homework_kv` → namespace `classwork`），不是 `context.env.homework_kv`
+- KV **单一键** `classworks_homework`（不再按日期拆多键）
+- KV value ≤ 25 MB，全部作业文本远小于此；eventual consistency ≤ 60s，可接受
+- 同域调用，**不加** `Access-Control-Allow-Origin: *`（避免放松安全）
 
 ## 前端改动
 
@@ -125,9 +147,10 @@ const SYNC_SECRET_KEY = 'classworks_sync_secret'
 
 export function getSyncSecret()              // localStorage 读取（空 = 纯本地模式）
 export function setSyncSecret(secret)        // localStorage 写入
-export async function pushHomework(date, homework, secret)
-export async function pullHomework(date, secret) // GET，带 x-sync-secret
-export function startPeriodicSync(cb)        // 无密钥不启动；setInterval，cb 收到 { mode: 'pulled' } 等
+export async function pushHomework(doc, secret) // PUT 整包（dates 合并后）
+export async function pullHomework(secret)      // GET 整包
+export async function syncNow(overrides)        // 完整 tick：GET→逐日期合并→(快照+弹框/推送)
+export function startPeriodicSync(cb)        // 无密钥不启动；setInterval，cb 收到 { pulledDates: [] } 等
 export function stopPeriodicSync()
 ```
 
@@ -147,7 +170,7 @@ export async function restoreSnapshot(date, ts)
 ### `src/pages/index.vue`（改）
 
 - `mounted` 后启动 `startPeriodicSync`
-- 保存作业后 `syncAfterSave`
+- 保存作业后 `syncNow()`（防抖）
 - 新增同步提示框：标题「检测到云端更新，本地已自动同步」，正文含按钮「对修改不满意？一键回退之前版本」+ 关闭
 - 回退对话框：快照列表（时间排序）+ 恢复按钮
 - 工具栏：同步状态点（空闲/同步中/失败可点重试）+ 回退入口（可选，与提示框共用回退对话框）
@@ -156,11 +179,11 @@ export async function restoreSnapshot(date, ts)
 
 SPA 回退 matcher 需放行 `/kv/`（加入 bypass），否则 `/kv/homework` 会被 rewrite 成 `index.html` 导致 API 404。
 
-## 配置与部署前置（代码外，手动）
+## 配置与部署前置
 
-1. EdgeOne 控制台 **启用 KV Storage** → 创建 namespace → 绑定到项目，**变量名设 `homework_kv`**（代码中为全局变量 `homework_kv`）
-2. 控制台设置环境变量 `SYNC_SECRET`（≥32 字符随机串）
-3. 开发联调按官方技能：`edgeone pages link` + `edgeone pages dev`（8088）。KV 未绑定会 `ReferenceError: homework_kv is not defined`
+- ✅ 已完成：KV namespace `classwork`（ns-VQKVSxxJ5Yjm）已创建并绑定到项目，变量名 `homework_kv`
+- ☐ 待做：控制台设置**唯一环境变量** `SYNC_SECRET`（≥32 字符随机串）——这是云端与本地的连接校验密钥
+- 开发联调按官方技能：`edgeone pages link` + `edgeone pages dev`（8088）。KV 未绑定会 `ReferenceError: homework_kv is not defined`
 
 ## 测试（ponytail 规则：非平凡逻辑留一个可运行自检）
 
