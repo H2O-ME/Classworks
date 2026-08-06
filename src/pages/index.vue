@@ -131,6 +131,79 @@
   />
 
   <FloatingICP />
+
+  <!-- 云端同步提示 -->
+  <v-dialog
+    v-model="syncNoticeVisible"
+    width="420"
+  >
+    <v-card class="sync-dialog-card">
+      <v-card-title class="sync-dialog-title">
+        检测到云端更新
+      </v-card-title>
+      <v-card-text class="sync-dialog-text">
+        本地已自动同步为最新内容。
+      </v-card-text>
+      <v-card-actions>
+        <v-spacer />
+        <v-btn
+          variant="text"
+          @click="syncNoticeVisible = false"
+        >
+          知道了
+        </v-btn>
+        <v-btn
+          color="primary"
+          variant="tonal"
+          @click="openRollback"
+        >
+          对修改不满意？一键回退之前版本
+        </v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
+
+  <!-- 回退快照列表 -->
+  <v-dialog
+    v-model="rollbackVisible"
+    width="460"
+  >
+    <v-card class="sync-dialog-card">
+      <v-card-title class="sync-dialog-title">
+        回退之前版本
+      </v-card-title>
+      <v-card-text>
+        <div
+          v-if="syncSnapshots.length === 0"
+          class="sync-empty-text"
+        >
+          没有可回退的快照。
+        </div>
+        <button
+          v-for="ts in syncSnapshots"
+          :key="ts"
+          type="button"
+          class="sync-snapshot-item"
+          @click="handleRollback(ts)"
+        >
+          <span>{{ formatSnapshotTime(ts) }}</span>
+          <v-icon
+            icon="mdi-restore"
+            size="16"
+          />
+        </button>
+      </v-card-text>
+      <v-card-actions>
+        <v-spacer />
+        <v-btn
+          variant="text"
+          @click="rollbackVisible = false"
+        >
+          取消
+        </v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
 </template>
 
 <script>
@@ -145,7 +218,13 @@ import {
   normalizeBoardData,
   resolveAvailableSubjects,
 } from "@/utils/board";
-import { getData, setData } from "@/utils/storage";
+import { getData, setData, listSnapshots } from "@/utils/storage";
+import {
+  rollbackDate,
+  scheduleSyncNow,
+  startPeriodicSync,
+  stopPeriodicSync,
+} from "@/utils/sync";
 import { getSetting, setSetting } from "@/utils/settings";
 
 const FloatingToolbar = defineAsyncComponent(() => import("@/components/FloatingToolbar.vue"));
@@ -175,6 +254,10 @@ export default {
       availableSubjects: [],
       loading: { copyToToday: false },
       fontSizeLevel: getSetting("display.fontSizeLevel") || 0,
+      syncNoticeVisible: false,
+      rollbackVisible: false,
+      syncSnapshots: [],
+      currentEditDateForRollback: "",
     };
   },
   computed: {
@@ -205,12 +288,16 @@ export default {
     },
   },
   async mounted() {
+    startPeriodicSync({ onPulled: (pulledDates) => this.handlePulledDates(pulledDates) });
     try {
       await this.initializeData();
       this.dataReady = true;
     } catch (error) {
       console.error("初始化失败:", error);
     }
+  },
+  beforeUnmount() {
+    stopPeriodicSync();
   },
   methods: {
     async initializeData() {
@@ -281,6 +368,7 @@ export default {
       }
 
       await this.uploadData();
+      scheduleSyncNow({ onPulled: (pulledDates) => this.handlePulledDates(pulledDates) });
     },
     zoom(direction) {
       this.fontSizeLevel = direction === "up" ? Math.min(this.fontSizeLevel + 1, 24) : Math.max(this.fontSizeLevel - 1, -4);
@@ -322,6 +410,25 @@ export default {
       } finally {
         this.loading.copyToToday = false;
       }
+    },
+    handlePulledDates(pulledDates) {
+      if (!pulledDates?.includes(this.dateString)) return;
+      this.syncNoticeVisible = true;
+    },
+    async openRollback() {
+      this.currentEditDateForRollback = this.dateString;
+      this.syncSnapshots = await listSnapshots(this.dateString);
+      this.syncNoticeVisible = false;
+      this.rollbackVisible = true;
+    },
+    formatSnapshotTime(ts) {
+      const date = new Date(ts);
+      return `${date.getMonth() + 1} 月 ${date.getDate()} 日 ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+    },
+    async handleRollback(ts) {
+      await rollbackDate(this.dateString, ts);
+      this.rollbackVisible = false;
+      await this.downloadData();
     },
   },
 };
@@ -637,5 +744,50 @@ export default {
     min-height: 58px;
     padding: 0 14px;
   }
+}
+
+.sync-dialog-card {
+  border-radius: 10px !important;
+  background: #181818 !important;
+  color: #f1f1f1;
+}
+
+.sync-dialog-title {
+  font-weight: 700 !important;
+}
+
+.sync-dialog-text {
+  color: rgba(255, 255, 255, 0.78) !important;
+}
+
+.sync-empty-text {
+  padding: 18px 0;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 13px;
+  text-align: center;
+}
+
+.sync-snapshot-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  min-height: 44px;
+  margin-bottom: 8px;
+  padding: 0 14px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  background: #202020;
+  color: #ededed;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.18s ease, border-color 0.18s ease;
+}
+
+.sync-snapshot-item:hover {
+  border-color: rgba(255, 255, 255, 0.2);
+  background: #262626;
 }
 </style>
