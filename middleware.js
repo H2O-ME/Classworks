@@ -2,7 +2,7 @@
 
 export const config = {
   matcher: [
-    "/((?!api|src|node_modules|@vite|@fs|@id|assets|pwa|sw\\.js|sw-cache-manager\\.js|favicon|.*\\.png|.*\\.jpg|.*\\.svg|.*\\.ico|.*\\.woff|.*\\.woff2|.*\\.ttf|.*\\.webmanifest|.*\\.js|.*\\.css|.*\\.sass|.*\\.scss).*)",
+    "/((?!api|kv|src|node_modules|@vite|@fs|@id|assets|pwa|sw\\.js|sw-cache-manager\\.js|favicon|.*\\.png|.*\\.jpg|.*\\.svg|.*\\.ico|.*\\.woff|.*\\.woff2|.*\\.ttf|.*\\.webmanifest|.*\\.js|.*\\.css|.*\\.sass|.*\\.scss).*)",
   ],
 };
 
@@ -16,7 +16,7 @@ export function middleware(context) {
   const url = new URL(context.request.url);
   const pathname = url.pathname;
 
-  const bypassPrefixes = ["/api/", "/src/", "/node_modules/", "/@vite/", "/@fs/", "/@id/"];
+  const bypassPrefixes = ["/api/", "/kv/", "/src/", "/node_modules/", "/@vite/", "/@fs/", "/@id/"];
   if (bypassPrefixes.some((prefix) => pathname.startsWith(prefix))) {
     return context.next();
   }
