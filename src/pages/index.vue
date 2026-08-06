@@ -218,7 +218,7 @@ import {
   normalizeBoardData,
   resolveAvailableSubjects,
 } from "@/utils/board";
-import { getData, setData, listSnapshots } from "@/utils/storage";
+import { getData, setData, listSnapshots, setMeta } from "@/utils/storage";
 import {
   rollbackDate,
   scheduleSyncNow,
@@ -368,6 +368,7 @@ export default {
       }
 
       await this.uploadData();
+      await setMeta(this.dateString, Date.now());
       scheduleSyncNow({ onPulled: (pulledDates) => this.handlePulledDates(pulledDates) });
     },
     zoom(direction) {
@@ -405,14 +406,17 @@ export default {
           Object.entries(sourceHomework).filter(([, value]) => value?.content?.trim()),
         );
         await this.uploadData();
+        await setMeta(this.dateString, Date.now());
+        scheduleSyncNow({ onPulled: (pulledDates) => this.handlePulledDates(pulledDates) });
       } catch (error) {
         console.error("复制到今天失败:", error);
       } finally {
         this.loading.copyToToday = false;
       }
     },
-    handlePulledDates(pulledDates) {
+    async handlePulledDates(pulledDates) {
       if (!pulledDates?.includes(this.dateString)) return;
+      await this.downloadData();
       this.syncNoticeVisible = true;
     },
     async openRollback() {
