@@ -4,9 +4,36 @@ import { mergeDates } from "./syncMerge";
 const SYNC_INTERVAL_MS = 5 * 60 * 1000;
 const SYNC_ENDPOINT = "/kv/homework";
 const SYNC_SECRET_KEY = "classworks_sync_secret";
+const SYNC_SECRET_EVENT = "classworks-sync-secret-changed";
+const DATE_KEY_RE = /^\d{8}$/;
 
 let timerId = null;
 let saveDebounceId = null;
+let syncPromise = null;
+
+function isPlainObject(value) {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
+function isValidCloudDates(dates) {
+  return isPlainObject(dates) && Object.entries(dates).every(([date, entry]) => (
+    DATE_KEY_RE.test(date)
+    && isPlainObject(entry)
+    && isPlainObject(entry.homework)
+    && typeof entry.updatedAt === "string"
+    && Number.isFinite(Date.parse(entry.updatedAt))
+  ));
+}
+
+function getCloudDates(cloudDoc) {
+  if (isPlainObject(cloudDoc) && cloudDoc.empty === true) return {};
+  if (!isPlainObject(cloudDoc) || !isValidCloudDates(cloudDoc.dates)) {
+    throw new Error("云端同步数据无效");
+  }
+  return cloudDoc.dates;
+}
 
 export function getSyncSecret() {
   return localStorage.getItem(SYNC_SECRET_KEY) || "";
@@ -18,6 +45,22 @@ export function setSyncSecret(secret) {
   } else {
     localStorage.removeItem(SYNC_SECRET_KEY);
   }
+  window.dispatchEvent(new window.Event(SYNC_SECRET_EVENT));
+}
+
+export function watchSyncSecret(callback) {
+  const handleSecretChange = () => callback(getSyncSecret());
+  const handleStorageChange = (event) => {
+    if (event.key === SYNC_SECRET_KEY) callback(getSyncSecret());
+  };
+
+  window.addEventListener(SYNC_SECRET_EVENT, handleSecretChange);
+  window.addEventListener("storage", handleStorageChange);
+  callback(getSyncSecret());
+  return () => {
+    window.removeEventListener(SYNC_SECRET_EVENT, handleSecretChange);
+    window.removeEventListener("storage", handleStorageChange);
+  };
 }
 
 async function requestJson(url, options) {
@@ -50,20 +93,31 @@ async function collectLocalDates() {
   return { local, meta };
 }
 
-export async function syncNow({ onPulled } = {}) {
+export function syncNow(options = {}) {
+  if (syncPromise) return syncPromise;
+  syncPromise = runSync(options).finally(() => {
+    syncPromise = null;
+  });
+  return syncPromise;
+}
+
+async function runSync({ onPulled } = {}) {
   const secret = getSyncSecret();
   if (!secret) return { status: "local-only" };
 
   const cloudDoc = await requestJson(`${SYNC_ENDPOINT}?t=${Date.now()}`, { headers: authHeaders(secret) });
-  const cloud = cloudDoc.empty ? {} : (cloudDoc.dates || {});
+  const cloud = getCloudDates(cloudDoc);
   const { local, meta } = await collectLocalDates();
 
   const result = mergeDates({ cloud, local, meta });
+  const pulled = [];
 
   for (const date of result.pulled) {
     await snapshotDate(date); // 覆写前留本地快照（无本地数据时 snapshotDate 返回 null，无副作用）
-    await setData(`classworks-data-${date}`, { homework: result.merged[date].homework });
-    await setMeta(date, Date.parse(result.merged[date].updatedAt));
+    const saved = await setData(`classworks-data-${date}`, { homework: result.merged[date].homework });
+    if (!saved) continue;
+    const metaSaved = await setMeta(date, Date.parse(result.merged[date].updatedAt));
+    if (metaSaved) pulled.push(date);
   }
 
   if (result.pushed.length > 0) {
@@ -78,8 +132,8 @@ export async function syncNow({ onPulled } = {}) {
     }
   }
 
-  onPulled?.(result.pulled);
-  return { status: "ok", pulled: result.pulled, pushed: result.pushed };
+  onPulled?.(pulled);
+  return { status: "ok", pulled, pushed: result.pushed };
 }
 
 export function scheduleSyncNow({ onPulled } = {}) {

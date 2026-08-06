@@ -224,6 +224,7 @@ import {
   scheduleSyncNow,
   startPeriodicSync,
   stopPeriodicSync,
+  watchSyncSecret,
 } from "@/utils/sync";
 import { getSetting, setSetting } from "@/utils/settings";
 
@@ -258,6 +259,7 @@ export default {
       rollbackVisible: false,
       syncSnapshots: [],
       currentEditDateForRollback: "",
+      unsubscribeSyncSecret: null,
     };
   },
   computed: {
@@ -288,7 +290,12 @@ export default {
     },
   },
   async mounted() {
-    startPeriodicSync({ onPulled: (pulledDates) => this.handlePulledDates(pulledDates) });
+    this.unsubscribeSyncSecret = watchSyncSecret((secret) => {
+      stopPeriodicSync();
+      if (secret) {
+        startPeriodicSync({ onPulled: (pulledDates) => this.handlePulledDates(pulledDates) });
+      }
+    });
     try {
       await this.initializeData();
       this.dataReady = true;
@@ -298,6 +305,7 @@ export default {
   },
   beforeUnmount() {
     stopPeriodicSync();
+    this.unsubscribeSyncSecret?.();
   },
   methods: {
     async initializeData() {

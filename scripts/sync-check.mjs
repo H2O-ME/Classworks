@@ -1,6 +1,24 @@
 import assert from "node:assert/strict";
 import { mergeDates } from "../src/utils/syncMerge.js";
 
+const DATE_KEY_RE = /^\d{8}$/;
+
+function isPlainObject(value) {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
+function isValidDates(dates) {
+  return isPlainObject(dates) && Object.entries(dates).every(([date, entry]) => (
+    DATE_KEY_RE.test(date)
+    && isPlainObject(entry)
+    && isPlainObject(entry.homework)
+    && typeof entry.updatedAt === "string"
+    && Number.isFinite(Date.parse(entry.updatedAt))
+  ));
+}
+
 // 场景 1: 云端该日期更新 → 应拉取
 {
   const r = mergeDates({
@@ -74,4 +92,20 @@ import { mergeDates } from "../src/utils/syncMerge.js";
   assert.deepEqual(r.merged, {});
 }
 
-console.log("syncMerge 自检通过: 6 个场景");
+// 场景 6: 云端文档条目必须有有效日期、作业对象和可解析时间戳
+{
+  assert.equal(isValidDates({
+    "20260806": { homework: { a: "作业" }, updatedAt: "2026-08-06T10:00:00.000Z" },
+  }), true);
+  assert.equal(isValidDates({
+    "20260806": { homework: {}, updatedAt: "not-a-date" },
+  }), false);
+  assert.equal(isValidDates({
+    "2026-08-06": { homework: {}, updatedAt: "2026-08-06T10:00:00.000Z" },
+  }), false);
+  assert.equal(isValidDates({
+    "20260806": { homework: [], updatedAt: "2026-08-06T10:00:00.000Z" },
+  }), false);
+}
+
+console.log("syncMerge 自检通过: 6 个合并场景和云端数据校验");

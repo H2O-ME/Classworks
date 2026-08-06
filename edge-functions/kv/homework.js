@@ -1,4 +1,21 @@
 const KV_KEY = "classworks_homework";
+const DATE_KEY_RE = /^\d{8}$/;
+
+function isPlainObject(value) {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
+function isValidDates(dates) {
+  return isPlainObject(dates) && Object.entries(dates).every(([date, entry]) => (
+    DATE_KEY_RE.test(date)
+    && isPlainObject(entry)
+    && isPlainObject(entry.homework)
+    && typeof entry.updatedAt === "string"
+    && Number.isFinite(Date.parse(entry.updatedAt))
+  ));
+}
 
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -33,11 +50,21 @@ export async function onRequestPut(context) {
     return json({ error: "invalid json" }, 400);
   }
 
-  if (!body || typeof body.dates !== "object" || body.dates === null) {
+  if (!body || !isValidDates(body.dates)) {
     return json({ error: "missing dates" }, 400);
   }
 
+  const current = await homework_kv.get(KV_KEY, "json");
+  const mergedDates = isValidDates(current?.dates) ? { ...current.dates } : {};
+  // Merge against the latest whole document so a stale client cannot erase newer dates.
+  for (const [date, incoming] of Object.entries(body.dates)) {
+    const existing = mergedDates[date];
+    if (!existing || Date.parse(incoming.updatedAt) >= Date.parse(existing.updatedAt)) {
+      mergedDates[date] = incoming;
+    }
+  }
+
   const savedAt = new Date().toISOString();
-  await homework_kv.put(KV_KEY, JSON.stringify({ savedAt, dates: body.dates }));
+  await homework_kv.put(KV_KEY, JSON.stringify({ savedAt, dates: mergedDates }));
   return json({ savedAt });
 }
