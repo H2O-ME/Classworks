@@ -133,35 +133,42 @@
   <FloatingICP />
 
   <!-- 云端同步提示 -->
-  <v-dialog
-    v-model="syncNoticeVisible"
-    width="420"
+  <aside
+    v-if="syncNoticeVisible"
+    class="sync-toast"
+    role="status"
+    @mouseenter="pauseSyncNotice"
+    @mouseleave="resumeSyncNotice"
   >
-    <v-card class="sync-dialog-card">
-      <v-card-title class="sync-dialog-title">
-        检测到云端更新
-      </v-card-title>
-      <v-card-text class="sync-dialog-text">
-        本地已自动同步为最新内容。
-      </v-card-text>
-      <v-card-actions>
-        <v-spacer />
-        <v-btn
-          variant="text"
-          @click="syncNoticeVisible = false"
-        >
-          知道了
-        </v-btn>
-        <v-btn
-          color="primary"
-          variant="tonal"
-          @click="openRollback"
-        >
-          对修改不满意？一键回退之前版本
-        </v-btn>
-      </v-card-actions>
-    </v-card>
-  </v-dialog>
+    <div class="sync-toast-mark">
+      <v-icon
+        icon="mdi-cloud-check-outline"
+        size="18"
+      />
+    </div>
+    <div class="sync-toast-copy">
+      <strong>检测到云端更新</strong>
+      <span>本地已自动同步为最新内容</span>
+    </div>
+    <button
+      class="sync-toast-rollback"
+      type="button"
+      @click="openRollback"
+    >
+      回退之前版本
+    </button>
+    <button
+      class="sync-toast-close"
+      type="button"
+      aria-label="关闭同步提示"
+      @click="dismissSyncNotice"
+    >
+      <v-icon
+        icon="mdi-close"
+        size="16"
+      />
+    </button>
+  </aside>
 
   <!-- 回退快照列表 -->
   <v-dialog
@@ -259,6 +266,8 @@ export default {
       rollbackVisible: false,
       syncSnapshots: [],
       currentEditDateForRollback: "",
+      syncNoticeTimer: null,
+      syncNoticePaused: false,
       unsubscribeSyncSecret: null,
     };
   },
@@ -306,6 +315,7 @@ export default {
   beforeUnmount() {
     stopPeriodicSync();
     this.unsubscribeSyncSecret?.();
+    this.clearSyncNoticeTimer();
   },
   methods: {
     async initializeData() {
@@ -428,8 +438,37 @@ export default {
       if (!pulledDates?.includes(this.dateString)) return;
       await this.downloadData();
       this.syncNoticeVisible = true;
+      this.syncNoticePaused = false;
+      this.startSyncNoticeTimer();
+    },
+    clearSyncNoticeTimer() {
+      if (this.syncNoticeTimer) {
+        clearTimeout(this.syncNoticeTimer);
+        this.syncNoticeTimer = null;
+      }
+    },
+    startSyncNoticeTimer() {
+      this.clearSyncNoticeTimer();
+      if (this.syncNoticePaused) return;
+      this.syncNoticeTimer = setTimeout(() => {
+        this.syncNoticeVisible = false;
+        this.syncNoticeTimer = null;
+      }, 5000);
+    },
+    pauseSyncNotice() {
+      this.syncNoticePaused = true;
+      this.clearSyncNoticeTimer();
+    },
+    resumeSyncNotice() {
+      this.syncNoticePaused = false;
+      if (this.syncNoticeVisible) this.startSyncNoticeTimer();
+    },
+    dismissSyncNotice() {
+      this.syncNoticeVisible = false;
+      this.clearSyncNoticeTimer();
     },
     async openRollback() {
+      this.dismissSyncNotice();
       this.currentEditDateForRollback = this.dateString;
       this.syncSnapshots = await listSnapshots(this.dateString);
       this.syncNoticeVisible = false;
@@ -732,7 +771,20 @@ export default {
   }
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .sync-toast {
+    animation: none;
+  }
+}
+
 @media (max-width: 700px) {
+  .sync-toast {
+    top: 76px;
+    right: 14px;
+    left: 14px;
+    width: auto;
+  }
+
   .app-bar-inner {
     padding: 0 14px 0 20px;
   }
@@ -760,18 +812,113 @@ export default {
   }
 }
 
+.sync-toast {
+  position: fixed;
+  top: 82px;
+  right: 18px;
+  z-index: 120;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  width: min(430px, calc(100vw - 36px));
+  padding: 12px 12px 12px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 9px;
+  background: #181818;
+  box-shadow: 0 22px 46px rgba(0, 0, 0, 0.26);
+  animation: sync-toast-enter 0.24s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.sync-toast-mark {
+  display: inline-flex;
+  width: 30px;
+  height: 30px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 7px;
+  background: #202020;
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.sync-toast-copy {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.sync-toast-copy strong {
+  overflow: hidden;
+  color: #f1f1f1;
+  font-size: 13px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sync-toast-copy span {
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.52);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sync-toast-rollback,
+.sync-toast-close {
+  border: 0;
+  color: rgba(255, 255, 255, 0.72);
+  cursor: pointer;
+}
+
+.sync-toast-rollback {
+  min-height: 30px;
+  padding: 0 9px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  background: #202020;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.sync-toast-rollback:hover {
+  border-color: rgba(255, 255, 255, 0.18);
+  background: #262626;
+  color: #f1f1f1;
+}
+
+.sync-toast-close {
+  display: inline-flex;
+  width: 28px;
+  height: 28px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  background: transparent;
+}
+
+.sync-toast-close:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #f1f1f1;
+}
+
+@keyframes sync-toast-enter {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 .sync-dialog-card {
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
   border-radius: 10px !important;
-  background: #181818 !important;
+  background: #171717 !important;
+  box-shadow: 0 22px 46px rgba(0, 0, 0, 0.26);
   color: #f1f1f1;
 }
 
 .sync-dialog-title {
   font-weight: 700 !important;
-}
-
-.sync-dialog-text {
-  color: rgba(255, 255, 255, 0.78) !important;
 }
 
 .sync-empty-text {
