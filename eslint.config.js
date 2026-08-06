@@ -69,6 +69,10 @@ export default [
         globalThis: 'readonly',
         // DOM
         location: 'readonly',
+        // EdgeOne Pages Edge Function globals（edge-functions/ 目录，V8 运行时）
+        Response: 'readonly',
+        Request: 'readonly',
+        homework_kv: 'readonly',
       },
     },
   }
