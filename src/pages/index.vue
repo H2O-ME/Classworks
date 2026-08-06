@@ -338,7 +338,7 @@ export default {
       }
     },
     async uploadData() {
-      await setData(`classworks-data-${this.dateString}`, this.boardData);
+      return setData(`classworks-data-${this.dateString}`, this.boardData);
     },
     openDialog(subject) {
       this.currentEditSubject = subject;
@@ -367,7 +367,8 @@ export default {
         };
       }
 
-      await this.uploadData();
+      const saved = await this.uploadData();
+      if (!saved) return;
       await setMeta(this.dateString, Date.now());
       scheduleSyncNow({ onPulled: (pulledDates) => this.handlePulledDates(pulledDates) });
     },
@@ -405,7 +406,8 @@ export default {
         this.boardData.homework = Object.fromEntries(
           Object.entries(sourceHomework).filter(([, value]) => value?.content?.trim()),
         );
-        await this.uploadData();
+        const saved = await this.uploadData();
+        if (!saved) return;
         await setMeta(this.dateString, Date.now());
         scheduleSyncNow({ onPulled: (pulledDates) => this.handlePulledDates(pulledDates) });
       } catch (error) {
