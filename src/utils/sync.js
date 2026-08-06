@@ -9,7 +9,7 @@ const DATE_KEY_RE = /^\d{8}$/;
 
 let timerId = null;
 let saveDebounceId = null;
-let syncPromise = null;
+let syncChain = Promise.resolve();
 
 function isPlainObject(value) {
   if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
@@ -44,6 +44,8 @@ export function setSyncSecret(secret) {
     localStorage.setItem(SYNC_SECRET_KEY, secret.trim());
   } else {
     localStorage.removeItem(SYNC_SECRET_KEY);
+    clearTimeout(saveDebounceId);
+    saveDebounceId = null;
   }
   window.dispatchEvent(new window.Event(SYNC_SECRET_EVENT));
 }
@@ -94,11 +96,12 @@ async function collectLocalDates() {
 }
 
 export function syncNow(options = {}) {
-  if (syncPromise) return syncPromise;
-  syncPromise = runSync(options).finally(() => {
-    syncPromise = null;
-  });
-  return syncPromise;
+  const next = syncChain.then(
+    () => runSync(options),
+    () => runSync(options),
+  );
+  syncChain = next.catch(() => {});
+  return next;
 }
 
 async function runSync({ onPulled } = {}) {
@@ -137,8 +140,10 @@ async function runSync({ onPulled } = {}) {
 }
 
 export function scheduleSyncNow({ onPulled } = {}) {
+  if (!getSyncSecret()) return;
   clearTimeout(saveDebounceId);
   saveDebounceId = setTimeout(() => {
+    saveDebounceId = null;
     syncNow({ onPulled }).catch((error) => console.warn("保存后同步失败:", error));
   }, 800);
 }
