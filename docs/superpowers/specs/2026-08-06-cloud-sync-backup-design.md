@@ -11,7 +11,7 @@ Classworks 作业看板当前为**纯本地**应用：作业按天存于浏览�
 
 - 本地功能持久可用，**不加鉴权**：读、编辑、展示永远可用，断网/无 key 不影响
 - 云端由 EdgeOne Pages 提供：`edge-functions` + KV Storage
-- 写入云端需要密钥（`SYNC_SECRET`），拉取云端不需要密钥
+- **读写云端都需要密钥**：设置里不输入密钥 → 完全本地运行，不做任何云端同步（不拉也不推）
 - 定时同步 + 时间戳 last-write-wins + 同步前本地快照可回退
 
 ## 非目标（YAGNI）
@@ -23,8 +23,8 @@ Classworks 作业看板当前为**纯本地**应用：作业按天存于浏览�
 
 ## 威胁模型与安全
 
-- **读不是威胁**：看板本质是给全班看的展示屏，读到作业内容不构成破坏 → `GET` 不鉴权
-- **写是威胁**：陌生人往云端写垃圾会污染全班作业 → `PUT` 必须校验密钥
+- 看板本质是给全班看的展示屏，本地展示无需任何鉴权
+- **云端读写均需密钥**：设置页不输入密钥 → 不启动同步（不拉不推），本地功能照常
 - 密钥 `SYNC_SECRET` 只存在于 EdgeOne 控制台环境变量（不进 git、不进 edgeone.json、不进前端产物）
 - 前端密钥存 `localStorage['classworks_sync_secret']`，设置页粘贴一次，之后自动携带
 - 请求头 `x-sync-secret`（**不用 query string**，避免密钥进访问日志/浏览器历史）
@@ -33,18 +33,18 @@ Classworks 作业看板当前为**纯本地**应用：作业按天存于浏览�
 ## 架构
 
 ```
-┌─ 前端 (Vue 3, 现有 src/) ──────────────┐
+┌─ 前端 (Vue 3, 现有 src/) ──────────────────┐
 │  storage.js ← IndexedDB（主存储，本地永远可用）│
 │  sync.js    ← 新增：定时/触发式云端同步       │
-│  settings.vue ← 新增：同步密钥输入           │
+│  settings.vue ← 新增：同步密钥输入（无密钥=纯本地）│
 │  index.vue   ← 新增：同步提示框 + 回退入口     │
-└──────────────┬─────────────────────────┘
-               │ HTTP (同域 /kv/homework)
-┌──────────────▼─────────────────────────┐
-│  edge-functions/kv/homework.js (新增)    │
-│  GET  → my_kv.get('hw:YYYYMMDD')        │
-│  PUT  → 校验 x-sync-secret → my_kv.put   │
-└──────────────┬─────────────────────────┘
+└──────────────┬────────────────────────────┘
+               │ HTTP (同域 /kv/homework) + 头 x-sync-secret
+┌──────────────▼────────────────────────────┐
+│  edge-functions/kv/homework.js (新增)       │
+│  GET/PUT 均校验 x-sync-secret              │
+│  → homework_kv.get / homework_kv.put        │
+└──────────────┬────────────────────────────┘
                │
         ┌──────▼──────┐
         │ KV Storage  │  hw:{date} → { homework, updatedAt }
@@ -55,12 +55,13 @@ Classworks 作业看板当前为**纯本地**应用：作业按天存于浏览�
 
 **保存作业时**（`handleHomeworkSave` 成功后）：
 1. 写 IndexedDB（现有逻辑不动）
-2. `sync.js.syncAfterSave()` → 800ms 防抖 → 若本地有密钥 → `PUT` 推送云端
+2. `sync.js.syncAfterSave()` → 800ms 防抖 → 若本地有密钥 → `PUT` 推送云端；无密钥则跳过（本地照常保存）
 
 **定时同步**（每 5 分钟，代码常量 `SYNC_INTERVAL_MS = 5 * 60 * 1000`）：
-1. `GET` 拉取云端当天数据
-2. 按「同步判定表」比较 → 拉 / 推 / 跳过
-3. 断网/API 失败 → 静默降级，下次再试（不打扰用户）
+1. **无密钥时不启动**（纯本地模式，连定时器都不跑）
+2. `GET` 拉取云端当天数据
+3. 按「同步判定表」比较 → 拉 / 推 / 跳过
+4. 断网/API 失败 → 静默降级，下次再试（不打扰用户）
 
 ### 本地同步元数据
 
@@ -74,10 +75,10 @@ Classworks 作业看板当前为**纯本地**应用：作业按天存于浏览�
 
 | 条件 | 动作 |
 |---|---|
+| 无密钥（`getSyncSecret()` 为空） | 跳过全部（本地模式） |
 | 云端有数据且 `云端.updatedAt > meta.updatedAt` | 快照本地 → 覆写本地 → 更新 meta → **弹提示框** |
-| 云端有数据、`云端.updatedAt <= meta.updatedAt`、有密钥 | `PUT` 推送（服务端重新盖章时间戳） |
-| 云端有数据、无密钥、本地不比云端新 | 跳过 |
-| 云端无数据、本地有作业内容、有密钥 | `PUT` 推送（首次备份） |
+| 云端有数据、`云端.updatedAt <= meta.updatedAt`、本地有改动 | `PUT` 推送（服务端重新盖章时间戳） |
+| 云端无数据、本地有作业内容 | `PUT` 推送（首次备份） |
 | 云端无数据、本地无作业内容 | 跳过 |
 | 无 meta（首次）且云端有数据 | 按上述比较时视 `meta.updatedAt = 0`，即云端必新 → 拉取 |
 
@@ -90,15 +91,19 @@ Classworks 作业看板当前为**纯本地**应用：作业按天存于浏览�
 
 路径 `/kv/homework`，方法 `GET` / `PUT`，参数 `date=YYYYMMDD`。
 
-**GET**（无鉴权）：
+**GET** / **PUT**（均需 `x-sync-secret` 头）：
+```
+校验: context.env.SYNC_SECRET 比对，不符 → 401 { error: "forbidden" }
+```
+
+**GET**：
 ```
 响应 200: { homework: {...}, updatedAt: "2026-08-06T10:30:00.000Z" }
 无数据:   { empty: true }
 ```
 
-**PUT**（需 `x-sync-secret` 头）：
+**PUT**：
 ```
-校验: context.env.SYNC_SECRET 比对，不符 → 401 { error: "forbidden" }
 请求体: { homework: {...} }
 行为: 服务端盖章 updatedAt = new Date().toISOString()
 响应 200: { updatedAt }
@@ -106,7 +111,7 @@ Classworks 作业看板当前为**纯本地**应用：作业按天存于浏览�
 
 技术要点（来自 edgeone-pages-dev 技能）：
 - V8 运行时，无 npm、无 Node 内置模块；`Response.json()` 不可用，用 `new Response(JSON.stringify(...), { headers: { 'Content-Type': 'application/json' } })`
-- KV 是**全局变量** `my_kv`（控制台绑定 namespace 时定的变量名），不是 `context.env.my_kv`
+- KV 是**全局变量** `homework_kv`（控制台绑定 namespace 时设的变量名），不是 `context.env.homework_kv`
 - KV key：`hw:20260806`（前缀 `hw:` + 8 位日期）
 - KV value ≤ 25 MB，作业文本远小于此；eventual consistency ≤ 60s，可接受
 
@@ -118,11 +123,11 @@ Classworks 作业看板当前为**纯本地**应用：作业按天存于浏览�
 const SYNC_INTERVAL_MS = 5 * 60 * 1000
 const SYNC_SECRET_KEY = 'classworks_sync_secret'
 
-export function getSyncSecret()              // localStorage 读取
+export function getSyncSecret()              // localStorage 读取（空 = 纯本地模式）
 export function setSyncSecret(secret)        // localStorage 写入
 export async function pushHomework(date, homework, secret)
-export async function pullHomework(date)     // GET，无鉴权
-export function startPeriodicSync(cb)        // setInterval，cb 收到 { mode: 'pulled' } 等
+export async function pullHomework(date, secret) // GET，带 x-sync-secret
+export function startPeriodicSync(cb)        // 无密钥不启动；setInterval，cb 收到 { mode: 'pulled' } 等
 export function stopPeriodicSync()
 ```
 
@@ -153,9 +158,9 @@ SPA 回退 matcher 需放行 `/kv/`（加入 bypass），否则 `/kv/homework` �
 
 ## 配置与部署前置（代码外，手动）
 
-1. EdgeOne 控制台 **启用 KV Storage** → 创建 namespace → 绑定到项目，变量名 `my_kv`
+1. EdgeOne 控制台 **启用 KV Storage** → 创建 namespace → 绑定到项目，**变量名设 `homework_kv`**（代码中为全局变量 `homework_kv`）
 2. 控制台设置环境变量 `SYNC_SECRET`（≥32 字符随机串）
-3. 开发联调按官方技能：`edgeone pages link` + `edgeone pages dev`（8088）。KV 未绑定会 `ReferenceError: my_kv is not defined`
+3. 开发联调按官方技能：`edgeone pages link` + `edgeone pages dev`（8088）。KV 未绑定会 `ReferenceError: homework_kv is not defined`
 
 ## 测试（ponytail 规则：非平凡逻辑留一个可运行自检）
 
