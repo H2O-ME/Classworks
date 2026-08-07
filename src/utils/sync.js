@@ -168,18 +168,19 @@ export function stopPeriodicSync() {
 }
 
 // 回退到该日期"本地留存的最后一次数据"（最新快照），并立即推送云端覆盖
-export async function rollbackToLatest(date) {
+export async function rollbackToLatest(date, options) {
   const snapshots = await listSnapshots(date);
   const latest = snapshots[snapshots.length - 1];
   if (!latest) return { ok: false, reason: "no-snapshot" };
-  return rollbackDate(date, latest);
+  return rollbackDate(date, latest, options);
 }
 
-// 回退后调：恢复快照 → 重写本地 → 立即推云端覆盖（凭 meta 更晚被判定为"待推送"）
-export async function rollbackDate(date, ts) {
+// 回退后调：恢复快照 → 重写本地 → 云端覆盖后台异步（不阻塞页面显示）
+export async function rollbackDate(date, ts, { onPushed } = {}) {
   const ok = await restoreSnapshot(date, ts);
   if (!ok) return { ok: false, reason: "no-snapshot" };
   await setMeta(date, Date.now());
-  await syncNow();
+  // ponytail: 回退先改本地立即显示，KV 推送后台异步完成，避免页面等网络
+  syncNow({ onPushed }).catch((error) => console.warn("回退后同步失败:", error));
   return { ok: true };
 }

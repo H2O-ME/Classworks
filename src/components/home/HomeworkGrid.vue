@@ -15,10 +15,7 @@
               v-for="(item, itemIndex) in column"
               :key="item.key"
               class="homework-card"
-              :class="{
-                'homework-card-geo-hdr': isGeoHdrEnabled(item),
-                'homework-card-updated': updatedKeys?.includes(item.key),
-              }"
+              :class="{ 'homework-card-geo-hdr': isGeoHdrEnabled(item) }"
               :style="{ '--card-delay': `${columnIndex * 56 + itemIndex * 42}ms` }"
               @click="handleCardClick(item.key)"
             >
@@ -34,6 +31,7 @@
 
               <div
                 class="homework-card-content"
+                :class="{ 'content-updated': updatedKeys?.includes(item.key) }"
                 :style="contentStyle"
               >
                 <div
@@ -246,16 +244,20 @@ export default {
   will-change: transform, opacity;
 }
 
-.homework-card-updated {
-  animation:
-    card-enter 0.42s cubic-bezier(0.22, 1, 0.36, 1) forwards,
-    updated-flash 0.9s ease-out 0.1s;
-  animation-delay: var(--card-delay, 0ms), 0s;
+.content-updated .content-line {
+  animation: content-line-update 0.9s ease-out;
 }
 
-@keyframes updated-flash {
-  0% { box-shadow: 0 0 0 2px rgba(168, 191, 220, 0.35), 0 10px 22px rgba(0, 0, 0, 0.1); }
-  100% { box-shadow: 0 10px 22px rgba(0, 0, 0, 0.1); }
+@keyframes content-line-update {
+  0% {
+    background-color: rgba(168, 191, 220, 0.16);
+    border-radius: 3px;
+    transform: translateY(2px);
+  }
+  100% {
+    background-color: transparent;
+    transform: translateY(0);
+  }
 }
 
 .homework-card-header {
@@ -404,10 +406,10 @@ export default {
 
 @media (prefers-reduced-motion: reduce) {
   .homework-card,
-  .homework-card-updated,
   .subject-quick-add,
   .subject-quick-add-button,
-  .homework-card-geo-hdr::after {
+  .homework-card-geo-hdr::after,
+  .content-updated .content-line {
     animation: none;
     opacity: 1;
     transform: none;

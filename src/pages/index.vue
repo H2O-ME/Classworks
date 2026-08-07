@@ -449,14 +449,16 @@ export default {
     },
     async handleRollbackLatest() {
       this.dismissSyncNotice();
-      const result = await rollbackToLatest(this.dateString);
+      // 回退本地立即生效（乐观更新）：恢复快照后马上刷新页面，KV 推送在后台完成
+      const result = await rollbackToLatest(this.dateString, {
+        onPushed: () => this.showPushedToast(),
+      });
       if (!result.ok) return;
       await this.downloadData();
       this.updatedCardKeys = this.sortedItems.map((item) => item.key);
       setTimeout(() => {
         this.updatedCardKeys = [];
       }, 1000);
-      this.showPushedToast();
     },
   },
 };
