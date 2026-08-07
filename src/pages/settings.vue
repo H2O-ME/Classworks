@@ -316,7 +316,7 @@ html,body,#app{margin:0;min-width:320px;width:100%;min-height:100%}
 
 @media(max-width:900px){
   .settings-workspace{grid-template-columns:1fr}
-  .settings-sidebar{display:flex;gap:6px;padding:8px 16px;overflow-x:auto;border-right:0;border-bottom:1px solid rgba(255,255,255,.08)}
+  .settings-sidebar{position:static;height:auto;display:flex;gap:6px;padding:8px 16px;overflow-x:auto;border-right:0;border-bottom:1px solid rgba(255,255,255,.08)}
   .settings-nav-item{flex:0 0 auto;width:auto;min-height:38px;margin:0;padding:0 14px}
   .settings-main{width:calc(100% - 32px);padding-top:22px}
 }

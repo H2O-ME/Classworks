@@ -521,7 +521,8 @@ export default {
   min-height: calc(100dvh - 64px);
   margin: 0 auto;
   padding: 20px 32px 76px;
-  overflow: clip;
+  /* ponytail: 仅裁横向；纵向 content 自然撑高 body，否则移动端内容超出会被 clip 截断且无法滚动 */
+  overflow-x: clip;
 }
 
 .empty-state {
