@@ -5,13 +5,75 @@ import Vue from "@vitejs/plugin-vue";
 import VueRouter from "unplugin-vue-router/vite";
 import Vuetify, { transformAssetUrls } from "vite-plugin-vuetify";
 import { VitePWA } from "vite-plugin-pwa";
-import { defineConfig } from "vite";
+import { defineConfig, loadEnv } from "vite";
 import { fileURLToPath, URL } from "node:url";
 import vueDevTools from "vite-plugin-vue-devtools";
 
-export default defineConfig({
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), "");
+  const devSecret = env.SYNC_SECRET || "";
+  // ponytail: 本地 dev mock 代替边缘函数，持久化仅内存（重启丢失），够校验和开发用
+  let devCache = null;
+
+  const DATE_KEY_RE = /^\d{8}$/;
+  function isPlainObject(value) {
+    return value !== null && typeof value === "object" && !Array.isArray(value) && (Object.getPrototypeOf(value) === Object.prototype || Object.getPrototypeOf(value) === null);
+  }
+  function isValidDates(dates) {
+    return isPlainObject(dates) && Object.entries(dates).every(([date, entry]) => DATE_KEY_RE.test(date) && isPlainObject(entry) && isPlainObject(entry.homework) && typeof entry.updatedAt === "string" && Number.isFinite(Date.parse(entry.updatedAt)));
+  }
+
+  return {
   base: "./",
   plugins: [
+    // 本地开发 mock KV 端点（生产环境由边缘函数提供，无需此插件）
+    devSecret ? {
+      name: "kv-mock",
+      configureServer(server) {
+        server.middlewares.use((req, res, next) => {
+          const cleanPath = new URL(req.url, "https://local").pathname;
+          if (cleanPath !== "/kv/homework") return next();
+          if (req.method === "GET" || req.method === "PUT") {
+            const secret = req.headers["x-sync-secret"];
+            if (!secret || secret !== devSecret) {
+              res.statusCode = 401;
+              res.setHeader("Content-Type", "application/json; charset=UTF-8");
+              return res.end(JSON.stringify({ error: "forbidden" }));
+            }
+          }
+          if (req.method === "GET") {
+            res.setHeader("Content-Type", "application/json; charset=UTF-8");
+            return res.end(JSON.stringify(devCache ?? { empty: true }));
+          }
+          if (req.method === "PUT") {
+            let body = "";
+            req.on("data", (chunk) => { body += chunk; });
+            req.on("end", () => {
+              let payload;
+              try { payload = JSON.parse(body); } catch { payload = null; }
+              if (!payload || !isValidDates(payload.dates)) {
+                res.statusCode = 400;
+                res.setHeader("Content-Type", "application/json; charset=UTF-8");
+                return res.end(JSON.stringify({ error: "missing dates" }));
+              }
+              const current = isValidDates(devCache?.dates) ? devCache : { dates: {} };
+              const merged = { ...current.dates };
+              for (const [date, incoming] of Object.entries(payload.dates)) {
+                const existing = merged[date];
+                if (!existing || Date.parse(incoming.updatedAt) >= Date.parse(existing.updatedAt)) merged[date] = incoming;
+              }
+              devCache = { savedAt: new Date().toISOString(), dates: merged };
+              res.setHeader("Content-Type", "application/json; charset=UTF-8");
+              return res.end(JSON.stringify({ savedAt: devCache.savedAt }));
+            });
+            return;
+          }
+          res.statusCode = 405;
+          res.setHeader("Content-Type", "application/json; charset=UTF-8");
+          return res.end(JSON.stringify({ error: "method not allowed" }));
+        });
+      },
+    } : null,
     VueRouter(),
     vueDevTools(),
     Layouts(),
@@ -188,4 +250,5 @@ export default defineConfig({
       },
     },
   },
+  };
 });

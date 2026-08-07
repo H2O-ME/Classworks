@@ -6,7 +6,8 @@ import { mergeDates } from "./syncMerge";
 const SYNC_INTERVAL_MS = 60 * 1000;
 const SYNC_ENDPOINT = "/kv/homework";
 const SYNC_SECRET_KEY = "classworks_sync_secret";
-const SYNC_SECRET_EVENT = "classworks-sync-secret-changed";
+const SYNC_ENABLED_KEY = "classworks_sync_enabled";
+const SYNC_SECRET_EVENT = "classworks-sync-changed";
 const DATE_KEY_RE = /^\d{8}$/;
 
 let timerId = null;
@@ -43,8 +44,9 @@ export function getSyncSecret() {
 }
 
 export function setSyncSecret(secret) {
-  if (secret) {
-    localStorage.setItem(SYNC_SECRET_KEY, secret.trim());
+  const normalized = String(secret || "").trim();
+  if (normalized) {
+    localStorage.setItem(SYNC_SECRET_KEY, normalized);
   } else {
     localStorage.removeItem(SYNC_SECRET_KEY);
     clearTimeout(saveDebounceId);
@@ -53,24 +55,67 @@ export function setSyncSecret(secret) {
   window.dispatchEvent(new window.Event(SYNC_SECRET_EVENT));
 }
 
-export function watchSyncSecret(callback) {
-  const handleSecretChange = () => callback(getSyncSecret());
+// 同步总开关：即使存了密钥，关闭后也不发任何云端请求
+export function getSyncEnabled() {
+  return localStorage.getItem(SYNC_ENABLED_KEY) === "1";
+}
+
+export function setSyncEnabled(enabled) {
+  if (enabled) {
+    localStorage.setItem(SYNC_ENABLED_KEY, "1");
+  } else {
+    localStorage.removeItem(SYNC_ENABLED_KEY);
+    clearTimeout(saveDebounceId);
+    saveDebounceId = null;
+    stopPeriodicSync();
+  }
+  window.dispatchEvent(new window.Event(SYNC_SECRET_EVENT));
+}
+
+export function watchSyncState(callback) {
+  const handleChange = () => callback({ enabled: getSyncEnabled(), secret: getSyncSecret() });
   const handleStorageChange = (event) => {
-    if (event.key === SYNC_SECRET_KEY) callback(getSyncSecret());
+    if (event.key === SYNC_SECRET_KEY || event.key === SYNC_ENABLED_KEY) handleChange();
   };
 
-  window.addEventListener(SYNC_SECRET_EVENT, handleSecretChange);
+  window.addEventListener(SYNC_SECRET_EVENT, handleChange);
   window.addEventListener("storage", handleStorageChange);
-  callback(getSyncSecret());
+  handleChange();
   return () => {
-    window.removeEventListener(SYNC_SECRET_EVENT, handleSecretChange);
+    window.removeEventListener(SYNC_SECRET_EVENT, handleChange);
     window.removeEventListener("storage", handleStorageChange);
   };
+}
+
+// 校验密钥：GET 接口 200 + JSON = 正确，401 = 错误，其它异常 = 无法连接
+export async function validateSyncSecret(secret) {
+  const normalized = String(secret || "").trim();
+  if (!normalized) return { ok: false, reason: "empty" };
+  try {
+    const response = await fetch(`${SYNC_ENDPOINT}?t=${Date.now()}`, {
+      headers: { "x-sync-secret": normalized },
+    });
+    // ponytail: 本地 dev 无后端时 SPA fallback 返回 200 的 HTML，只有 JSON 响应才算有效
+    if (response.ok && response.headers.get("Content-Type")?.includes("json")) return { ok: true };
+    if (response.status === 401 || response.status === 403) return { ok: false, reason: "invalid" };
+    if (response.status >= 500) return { ok: false, reason: "server" };
+    return { ok: false, reason: "unexpected" };
+  } catch {
+    return { ok: false, reason: "network" };
+  }
+}
+
+function isSyncActive() {
+  return getSyncEnabled() && !!getSyncSecret();
 }
 
 async function requestJson(url, options) {
   const response = await fetch(url, options);
   if (!response.ok) throw new Error(`同步请求失败: ${response.status}`);
+  // ponytail: 本地 dev 无后端时 SPA fallback 返回 200 的 HTML，非 JSON 视作接口不存在
+  if (!response.headers.get("Content-Type")?.includes("json")) {
+    throw new Error("同步接口不存在或返回了非 JSON 响应");
+  }
   return response.json();
 }
 
@@ -108,8 +153,8 @@ export function syncNow(options = {}) {
 }
 
 async function runSync({ onPulled, onPushed } = {}) {
+  if (!isSyncActive()) return { status: "local-only" };
   const secret = getSyncSecret();
-  if (!secret) return { status: "local-only" };
 
   const cloudDoc = await requestJson(`${SYNC_ENDPOINT}?t=${Date.now()}`, { headers: authHeaders(secret) });
   const cloud = getCloudDates(cloudDoc);
@@ -146,7 +191,7 @@ async function runSync({ onPulled, onPushed } = {}) {
 }
 
 export function scheduleSyncNow({ onPulled, onPushed } = {}) {
-  if (!getSyncSecret()) return;
+  if (!isSyncActive()) return;
   clearTimeout(saveDebounceId);
   saveDebounceId = setTimeout(() => {
     saveDebounceId = null;
@@ -156,7 +201,7 @@ export function scheduleSyncNow({ onPulled, onPushed } = {}) {
 
 export function startPeriodicSync({ onPulled, onPushed } = {}) {
   stopPeriodicSync();
-  if (!getSyncSecret()) return;
+  if (!isSyncActive()) return;
   syncNow({ onPulled, onPushed }).catch((error) => console.warn("首次同步失败:", error));
   timerId = setInterval(() => {
     syncNow({ onPulled, onPushed }).catch((error) => console.warn("定时同步失败:", error));

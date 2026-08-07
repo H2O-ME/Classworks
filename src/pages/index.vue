@@ -133,42 +133,46 @@
 
   <FloatingICP />
 
-  <!-- 云端同步提示 -->
-  <aside
-    v-if="syncNoticeVisible"
-    class="sync-toast"
-    role="status"
-    @mouseenter="pauseSyncNotice"
-    @mouseleave="resumeSyncNotice"
-  >
-    <div class="sync-toast-mark">
+  <!-- 云端同步提示（持续显示，点击任意处消失） -->
+  <transition name="sync-toast">
+    <aside
+      v-if="syncNoticeVisible"
+      class="sync-toast"
+      role="status"
+      aria-live="assertive"
+      @click="dismissSyncNotice"
+    >
+      <div class="sync-toast-mark">
+        <v-icon
+          icon="mdi-cloud-check-outline"
+          size="18"
+        />
+      </div>
+      <strong>检测到云端更新</strong>
+      <button
+        class="sync-toast-rollback"
+        type="button"
+        @click.stop="handleRollbackLatest"
+      >
+        回退
+      </button>
+    </aside>
+  </transition>
+
+  <!-- 已同步到云端提示 -->
+  <transition name="sync-toast">
+    <aside
+      v-if="syncPushedToast"
+      class="sync-pushed-toast"
+      role="status"
+    >
       <v-icon
         icon="mdi-cloud-check-outline"
         size="18"
       />
-    </div>
-    <strong>检测到云端更新</strong>
-    <button
-      class="sync-toast-rollback"
-      type="button"
-      @click="handleRollbackLatest"
-    >
-      回退
-    </button>
-  </aside>
-
-  <!-- 已同步到云端提示 -->
-  <aside
-    v-if="syncPushedToast"
-    class="sync-pushed-toast"
-    role="status"
-  >
-    <v-icon
-      icon="mdi-cloud-check-outline"
-      size="18"
-    />
-    <span>已同步到云端</span>
-  </aside>
+      <span>已同步到云端</span>
+    </aside>
+  </transition>
 </template>
 
 <script>
@@ -189,7 +193,7 @@ import {
   scheduleSyncNow,
   startPeriodicSync,
   stopPeriodicSync,
-  watchSyncSecret,
+  watchSyncState,
 } from "@/utils/sync";
 import { getSetting, setSetting } from "@/utils/settings";
 
@@ -221,12 +225,10 @@ export default {
       loading: { copyToToday: false },
       fontSizeLevel: getSetting("display.fontSizeLevel") || 0,
       syncNoticeVisible: false,
-      syncNoticeTimer: null,
-      syncNoticePaused: false,
       syncPushedToast: false,
       syncPushedTimer: null,
       updatedCardKeys: [],
-      unsubscribeSyncSecret: null,
+      unsubscribeSyncState: null,
     };
   },
   computed: {
@@ -260,9 +262,9 @@ export default {
     try {
       await this.initializeData();
       this.dataReady = true;
-      this.unsubscribeSyncSecret = watchSyncSecret((secret) => {
+      this.unsubscribeSyncState = watchSyncState(({ enabled, secret }) => {
         stopPeriodicSync();
-        if (secret) {
+        if (enabled && secret) {
           startPeriodicSync({ onPulled: (pulledDates) => this.handlePulledDates(pulledDates) });
         }
       });
@@ -272,8 +274,7 @@ export default {
   },
   beforeUnmount() {
     stopPeriodicSync();
-    this.unsubscribeSyncSecret?.();
-    this.clearSyncNoticeTimer();
+    this.unsubscribeSyncState?.();
     if (this.syncPushedTimer) {
       clearTimeout(this.syncPushedTimer);
       this.syncPushedTimer = null;
@@ -410,34 +411,9 @@ export default {
         this.updatedCardKeys = [];
       }, 1000);
       this.syncNoticeVisible = true;
-      this.syncNoticePaused = false;
-      this.startSyncNoticeTimer();
-    },
-    clearSyncNoticeTimer() {
-      if (this.syncNoticeTimer) {
-        clearTimeout(this.syncNoticeTimer);
-        this.syncNoticeTimer = null;
-      }
-    },
-    startSyncNoticeTimer() {
-      this.clearSyncNoticeTimer();
-      if (this.syncNoticePaused) return;
-      this.syncNoticeTimer = setTimeout(() => {
-        this.syncNoticeVisible = false;
-        this.syncNoticeTimer = null;
-      }, 5000);
-    },
-    pauseSyncNotice() {
-      this.syncNoticePaused = true;
-      this.clearSyncNoticeTimer();
-    },
-    resumeSyncNotice() {
-      this.syncNoticePaused = false;
-      if (this.syncNoticeVisible) this.startSyncNoticeTimer();
     },
     dismissSyncNotice() {
       this.syncNoticeVisible = false;
-      this.clearSyncNoticeTimer();
     },
     showPushedToast() {
       this.syncPushedToast = true;
@@ -751,17 +727,33 @@ export default {
 @media (prefers-reduced-motion: reduce) {
   .sync-toast,
   .sync-pushed-toast {
-    animation: none;
+    transition: none;
   }
 }
 
 @media (max-width: 700px) {
-  .sync-toast,
+  .sync-toast {
+    right: 14px;
+    bottom: 84px;
+    left: 14px;
+    max-width: none;
+  }
+
   .sync-pushed-toast {
     right: 14px;
-    bottom: 76px;
+    bottom: 84px;
     left: 14px;
     width: auto;
+  }
+
+  .sync-toast strong {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+  }
+
+  .sync-toast-rollback {
+    margin-left: auto;
   }
 
   .app-bar-inner {
@@ -797,14 +789,17 @@ export default {
   bottom: 18px;
   z-index: 120;
   display: inline-flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 9px;
-  padding: 10px 14px;
+  justify-content: flex-end;
+  gap: 8px 10px;
+  max-width: min(420px, calc(100vw - 36px));
+  padding: 11px 14px;
   border-radius: 9px;
   background: #1e3a5f;
   color: #dce8f5;
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.22);
-  animation: sync-toast-enter 0.24s cubic-bezier(0.22, 1, 0.36, 1);
+  cursor: pointer;
 }
 
 .sync-toast-mark {
@@ -815,10 +810,14 @@ export default {
 }
 
 .sync-toast strong {
+  flex: 0 1 auto;
+  min-width: 0;
   color: #f2f7fb;
   font-size: 13px;
   font-weight: 700;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .sync-toast-rollback {
@@ -839,9 +838,17 @@ export default {
   background: rgba(255, 255, 255, 0.2);
 }
 
-@keyframes sync-toast-enter {
-  from { opacity: 0; transform: translateY(6px); }
-  to { opacity: 1; transform: translateY(0); }
+.sync-toast-enter-active,
+.sync-toast-leave-active {
+  transition:
+    opacity 0.24s ease,
+    transform 0.24s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.sync-toast-enter-from,
+.sync-toast-leave-to {
+  opacity: 0;
+  transform: translateY(6px);
 }
 
 .sync-pushed-toast {
@@ -857,7 +864,6 @@ export default {
   background: #1e3a5f;
   color: #dce8f5;
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.22);
-  animation: sync-toast-enter 0.24s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .sync-pushed-toast span {
