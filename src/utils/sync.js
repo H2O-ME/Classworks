@@ -1,7 +1,9 @@
 import { getData, getKeysByPrefix, getMeta, listSnapshots, restoreSnapshot, setData, setMeta, snapshotDate } from "./storage";
 import { mergeDates } from "./syncMerge";
 
-const SYNC_INTERVAL_MS = 5 * 60 * 1000;
+// 展示屏场景下 5 分钟太长；浏览器对后台标签页 setInterval 还会大幅节流，
+// 所以缩短为 60 秒，并配合 visibilitychange/focus 在切回页面时立即补一次同步。
+const SYNC_INTERVAL_MS = 60 * 1000;
 const SYNC_ENDPOINT = "/kv/homework";
 const SYNC_SECRET_KEY = "classworks_sync_secret";
 const SYNC_SECRET_EVENT = "classworks-sync-secret-changed";
@@ -10,6 +12,7 @@ const DATE_KEY_RE = /^\d{8}$/;
 let timerId = null;
 let saveDebounceId = null;
 let syncChain = Promise.resolve();
+let unbindVisibility = null;
 
 function isPlainObject(value) {
   if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
@@ -158,6 +161,23 @@ export function startPeriodicSync({ onPulled, onPushed } = {}) {
   timerId = setInterval(() => {
     syncNow({ onPulled, onPushed }).catch((error) => console.warn("定时同步失败:", error));
   }, SYNC_INTERVAL_MS);
+
+  // 后台标签页 setInterval 会被浏览器节流；切回页面/窗口时立即补一次同步
+  const handleVisibility = () => {
+    if (document.visibilityState === "visible") {
+      syncNow({ onPulled, onPushed }).catch((error) => console.warn("回到页面同步失败:", error));
+    }
+  };
+  const handleFocus = () => {
+    syncNow({ onPulled, onPushed }).catch((error) => console.warn("窗口聚焦同步失败:", error));
+  };
+  document.addEventListener("visibilitychange", handleVisibility);
+  window.addEventListener("focus", handleFocus);
+  unbindVisibility = () => {
+    document.removeEventListener("visibilitychange", handleVisibility);
+    window.removeEventListener("focus", handleFocus);
+    unbindVisibility = null;
+  };
 }
 
 export function stopPeriodicSync() {
@@ -165,6 +185,7 @@ export function stopPeriodicSync() {
     clearInterval(timerId);
     timerId = null;
   }
+  unbindVisibility?.();
 }
 
 // 回退到该日期"本地留存的最后一次数据"（最新快照），并立即推送云端覆盖
