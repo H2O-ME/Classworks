@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { mergeDates } from "../src/utils/syncMerge.js";
+import { classifySyncResponse } from "../src/utils/syncClassify.js";
 
 const DATE_KEY_RE = /^\d{8}$/;
 
@@ -109,3 +110,24 @@ function isValidDates(dates) {
 }
 
 console.log("syncMerge 自检通过: 6 个合并场景和云端数据校验");
+
+// 密钥校验响应分类：状态码 + Content-Type 决定判定结果
+{
+  // 2xx + JSON → 正确（生产边缘函数）
+  assert.equal(classifySyncResponse(200, "application/json"), "ok");
+  // 2xx + 非 JSON（SPA fallback 的 HTML 200）→ 不算正确，防止本地误判
+  assert.equal(classifySyncResponse(200, "text/html"), "unexpected");
+  assert.equal(classifySyncResponse(200, ""), "unexpected");
+  // 401/403 → 密钥不正确
+  assert.equal(classifySyncResponse(401, "application/json"), "invalid");
+  assert.equal(classifySyncResponse(403, "text/plain"), "invalid");
+  // 5xx → 服务异常
+  assert.equal(classifySyncResponse(500, "application/json"), "server");
+  assert.equal(classifySyncResponse(503, "text/html"), "server");
+  // 其它 → 接口异常
+  assert.equal(classifySyncResponse(404, "application/json"), "unexpected");
+  // 2xx 无 JSON body（如 204）仍是成功，与原始 response.ok 语义一致
+  assert.equal(classifySyncResponse(204, "application/json"), "ok");
+}
+
+console.log("syncClassify 自检通过: 密钥校验响应分类");

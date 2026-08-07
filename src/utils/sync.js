@@ -1,5 +1,6 @@
 import { getData, getKeysByPrefix, getMeta, listSnapshots, restoreSnapshot, setData, setMeta, snapshotDate } from "./storage";
 import { mergeDates } from "./syncMerge";
+import { classifySyncResponse } from "./syncClassify";
 
 // 展示屏场景下 5 分钟太长；浏览器对后台标签页 setInterval 还会大幅节流，
 // 所以缩短为 60 秒，并配合 visibilitychange/focus 在切回页面时立即补一次同步。
@@ -95,11 +96,8 @@ export async function validateSyncSecret(secret) {
     const response = await fetch(`${SYNC_ENDPOINT}?t=${Date.now()}`, {
       headers: { "x-sync-secret": normalized },
     });
-    // ponytail: 本地 dev 无后端时 SPA fallback 返回 200 的 HTML，只有 JSON 响应才算有效
-    if (response.ok && response.headers.get("Content-Type")?.includes("json")) return { ok: true };
-    if (response.status === 401 || response.status === 403) return { ok: false, reason: "invalid" };
-    if (response.status >= 500) return { ok: false, reason: "server" };
-    return { ok: false, reason: "unexpected" };
+    const reason = classifySyncResponse(response.status, response.headers.get("Content-Type") || "");
+    return reason === "ok" ? { ok: true } : { ok: false, reason };
   } catch {
     return { ok: false, reason: "network" };
   }
