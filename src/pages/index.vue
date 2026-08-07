@@ -104,6 +104,7 @@
           :sorted-items="sortedItems"
           :unused-subjects="unusedSubjects"
           :content-style="contentStyle"
+          :updated-keys="updatedCardKeys"
           @open-dialog="openDialog"
         />
       </section>
@@ -146,71 +147,28 @@
         size="18"
       />
     </div>
-    <div class="sync-toast-copy">
-      <strong>检测到云端更新</strong>
-      <span>本地已自动同步为最新内容</span>
-    </div>
+    <strong>检测到云端更新</strong>
     <button
       class="sync-toast-rollback"
       type="button"
-      @click="openRollback"
+      @click="handleRollbackLatest"
     >
-      回退之前版本
-    </button>
-    <button
-      class="sync-toast-close"
-      type="button"
-      aria-label="关闭同步提示"
-      @click="dismissSyncNotice"
-    >
-      <v-icon
-        icon="mdi-close"
-        size="16"
-      />
+      回退
     </button>
   </aside>
 
-  <!-- 回退快照列表 -->
-  <v-dialog
-    v-model="rollbackVisible"
-    width="460"
+  <!-- 已同步到云端提示 -->
+  <aside
+    v-if="syncPushedToast"
+    class="sync-pushed-toast"
+    role="status"
   >
-    <v-card class="sync-dialog-card">
-      <v-card-title class="sync-dialog-title">
-        回退之前版本
-      </v-card-title>
-      <v-card-text>
-        <div
-          v-if="syncSnapshots.length === 0"
-          class="sync-empty-text"
-        >
-          没有可回退的快照。
-        </div>
-        <button
-          v-for="ts in syncSnapshots"
-          :key="ts"
-          type="button"
-          class="sync-snapshot-item"
-          @click="handleRollback(ts)"
-        >
-          <span>{{ formatSnapshotTime(ts) }}</span>
-          <v-icon
-            icon="mdi-restore"
-            size="16"
-          />
-        </button>
-      </v-card-text>
-      <v-card-actions>
-        <v-spacer />
-        <v-btn
-          variant="text"
-          @click="rollbackVisible = false"
-        >
-          取消
-        </v-btn>
-      </v-card-actions>
-    </v-card>
-  </v-dialog>
+    <v-icon
+      icon="mdi-cloud-check-outline"
+      size="18"
+    />
+    <span>已同步到云端</span>
+  </aside>
 </template>
 
 <script>
@@ -225,9 +183,9 @@ import {
   normalizeBoardData,
   resolveAvailableSubjects,
 } from "@/utils/board";
-import { getData, setData, listSnapshots, setMeta } from "@/utils/storage";
+import { getData, setData, setMeta } from "@/utils/storage";
 import {
-  rollbackDate,
+  rollbackToLatest,
   scheduleSyncNow,
   startPeriodicSync,
   stopPeriodicSync,
@@ -263,11 +221,11 @@ export default {
       loading: { copyToToday: false },
       fontSizeLevel: getSetting("display.fontSizeLevel") || 0,
       syncNoticeVisible: false,
-      rollbackVisible: false,
-      syncSnapshots: [],
-      currentEditDateForRollback: "",
       syncNoticeTimer: null,
       syncNoticePaused: false,
+      syncPushedToast: false,
+      syncPushedTimer: null,
+      updatedCardKeys: [],
       unsubscribeSyncSecret: null,
     };
   },
@@ -316,6 +274,10 @@ export default {
     stopPeriodicSync();
     this.unsubscribeSyncSecret?.();
     this.clearSyncNoticeTimer();
+    if (this.syncPushedTimer) {
+      clearTimeout(this.syncPushedTimer);
+      this.syncPushedTimer = null;
+    }
   },
   methods: {
     async initializeData() {
@@ -388,7 +350,10 @@ export default {
       const saved = await this.uploadData();
       if (!saved) return;
       await setMeta(this.dateString, Date.now());
-      scheduleSyncNow({ onPulled: (pulledDates) => this.handlePulledDates(pulledDates) });
+      scheduleSyncNow({
+        onPulled: (pulledDates) => this.handlePulledDates(pulledDates),
+        onPushed: () => this.showPushedToast(),
+      });
     },
     zoom(direction) {
       this.fontSizeLevel = direction === "up" ? Math.min(this.fontSizeLevel + 1, 24) : Math.max(this.fontSizeLevel - 1, -4);
@@ -427,7 +392,10 @@ export default {
         const saved = await this.uploadData();
         if (!saved) return;
         await setMeta(this.dateString, Date.now());
-        scheduleSyncNow({ onPulled: (pulledDates) => this.handlePulledDates(pulledDates) });
+        scheduleSyncNow({
+          onPulled: (pulledDates) => this.handlePulledDates(pulledDates),
+          onPushed: () => this.showPushedToast(),
+        });
       } catch (error) {
         console.error("复制到今天失败:", error);
       } finally {
@@ -437,6 +405,10 @@ export default {
     async handlePulledDates(pulledDates) {
       if (!pulledDates?.includes(this.dateString)) return;
       await this.downloadData();
+      this.updatedCardKeys = this.sortedItems.map((item) => item.key);
+      setTimeout(() => {
+        this.updatedCardKeys = [];
+      }, 1000);
       this.syncNoticeVisible = true;
       this.syncNoticePaused = false;
       this.startSyncNoticeTimer();
@@ -467,21 +439,24 @@ export default {
       this.syncNoticeVisible = false;
       this.clearSyncNoticeTimer();
     },
-    async openRollback() {
+    showPushedToast() {
+      this.syncPushedToast = true;
+      if (this.syncPushedTimer) clearTimeout(this.syncPushedTimer);
+      this.syncPushedTimer = setTimeout(() => {
+        this.syncPushedToast = false;
+        this.syncPushedTimer = null;
+      }, 2500);
+    },
+    async handleRollbackLatest() {
       this.dismissSyncNotice();
-      this.currentEditDateForRollback = this.dateString;
-      this.syncSnapshots = await listSnapshots(this.dateString);
-      this.syncNoticeVisible = false;
-      this.rollbackVisible = true;
-    },
-    formatSnapshotTime(ts) {
-      const date = new Date(ts);
-      return `${date.getMonth() + 1} 月 ${date.getDate()} 日 ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
-    },
-    async handleRollback(ts) {
-      await rollbackDate(this.dateString, ts);
-      this.rollbackVisible = false;
+      const result = await rollbackToLatest(this.dateString);
+      if (!result.ok) return;
       await this.downloadData();
+      this.updatedCardKeys = this.sortedItems.map((item) => item.key);
+      setTimeout(() => {
+        this.updatedCardKeys = [];
+      }, 1000);
+      this.showPushedToast();
     },
   },
 };
@@ -772,15 +747,17 @@ export default {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .sync-toast {
+  .sync-toast,
+  .sync-pushed-toast {
     animation: none;
   }
 }
 
 @media (max-width: 700px) {
-  .sync-toast {
-    top: 76px;
+  .sync-toast,
+  .sync-pushed-toast {
     right: 14px;
+    bottom: 76px;
     left: 14px;
     width: auto;
   }
@@ -814,141 +791,76 @@ export default {
 
 .sync-toast {
   position: fixed;
-  top: 82px;
   right: 18px;
+  bottom: 18px;
   z-index: 120;
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  display: inline-flex;
   align-items: center;
-  gap: 10px;
-  width: min(430px, calc(100vw - 36px));
-  padding: 12px 12px 12px 14px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  gap: 9px;
+  padding: 10px 14px;
   border-radius: 9px;
-  background: #181818;
-  box-shadow: 0 22px 46px rgba(0, 0, 0, 0.26);
+  background: #1e3a5f;
+  color: #dce8f5;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.22);
   animation: sync-toast-enter 0.24s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .sync-toast-mark {
   display: inline-flex;
-  width: 30px;
-  height: 30px;
   align-items: center;
   justify-content: center;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 7px;
-  background: #202020;
-  color: rgba(255, 255, 255, 0.78);
+  color: rgba(255, 255, 255, 0.9);
 }
 
-.sync-toast-copy {
-  display: grid;
-  min-width: 0;
-  gap: 3px;
-}
-
-.sync-toast-copy strong {
-  overflow: hidden;
-  color: #f1f1f1;
+.sync-toast strong {
+  color: #f2f7fb;
   font-size: 13px;
   font-weight: 700;
-  text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.sync-toast-copy span {
-  overflow: hidden;
-  color: rgba(255, 255, 255, 0.52);
-  font-size: 12px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.sync-toast-rollback,
-.sync-toast-close {
-  border: 0;
-  color: rgba(255, 255, 255, 0.72);
-  cursor: pointer;
 }
 
 .sync-toast-rollback {
-  min-height: 30px;
+  min-height: 28px;
   padding: 0 9px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.22);
   border-radius: 6px;
-  background: #202020;
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  font-family: inherit;
   font-size: 12px;
   font-weight: 700;
+  cursor: pointer;
   white-space: nowrap;
 }
 
 .sync-toast-rollback:hover {
-  border-color: rgba(255, 255, 255, 0.18);
-  background: #262626;
-  color: #f1f1f1;
-}
-
-.sync-toast-close {
-  display: inline-flex;
-  width: 28px;
-  height: 28px;
-  align-items: center;
-  justify-content: center;
-  border-radius: 6px;
-  background: transparent;
-}
-
-.sync-toast-close:hover {
-  background: rgba(255, 255, 255, 0.06);
-  color: #f1f1f1;
+  background: rgba(255, 255, 255, 0.2);
 }
 
 @keyframes sync-toast-enter {
-  from { opacity: 0; transform: translateY(-6px); }
+  from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
-.sync-dialog-card {
-  border: 1px solid rgba(255, 255, 255, 0.08) !important;
-  border-radius: 10px !important;
-  background: #171717 !important;
-  box-shadow: 0 22px 46px rgba(0, 0, 0, 0.26);
-  color: #f1f1f1;
-}
-
-.sync-dialog-title {
-  font-weight: 700 !important;
-}
-
-.sync-empty-text {
-  padding: 18px 0;
-  color: rgba(255, 255, 255, 0.5);
-  font-size: 13px;
-  text-align: center;
-}
-
-.sync-snapshot-item {
-  display: flex;
+.sync-pushed-toast {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 120;
+  display: inline-flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  width: 100%;
-  min-height: 44px;
-  margin-bottom: 8px;
-  padding: 0 14px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 6px;
-  background: #202020;
-  color: #ededed;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background-color 0.18s ease, border-color 0.18s ease;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 9px;
+  background: #1e3a5f;
+  color: #dce8f5;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.22);
+  animation: sync-toast-enter 0.24s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-.sync-snapshot-item:hover {
-  border-color: rgba(255, 255, 255, 0.2);
-  background: #262626;
+.sync-pushed-toast span {
+  color: #f2f7fb;
+  font-size: 13px;
+  font-weight: 700;
 }
 </style>

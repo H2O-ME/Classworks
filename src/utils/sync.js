@@ -1,4 +1,4 @@
-import { getData, getKeysByPrefix, getMeta, restoreSnapshot, setData, setMeta, snapshotDate } from "./storage";
+import { getData, getKeysByPrefix, getMeta, listSnapshots, restoreSnapshot, setData, setMeta, snapshotDate } from "./storage";
 import { mergeDates } from "./syncMerge";
 
 const SYNC_INTERVAL_MS = 5 * 60 * 1000;
@@ -104,7 +104,7 @@ export function syncNow(options = {}) {
   return next;
 }
 
-async function runSync({ onPulled } = {}) {
+async function runSync({ onPulled, onPushed } = {}) {
   const secret = getSyncSecret();
   if (!secret) return { status: "local-only" };
 
@@ -124,6 +124,8 @@ async function runSync({ onPulled } = {}) {
   }
 
   if (result.pushed.length > 0) {
+    // ponytail: 整包 PUT + 日期级 last-write-wins。mergeDates 已按日期独立合并，
+    // 编辑往日不会污染其他日期；并发整包覆写由服务端按日期二次合并兜底。
     const putBody = { dates: result.merged };
     await requestJson(SYNC_ENDPOINT, {
       method: "PUT",
@@ -133,27 +135,28 @@ async function runSync({ onPulled } = {}) {
     for (const date of result.pushed) {
       await setMeta(date, Date.parse(result.merged[date].updatedAt));
     }
+    onPushed?.(result.pushed);
   }
 
   onPulled?.(pulled);
   return { status: "ok", pulled, pushed: result.pushed };
 }
 
-export function scheduleSyncNow({ onPulled } = {}) {
+export function scheduleSyncNow({ onPulled, onPushed } = {}) {
   if (!getSyncSecret()) return;
   clearTimeout(saveDebounceId);
   saveDebounceId = setTimeout(() => {
     saveDebounceId = null;
-    syncNow({ onPulled }).catch((error) => console.warn("保存后同步失败:", error));
+    syncNow({ onPulled, onPushed }).catch((error) => console.warn("保存后同步失败:", error));
   }, 800);
 }
 
-export function startPeriodicSync({ onPulled } = {}) {
+export function startPeriodicSync({ onPulled, onPushed } = {}) {
   stopPeriodicSync();
   if (!getSyncSecret()) return;
-  syncNow({ onPulled }).catch((error) => console.warn("首次同步失败:", error));
+  syncNow({ onPulled, onPushed }).catch((error) => console.warn("首次同步失败:", error));
   timerId = setInterval(() => {
-    syncNow({ onPulled }).catch((error) => console.warn("定时同步失败:", error));
+    syncNow({ onPulled, onPushed }).catch((error) => console.warn("定时同步失败:", error));
   }, SYNC_INTERVAL_MS);
 }
 
@@ -164,11 +167,19 @@ export function stopPeriodicSync() {
   }
 }
 
+// 回退到该日期"本地留存的最后一次数据"（最新快照），并立即推送云端覆盖
+export async function rollbackToLatest(date) {
+  const snapshots = await listSnapshots(date);
+  const latest = snapshots[snapshots.length - 1];
+  if (!latest) return { ok: false, reason: "no-snapshot" };
+  return rollbackDate(date, latest);
+}
+
 // 回退后调：恢复快照 → 重写本地 → 立即推云端覆盖（凭 meta 更晚被判定为"待推送"）
 export async function rollbackDate(date, ts) {
   const ok = await restoreSnapshot(date, ts);
-  if (!ok) return false;
+  if (!ok) return { ok: false, reason: "no-snapshot" };
   await setMeta(date, Date.now());
   await syncNow();
-  return true;
+  return { ok: true };
 }
