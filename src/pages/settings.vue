@@ -269,10 +269,12 @@ export default {
       this.validationTimer = setTimeout(() => this.validateSecret(this.secretInput), 600);
     },
     async validateSecret(secret) {
-      const result = await validateSyncSecret(secret);
+      this.applyValidationResult(await validateSyncSecret(secret));
+    },
+    applyValidationResult(result, okText = "密钥正确，云端连接可用") {
       this.validationState = result.ok ? "valid" : result.reason;
       this.validationText = result.ok
-        ? "密钥正确，云端连接可用"
+        ? okText
         : result.reason === "invalid"
           ? "密钥不正确"
           : result.reason === "server"
@@ -288,7 +290,7 @@ export default {
       this.validationState = "checking";
       this.validationText = "正在校验密钥…";
       const result = await validateSyncSecret(secret);
-      if (!result.ok) { await this.validateSecret(secret); return; }
+      if (!result.ok) { this.applyValidationResult(result); return; }
       setSyncSecret(secret);
       setSyncEnabled(true);
       this.secretInput = secret;

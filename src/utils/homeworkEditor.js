@@ -5,7 +5,7 @@ export const EDITOR_COPY = {
   save: "保存并关闭",
   placeholder: "输入作业内容，每行一项会更清晰。",
   dirty: "有未保存修改",
-  synced: "已同步到编辑草稿",
+  synced: "内容未修改",
   newline: "换行",
   paste: "粘贴",
   clear: "清空",

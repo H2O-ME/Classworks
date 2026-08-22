@@ -71,8 +71,6 @@ function normalizeCloudDoc(raw) {
   return result;
 }
 
-// 云端 → 本地应用：跳过 skipKeys（脏格）；先对将变化的日期留快照，再逐格覆盖
-
 export function getSyncSecret() {
   return localStorage.getItem(SYNC_SECRET_KEY) || "";
 }
@@ -367,7 +365,8 @@ export function scheduleSyncNow(options = {}) {
   clearTimeout(saveDebounceId);
   saveDebounceId = setTimeout(() => {
     saveDebounceId = null;
-    runSyncWithMigrate(options).catch((error) => console.warn("保存后同步失败:", error));
+    // 走 syncChain 串行链：保存触发的同步与定时/visibility 同步互斥，避免按日期读改写交错
+    syncNow(options).catch((error) => console.warn("保存后同步失败:", error));
   }, 800);
 }
 
@@ -413,13 +412,17 @@ export async function rollbackToLatest(date, options) {
 }
 
 export async function rollbackDate(date, ts, { onPushed } = {}) {
+  // 标脏取恢复前后学科并集：被回退掉的学科推空条目（墓碑），否则云端下次拉取会把它们复活
+  const before = await getData(`classworks-data-${date}`);
+  const beforeSubjects = isPlainObject(before?.homework) ? Object.keys(before.homework) : [];
+
   const restored = await restoreSnapshot(date, ts);
   if (!restored) return { ok: false, reason: "no-snapshot" };
 
-  // 快照恢复整日数据 → 该日所有学科标脏，保证恢复内容重新上云
   const board = await getData(`classworks-data-${date}`);
   const subjects = isPlainObject(board?.homework) ? Object.keys(board.homework) : [];
-  await addDirty(subjects.map((subject) => `${date}|${subject}`));
+  const union = [...new Set([...beforeSubjects, ...subjects])];
+  await addDirty(union.map((subject) => `${date}|${subject}`));
   syncNow({ onPushed }).catch((error) => console.warn("回退后同步失败:", error));
   return { ok: true };
 }

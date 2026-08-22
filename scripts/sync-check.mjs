@@ -1,6 +1,6 @@
 // 脏集增量同步协议 v3 自检（无依赖，node 直接运行：node scripts/sync-check.mjs）
-// 覆盖 6 个核心场景：v1/v2→v3 转换、单科推送不碰他科、清空(墓碑)传播、
-// 双端并发同科后推者赢、服务端竞态丢写自愈、空设备只拉不推。
+// 覆盖 7 个核心场景：v1/v2→v3 转换、单科推送不碰他科、清空(墓碑)传播、
+// 双端并发同科后推者赢、服务端竞态丢写自愈、空设备只拉不推、整日回退标脏并集。
 // 说明：sync.js/storage.js 依赖 idb，node 下无法 import，这里按同一份协议
 // 复刻纯逻辑做黑盒断言，与 src/utils/sync.js / edge-functions/kv/homework.js 对齐。
 import assert from "node:assert/strict";
@@ -146,6 +146,34 @@ function applyCloud(local, cloudEntries, skipKeys) {
   console.log("✓ 场景6 v1/v2 → v3 迁移");
 }
 
+// ── 场景 7：整日回退/替换 → 标脏取恢复前后学科并集，被丢弃学科推空墓碑，拉取不复活 ──
+{
+  // 云端与本地 20260822：数学+物理 都有新版
+  let cloud = serverPut({}, {
+    "20260822|数学": { content: "数学新版", options: {} },
+    "20260822|物理": { content: "物理新版", options: {} },
+  });
+  // 回退到旧快照：快照只有数学（旧内容）→ 标脏 = 恢复前{数学,物理} ∪ 恢复后{数学}
+  const local = { 20260822: { homework: { 数学: { content: "数学旧版", options: {} } } } };
+  const dirty = [...new Set([...["数学", "物理"], ...Object.keys(local[20260822].homework)])]
+    .map((subject) => `20260822|${subject}`);
+  assert.deepEqual(dirty.sort(), ["20260822|数学", "20260822|物理"]);
+  // 推送：本地已缺失的物理按空条目照推（readDirtyChanges 语义），数学推快照内容
+  const changes = {};
+  for (const key of dirty) {
+    const cell = local[20260822].homework[key.split("|")[1]];
+    changes[key] = cell ? { content: cell.content, options: cell.options || {} } : { content: "", options: {} };
+  }
+  cloud = serverPut(cloud, changes);
+  assert.equal(cloud.entries["20260822|数学"].content, "数学旧版");
+  assert.equal(cloud.entries["20260822|物理"].content, ""); // 墓碑落库
+  // 拉取应用：物理保持删除，不复活
+  const { local: afterLocal } = applyCloud(JSON.parse(JSON.stringify(local)), cloud.entries, []);
+  assert.equal(afterLocal[20260822].homework.物理, undefined);
+  assert.equal(afterLocal[20260822].homework.数学.content, "数学旧版");
+  console.log("✓ 场景7 整日回退标脏并集：被回退学科推空墓碑不复活");
+}
+
 // ── 密钥校验响应分类（原有） ──
 {
   assert.equal(classifySyncResponse(200, "application/json"), "ok");
@@ -156,4 +184,4 @@ function applyCloud(local, cloudEntries, skipKeys) {
   console.log("✓ classifySyncResponse 密钥校验分类");
 }
 
-console.log("\n✅ sync-check 全部通过（6 场景 + 密钥分类）");
+console.log("\n✅ sync-check 全部通过（7 场景 + 密钥分类）");

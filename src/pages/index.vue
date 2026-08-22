@@ -114,7 +114,6 @@
   <HomeworkEditDialog
     v-model="dialogVisible"
     :initial-content="textareaContent"
-    :initial-options="dialogOptions"
     :title="dialogTitle"
     @save="handleHomeworkSave"
   />
@@ -130,8 +129,6 @@
     @next-day="navigateDay(1)"
     @copy-to-today="copyHomeworkToToday"
   />
-
-  <FloatingICP />
 
   <!-- 云端同步提示（持续显示，点击任意处消失） -->
   <transition name="sync-toast">
@@ -177,15 +174,14 @@
 
 <script>
 import { defineAsyncComponent } from "vue";
-import FloatingICP from "@/components/FloatingICP.vue";
 import HomeSkeleton from "@/components/common/HomeSkeleton.vue";
 import HomeworkGrid from "@/components/home/HomeworkGrid.vue";
 import {
   formatDateKey,
+  getDefaultSubjects,
   getSortedHomeworkItems,
   getUnusedSubjects,
   normalizeBoardData,
-  resolveAvailableSubjects,
 } from "@/utils/board";
 import { getData, setData, addDirty } from "@/utils/storage";
 import {
@@ -204,7 +200,6 @@ export default {
   name: "ClassworksBoard",
   components: {
     FloatingToolbar,
-    FloatingICP,
     HomeworkEditDialog,
     HomeworkGrid,
     HomeSkeleton,
@@ -218,10 +213,9 @@ export default {
       dialogVisible: false,
       dialogTitle: "",
       textareaContent: "",
-      dialogOptions: {},
       currentEditSubject: "",
       dataReady: false,
-      availableSubjects: [],
+      availableSubjects: getDefaultSubjects(),
       loading: { copyToToday: false },
       fontSizeLevel: getSetting("display.fontSizeLevel") || 0,
       syncNoticeVisible: false,
@@ -301,16 +295,7 @@ export default {
       this.dateString = formatDateKey(currentDate);
       this.isToday = this.dateString === formatDateKey(today);
 
-      await Promise.all([this.downloadData(), this.loadConfig()]);
-    },
-    async loadConfig() {
-      try {
-        const subjectsResponse = await getData("classworks-config-subject");
-        this.availableSubjects = resolveAvailableSubjects(subjectsResponse);
-      } catch (error) {
-        console.warn("加载学科配置失败:", error);
-        this.availableSubjects = resolveAvailableSubjects([]);
-      }
+      await this.downloadData();
     },
     async downloadData() {
       try {
@@ -326,10 +311,8 @@ export default {
     },
     openDialog(subject) {
       this.currentEditSubject = subject;
-      const card = this.boardData.homework[subject] || { content: "", options: {} };
-      this.dialogTitle = card.name || subject;
-      this.textareaContent = card.content || "";
-      this.dialogOptions = { ...(card.options || {}) };
+      this.dialogTitle = subject;
+      this.textareaContent = this.boardData.homework[subject]?.content || "";
       this.dialogVisible = true;
     },
     async handleHomeworkSave(payload) {
@@ -337,15 +320,12 @@ export default {
 
       const subject = this.currentEditSubject;
       const existing = this.boardData.homework[subject] || {};
-      const normalizedPayload =
-        typeof payload === "string"
-          ? { content: payload, options: existing.options || {} }
-          : { content: payload?.content || "", options: payload?.options || {} };
+      const after = payload?.content || "";
+      const options = payload?.options || {};
 
       // 保存前后对本机做 diff：只有内容或 options 变化的学科才进脏集（本机没动过的不推）
-      const before = existing.content || "";
-      const after = normalizedPayload.content;
-      const subjectChanged = before !== after || JSON.stringify(existing.options || {}) !== JSON.stringify(normalizedPayload.options || {});
+      const subjectChanged = (existing.content || "") !== after
+        || JSON.stringify(existing.options || {}) !== JSON.stringify(options);
 
       if (!after.trim()) {
         delete this.boardData.homework[subject];
@@ -353,7 +333,7 @@ export default {
         this.boardData.homework[subject] = {
           ...existing,
           content: after,
-          options: normalizedPayload.options,
+          options,
         };
       }
 
@@ -400,13 +380,18 @@ export default {
         this.dateString = formatDateKey(today);
         this.isToday = true;
 
-        // 复制前对比本机今天已有内容：被覆盖的学科逐个标脏，新出现的学科也标脏
-        const previous = this.boardData.homework;
+        // 复制前先读「今天」已存的数据（boardData 此刻还是源日期的）：内容变化的学科标脏；
+        // 今天原有、源里没有的学科会被整日替换删掉 → 也标脏推空（墓碑），否则云端会复活它们
+        const previous = normalizeBoardData(await getData(`classworks-data-${this.dateString}`)).homework;
         const dirtyEntries = [];
         for (const [key, value] of Object.entries(sourceHomework)) {
           if (!value?.content?.trim()) continue;
-          const prevContent = previous[key]?.content || "";
-          if (prevContent !== value.content) dirtyEntries.push(`${this.dateString}|${key}`);
+          if ((previous[key]?.content || "") !== value.content) dirtyEntries.push(`${this.dateString}|${key}`);
+        }
+        for (const [key, value] of Object.entries(previous)) {
+          if (value?.content?.trim() && !sourceHomework[key]?.content?.trim()) {
+            dirtyEntries.push(`${this.dateString}|${key}`);
+          }
         }
 
         this.boardData.homework = Object.fromEntries(

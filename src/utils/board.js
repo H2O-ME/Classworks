@@ -25,26 +25,6 @@ export function normalizeBoardData(data) {
   };
 }
 
-export function resolveAvailableSubjects(subjectConfig) {
-  if (!Array.isArray(subjectConfig) || !subjectConfig.length) {
-    return getDefaultSubjects();
-  }
-
-  const defaultSubjects = getDefaultSubjects();
-  const allowedSubjects = new Set(defaultSubjects.map((subject) => subject.name));
-  const orderMap = new Map(defaultSubjects.map((subject) => [subject.name, subject.order]));
-
-  const filteredSubjects = subjectConfig
-    .filter((subject) => allowedSubjects.has(subject.name))
-    .map((subject) => ({
-      ...subject,
-      order: orderMap.get(subject.name) ?? 999,
-    }))
-    .sort((a, b) => a.order - b.order);
-
-  return filteredSubjects.length ? filteredSubjects : defaultSubjects;
-}
-
 export function getSortedHomeworkItems(boardData, availableSubjects) {
   const items = [];
   const homework = normalizeBoardData(boardData).homework;
@@ -55,23 +35,9 @@ export function getSortedHomeworkItems(boardData, availableSubjects) {
       items.push({
         key: subject.name,
         name: subject.name,
-        type: "homework",
         content: subjectData.content,
         options: subjectData.options || {},
         order: subject.order,
-      });
-    }
-  }
-
-  for (const [key, value] of Object.entries(homework)) {
-    if (key.startsWith("custom-") && value?.content?.trim()) {
-      items.push({
-        key,
-        name: value.name || "自定义",
-        type: "custom",
-        content: value.content,
-        options: value.options || {},
-        order: 1000,
       });
     }
   }

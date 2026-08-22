@@ -3,9 +3,8 @@ import { registerSW } from "virtual:pwa-register";
 import App from "./App.vue";
 import { registerPlugins } from "@/plugins";
 
-if (import.meta.env.DEV) {
-  registerDevServiceWorker();
-} else {
+// dev 不注册 SW：PWA devOptions 已在 vite.config 关闭，dev 下 /sw.js 只会拿到 SPA 回退 HTML 并报 MIME 错
+if (import.meta.env.PROD) {
   registerAppServiceWorker();
 }
 
@@ -24,12 +23,4 @@ function registerAppServiceWorker() {
       }, 60 * 60 * 1000);
     },
   });
-}
-
-async function registerDevServiceWorker() {
-  if (window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1") {
-    return;
-  }
-
-  registerAppServiceWorker();
 }

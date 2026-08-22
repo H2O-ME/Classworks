@@ -61,8 +61,6 @@ export function onFontChange(callback) {
 
 function applyFontToDocument(font) {
   const fontStack = font.fontFamily;
-  document.documentElement.style.setProperty("--app-font-family", fontStack);
-
   let styleElement = document.getElementById("global-font-override");
   if (!styleElement) {
     styleElement = document.createElement("style");

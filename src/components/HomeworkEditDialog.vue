@@ -28,7 +28,6 @@
           </v-btn>
           <v-btn
             class="dialog-btn dialog-btn-solid"
-            :loading="saving"
             variant="flat"
             @click="handleSaveAndClose"
           >
@@ -50,22 +49,13 @@
             </div>
           </div>
 
-          <div
-            class="editor-field"
-            :class="{ 'editor-field-updated': contentUpdated }"
-          >
+          <div class="editor-field">
             <textarea
               ref="inputRef"
               v-model="content"
               class="editor-textarea"
               :placeholder="copy.placeholder"
               rows="10"
-              @input="handleContentInput"
-            />
-            <div
-              v-if="contentUpdated"
-              class="content-update-sheen"
-              aria-hidden="true"
             />
           </div>
 
@@ -130,7 +120,6 @@ export default {
     modelValue: { type: Boolean, required: true },
     title: { type: String, required: true },
     initialContent: { type: String, default: "" },
-    initialOptions: { type: Object, default: () => ({}) },
   },
   emits: ["update:modelValue", "save"],
   setup() {
@@ -140,8 +129,6 @@ export default {
   data() {
     return {
       ...createEditorState(),
-      saving: false,
-      contentUpdated: false,
       quickTexts: QUICK_INSERT_TEXTS,
       copy: EDITOR_COPY,
     };
@@ -174,37 +161,20 @@ export default {
     updateDirtyState() {
       this.dirty = this.content !== this.initialContent;
     },
-    handleContentInput() {
-      // 占位：将来需要清提示时在这里挂
+    handleSaveAndClose() {
+      this.persistAndClose();
     },
-    async handleSaveAndClose() {
-      await this.persistAndClose();
+    handleClose() {
+      this.persistAndClose();
     },
-    async handleClose() {
-      await this.persistAndClose();
-    },
-    async persistAndClose() {
-      if (this.saving) return;
-      this.saving = true;
-      try {
-        await this.$emit("save", buildSavePayload(this.content));
-        this.dialogVisible = false;
-      } finally {
-        this.saving = false;
-      }
+    // $emit 不返回 Promise：父组件的异步保存在后台继续，这里直接关窗（主页有「已同步到云端」提示兜底）
+    persistAndClose() {
+      this.$emit("save", buildSavePayload(this.content));
+      this.dialogVisible = false;
     },
     clearContent() {
       this.content = "";
       this.$nextTick(() => this.$refs.inputRef?.focus());
-    },
-    flashContentUpdated() {
-      this.contentUpdated = false;
-      window.requestAnimationFrame(() => {
-        this.contentUpdated = true;
-        window.setTimeout(() => {
-          this.contentUpdated = false;
-        }, 900);
-      });
     },
     async pasteFromClipboard() {
       try {
@@ -320,8 +290,6 @@ export default {
 }
 
 .editor-field {
-  position: relative;
-  overflow: hidden;
   border-radius: 9px;
 }
 
@@ -346,19 +314,6 @@ export default {
 .editor-textarea:focus {
   border-color: rgba(196, 211, 238, 0.28);
   box-shadow: 0 0 0 1px rgba(196, 211, 238, 0.14);
-}
-
-.content-update-sheen {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  border-radius: 9px;
-  mix-blend-mode: screen;
-  z-index: 4;
-  background:
-    linear-gradient(110deg, transparent 0%, rgba(255, 255, 255, 0.18) 42%, rgba(255, 255, 255, 0.38) 50%, transparent 62%),
-    radial-gradient(circle at 50% 50%, rgba(214, 226, 255, 0.13), transparent 58%);
-  animation: content-update-sheen 0.9s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .editor-footer {
@@ -446,23 +401,8 @@ export default {
   }
 }
 
-@keyframes content-update-sheen {
-  0% {
-    opacity: 0;
-    transform: translateX(-72%);
-  }
-  22% {
-    opacity: 0.82;
-  }
-  100% {
-    opacity: 0;
-    transform: translateX(72%);
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .editor-card,
-  .content-update-sheen {
+  .editor-card {
     animation: none;
   }
 }

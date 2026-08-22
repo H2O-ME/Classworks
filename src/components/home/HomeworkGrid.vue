@@ -23,7 +23,7 @@
                   {{ item.name }}
                 </div>
                 <v-icon
-                  :icon="item.type === 'custom' ? 'mdi-card-text-outline' : 'mdi-pencil-outline'"
+                  icon="mdi-pencil-outline"
                   size="15"
                 />
               </header>
