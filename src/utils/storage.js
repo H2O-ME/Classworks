@@ -82,11 +82,27 @@ export async function restoreSnapshot(date, ts) {
   return setData(`classworks-data-${date}`, data);
 }
 
-export async function getMeta(date) {
-  const meta = await getData(`classworks-meta-${date}`);
-  return meta?.updatedAt ?? 0;
+// ── 脏集：记录本机真实编辑过的「日期|学科」格子，只有脏集里的条目会被推送 ──
+const DIRTY_KEY = "classworks-dirty";
+
+export async function getDirty() {
+  const list = await getData(DIRTY_KEY);
+  return Array.isArray(list) ? list : [];
 }
 
-export async function setMeta(date, updatedAt) {
-  return setData(`classworks-meta-${date}`, { updatedAt });
+export async function setDirty(entries) {
+  return setData(DIRTY_KEY, Array.isArray(entries) ? entries : []);
+}
+
+// 逐条并入脏集并去重（顺序保留首次出现位置）
+export async function addDirty(entries) {
+  const current = await getDirty();
+  const seen = new Set(current);
+  for (const entry of entries) {
+    if (!seen.has(entry)) {
+      current.push(entry);
+      seen.add(entry);
+    }
+  }
+  return setDirty(current);
 }

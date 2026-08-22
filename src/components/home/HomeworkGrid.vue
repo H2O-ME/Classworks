@@ -15,7 +15,6 @@
               v-for="(item, itemIndex) in column"
               :key="item.key"
               class="homework-card"
-              :class="{ 'homework-card-geo-hdr': isGeoHdrEnabled(item) }"
               :style="{ '--card-delay': `${columnIndex * 56 + itemIndex * 42}ms` }"
               @click="handleCardClick(item.key)"
             >
@@ -136,12 +135,6 @@ export default {
     window.removeEventListener("resize", this.handleResize);
   },
   methods: {
-    isGeographySubject(subjectName) {
-      return subjectName === "地理";
-    },
-    isGeoHdrEnabled(item) {
-      return this.isGeographySubject(item.name);
-    },
     handleResize() {
       this.viewportWidth = window.innerWidth;
     },
@@ -219,29 +212,6 @@ export default {
   border-color: rgba(255, 255, 255, 0.12);
   background: #1f1f1f;
   box-shadow: 0 14px 26px rgba(0, 0, 0, 0.14);
-}
-
-.homework-card-geo-hdr::after {
-  content: "";
-  position: absolute;
-  top: -24%;
-  bottom: -24%;
-  left: 0;
-  width: 42%;
-  background: linear-gradient(
-    105deg,
-    transparent 0%,
-    rgba(255, 255, 255, 0.12) 22%,
-    rgba(255, 255, 255, 0.72) 48%,
-    rgba(255, 255, 255, 0.14) 74%,
-    transparent 100%
-  );
-  opacity: 0;
-  pointer-events: none;
-  mix-blend-mode: screen;
-  transform: translate3d(-165%, 0, 0) skewX(-18deg);
-  animation: geo-hdr-sheen 5.8s ease-in-out infinite;
-  will-change: transform, opacity;
 }
 
 .content-updated .content-line {
@@ -391,24 +361,10 @@ export default {
   to { opacity: 1; transform: translateY(0); }
 }
 
-@keyframes geo-hdr-sheen {
-  0%, 64%, 100% {
-    transform: translate3d(-165%, 0, 0) skewX(-18deg);
-    opacity: 0;
-  }
-  70% { opacity: 0.34; }
-  82% {
-    transform: translate3d(310%, 0, 0) skewX(-18deg);
-    opacity: 0.9;
-  }
-  88% { opacity: 0; }
-}
-
 @media (prefers-reduced-motion: reduce) {
   .homework-card,
   .subject-quick-add,
   .subject-quick-add-button,
-  .homework-card-geo-hdr::after,
   .content-updated .content-line {
     animation: none;
     opacity: 1;

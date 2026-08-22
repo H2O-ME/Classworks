@@ -187,7 +187,7 @@ import {
   normalizeBoardData,
   resolveAvailableSubjects,
 } from "@/utils/board";
-import { getData, setData, setMeta } from "@/utils/storage";
+import { getData, setData, addDirty } from "@/utils/storage";
 import {
   rollbackToLatest,
   scheduleSyncNow,
@@ -265,7 +265,10 @@ export default {
       this.unsubscribeSyncState = watchSyncState(({ enabled, secret }) => {
         stopPeriodicSync();
         if (enabled && secret) {
-          startPeriodicSync({ onPulled: (pulledDates) => this.handlePulledDates(pulledDates) });
+          startPeriodicSync({
+            onPulled: (pulledDates) => this.handlePulledDates(pulledDates),
+            onConflict: (conflictKeys) => this.handleConflicts(conflictKeys),
+          });
         }
       });
     } catch (error) {
@@ -332,28 +335,37 @@ export default {
     async handleHomeworkSave(payload) {
       if (!this.currentEditSubject) return;
 
-      const existing = this.boardData.homework[this.currentEditSubject] || {};
+      const subject = this.currentEditSubject;
+      const existing = this.boardData.homework[subject] || {};
       const normalizedPayload =
         typeof payload === "string"
           ? { content: payload, options: existing.options || {} }
           : { content: payload?.content || "", options: payload?.options || {} };
 
-      if (!normalizedPayload.content.trim()) {
-        delete this.boardData.homework[this.currentEditSubject];
+      // 保存前后对本机做 diff：只有内容或 options 变化的学科才进脏集（本机没动过的不推）
+      const before = existing.content || "";
+      const after = normalizedPayload.content;
+      const subjectChanged = before !== after || JSON.stringify(existing.options || {}) !== JSON.stringify(normalizedPayload.options || {});
+
+      if (!after.trim()) {
+        delete this.boardData.homework[subject];
       } else {
-        this.boardData.homework[this.currentEditSubject] = {
+        this.boardData.homework[subject] = {
           ...existing,
-          content: normalizedPayload.content,
+          content: after,
           options: normalizedPayload.options,
         };
       }
 
       const saved = await this.uploadData();
       if (!saved) return;
-      await setMeta(this.dateString, Date.now());
+      if (subjectChanged) {
+        await addDirty([`${this.dateString}|${subject}`]);
+      }
       scheduleSyncNow({
         onPulled: (pulledDates) => this.handlePulledDates(pulledDates),
         onPushed: () => this.showPushedToast(),
+        onConflict: (conflictKeys) => this.handleConflicts(conflictKeys),
       });
     },
     zoom(direction) {
@@ -387,15 +399,28 @@ export default {
         this.selectedDateObj = today;
         this.dateString = formatDateKey(today);
         this.isToday = true;
+
+        // 复制前对比本机今天已有内容：被覆盖的学科逐个标脏，新出现的学科也标脏
+        const previous = this.boardData.homework;
+        const dirtyEntries = [];
+        for (const [key, value] of Object.entries(sourceHomework)) {
+          if (!value?.content?.trim()) continue;
+          const prevContent = previous[key]?.content || "";
+          if (prevContent !== value.content) dirtyEntries.push(`${this.dateString}|${key}`);
+        }
+
         this.boardData.homework = Object.fromEntries(
           Object.entries(sourceHomework).filter(([, value]) => value?.content?.trim()),
         );
         const saved = await this.uploadData();
         if (!saved) return;
-        await setMeta(this.dateString, Date.now());
+        if (dirtyEntries.length) {
+          await addDirty(dirtyEntries);
+        }
         scheduleSyncNow({
           onPulled: (pulledDates) => this.handlePulledDates(pulledDates),
           onPushed: () => this.showPushedToast(),
+          onConflict: (conflictKeys) => this.handleConflicts(conflictKeys),
         });
       } catch (error) {
         console.error("复制到今天失败:", error);
@@ -411,6 +436,13 @@ export default {
         this.updatedCardKeys = [];
       }, 1000);
       this.syncNoticeVisible = true;
+    },
+    handleConflicts(conflictKeys) {
+      // 真并发：本机推的条目被其他设备更新覆盖 → 弹通知条，可一键回退到本机版本
+      if (!conflictKeys?.length) return;
+      if (conflictKeys.some((key) => key.startsWith(`${this.dateString}|`))) {
+        this.syncNoticeVisible = true;
+      }
     },
     dismissSyncNotice() {
       this.syncNoticeVisible = false;

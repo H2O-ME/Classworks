@@ -2,6 +2,12 @@ html {
   scroll-behavior: smooth;
 }
 
+/* 覆盖 Vuetify reset 的 html{overflow-y:scroll}：:root 特异性更高可生效，
+   又低于 v-dialog 滚动锁 html.overflow-y-hidden(0,1,1)，对话框滚动锁定不受影响 */
+:root {
+  overflow-y: auto;
+}
+
 body {
   margin: 0;
   background: #111111;

@@ -1,168 +1,217 @@
-<route lang="json">
-{
-  "meta": {
-    "layout": false
-  }
-}
-</route>
-
 <template>
-  <div class="settings-page">
-    <header class="settings-topbar">
-      <div class="settings-topbar-inner">
-        <button
-          class="settings-back-button"
-          type="button"
-          aria-label="返回首页"
-          @click="goHome"
-        >
-          <v-icon
-            icon="mdi-arrow-left"
-            size="20"
-          />
-        </button>
-        <strong class="settings-title">设置</strong>
+  <v-app-bar
+    class="no-select board-app-bar"
+    elevation="0"
+  >
+    <div class="app-bar-inner">
+      <div class="app-bar-title">
+        设置
       </div>
-    </header>
-
-    <div class="settings-workspace">
-      <nav
-        class="settings-sidebar"
-        aria-label="设置导航"
-      >
-        <button
-          class="settings-nav-item"
-          type="button"
-          @click="goHome"
+      <div class="app-bar-actions">
+        <router-link
+          class="nav-button"
+          to="/"
+          aria-label="返回首页"
         >
           <v-icon
-            icon="mdi-home-outline"
-            size="20"
-          /><span>首页</span>
-        </button>
-        <button
-          class="settings-nav-item settings-nav-item-active"
-          type="button"
-        >
-          <v-icon
-            icon="mdi-database-outline"
-            size="20"
-          /><span>云端同步</span>
-        </button>
-      </nav>
+            icon="mdi-chevron-left"
+            size="19"
+          />
+          <span>首页</span>
+        </router-link>
+      </div>
+    </div>
+  </v-app-bar>
 
-      <main class="settings-main">
-        <div class="settings-main-heading">
-          <h1>数据源设置</h1>
-        </div>
-
-        <section class="settings-card">
-          <div class="settings-card-title-row">
-            <v-icon
-              icon="mdi-cloud-sync-outline"
-              size="20"
-            /><h2>云端同步</h2><span
-              class="settings-state"
-              :class="{ 'settings-state-on': syncEnabled && secretValid }"
-            >{{ syncEnabled && secretValid ? "已连接" : syncEnabled ? "待配置" : "已关闭" }}</span>
+  <div class="settings-scroll">
+    <div class="settings-body">
+      <div class="settings-grid">
+        <!-- 云端同步 -->
+        <section class="panel">
+          <div class="panel-head">
+            <div class="panel-icon">
+              <v-icon
+                icon="mdi-cloud-sync-outline"
+                size="20"
+              />
+            </div>
+            <div class="panel-copy">
+              <h2 class="panel-title">
+                云端同步
+              </h2>
+              <p class="panel-desc">
+                开启后，作业的每次改动都会推送到云端，并在所有设备间保持一致。
+              </p>
+            </div>
+            <span
+              class="status-chip"
+              :class="syncEnabled ? (secretValid ? 'status-on' : 'status-wait') : 'status-off'"
+            >
+              {{ syncEnabled ? (secretValid ? "已连接" : "待校验") : "已关闭" }}
+            </span>
           </div>
-          <div class="settings-sync-row">
-            <div><h3>启用云端同步</h3><p>开启后自动备份作业，并在页面访问期间定时获取云端更新。</p></div><button
-              class="settings-switch"
-              :class="{ 'settings-switch-on': syncEnabled }"
+
+          <div class="toggle-row">
+            <span class="toggle-label">启用云端同步</span>
+            <button
+              class="switch"
+              :class="{ 'switch-on': syncEnabled }"
               type="button"
               role="switch"
-              aria-label="启用云端同步"
               :aria-checked="syncEnabled"
+              aria-label="启用云端同步"
               @click="toggleSync"
             >
-              <span class="settings-switch-knob" />
+              <span class="switch-knob" />
             </button>
           </div>
-          <div class="settings-divider" />
-          <label
-            class="settings-field-label"
-            for="sync-secret"
-          >云端连接校验密钥</label>
-          <div class="settings-key-row">
-            <input
-              id="sync-secret"
-              ref="syncSecret"
-              v-model="secretInput"
-              class="settings-key-input"
-              type="password"
-              placeholder="输入 SYNC_SECRET"
-              autocomplete="off"
-              @input="handleSecretInput"
-            ><button
-              class="settings-validate-button"
-              type="button"
-              :disabled="!secretInput.trim() || validationState === 'checking'"
-              @click="validateAndSave"
+        </section>
+
+        <!-- 连接密钥 -->
+        <section class="panel">
+          <div class="panel-head">
+            <div class="panel-icon">
+              <v-icon
+                icon="mdi-key-variant"
+                size="20"
+              />
+            </div>
+            <div class="panel-copy">
+              <h2 class="panel-title">
+                连接密钥
+              </h2>
+              <p class="panel-desc">
+                与部署端 SYNC_SECRET 一致，用于校验本设备的云端读写权限。
+              </p>
+            </div>
+          </div>
+
+          <div class="key-form">
+            <label
+              class="field-label"
+              for="sync-secret"
+            >云端连接校验密钥</label>
+            <div class="key-row">
+              <input
+                id="sync-secret"
+                ref="syncSecret"
+                v-model="secretInput"
+                class="key-input"
+                type="password"
+                placeholder="输入 SYNC_SECRET"
+                autocomplete="off"
+                spellcheck="false"
+                @input="handleSecretInput"
+              >
+              <button
+                class="validate-btn"
+                type="button"
+                :disabled="!secretInput.trim() || validationState === 'checking'"
+                @click="validateAndSave"
+              >
+                {{ validationState === "checking" ? "校验中" : "验证并保存" }}
+              </button>
+            </div>
+
+            <div
+              class="validation"
+              :class="`validation-${validationState}`"
+              role="status"
+              aria-live="polite"
             >
-              {{ validationState === "checking" ? "校验中" : "验证并保存" }}
-            </button>
-          </div>
-          <div
-            class="settings-validation"
-            :class="`settings-validation-${validationState}`"
-            role="status"
-          >
-            <v-icon
-              v-if="validationState === 'checking'"
-              icon="mdi-loading"
-              size="16"
-            /><v-icon
-              v-else-if="validationState === 'valid'"
-              icon="mdi-check-circle-outline"
-              size="16"
-            /><v-icon
-              v-else-if="validationState === 'invalid'"
-              icon="mdi-alert-circle-outline"
-              size="16"
-            /><v-icon
-              v-else-if="validationState === 'server' || validationState === 'network'"
-              icon="mdi-cloud-alert-outline"
-              size="16"
-            /><span>{{ validationText }}</span>
-          </div>
-          <div class="settings-actions">
+              <v-icon
+                v-if="validationState === 'checking'"
+                icon="mdi-loading"
+                size="15"
+              />
+              <v-icon
+                v-else-if="validationState === 'valid'"
+                icon="mdi-check-circle-outline"
+                size="15"
+              />
+              <v-icon
+                v-else-if="validationState === 'invalid'"
+                icon="mdi-alert-circle-outline"
+                size="15"
+              />
+              <v-icon
+                v-else-if="validationState === 'server' || validationState === 'network'"
+                icon="mdi-cloud-alert-outline"
+                size="15"
+              />
+              <span>{{ validationText }}</span>
+            </div>
+
             <button
-              class="settings-action settings-action-danger"
+              v-if="hasSecret"
+              class="clear-secret"
               type="button"
-              :disabled="!syncEnabled"
-              @click="disableSync"
-            >
-              关闭同步
-            </button><button
-              class="settings-action settings-action-muted"
-              type="button"
-              :disabled="!hasSecret"
               @click="clearSecret"
             >
               清除密钥
             </button>
           </div>
         </section>
+      </div>
 
-        <section class="settings-card">
-          <div class="settings-card-title-row">
+      <!-- 数据策略 -->
+      <section class="panel panel-policy">
+        <div class="panel-head">
+          <div class="panel-icon">
             <v-icon
               icon="mdi-shield-check-outline"
               size="20"
-            /><h2>数据策略</h2>
+            />
           </div>
-          <div class="settings-policy-row">
-            <span><strong>本地优先</strong> 作业首先写入浏览器 IndexedDB，断网也能使用。</span>
+          <div class="panel-copy">
+            <h2 class="panel-title">
+              数据策略
+            </h2>
+            <p class="panel-desc">
+              同步过程始终遵循的三条原则。
+            </p>
           </div>
-          <div class="settings-policy-row">
-            <span><strong>自动备份</strong> 保存成功后推送到 EdgeOne KV。</span>
+        </div>
+
+        <div class="policy-list">
+          <div class="policy-item">
+            <div class="policy-item-icon">
+              <v-icon
+                icon="mdi-laptop"
+                size="16"
+              />
+            </div>
+            <div class="policy-item-copy">
+              <strong>本地优先</strong>
+              <span>作业首先保存在本机浏览器，断网也能正常使用。</span>
+            </div>
           </div>
-          <div class="settings-policy-row">
-            <span><strong>本地回退</strong> 云端更新覆盖前保留最后一次本地快照。</span>
+          <div class="policy-item">
+            <div class="policy-item-icon">
+              <v-icon
+                icon="mdi-cloud-upload-outline"
+                size="16"
+              />
+            </div>
+            <div class="policy-item-copy">
+              <strong>增量备份</strong>
+              <span>每次编辑只把有改动的学科推送到云端，流量极小。</span>
+            </div>
           </div>
-        </section>
-      </main>
+          <div class="policy-item">
+            <div class="policy-item-icon">
+              <v-icon
+                icon="mdi-history"
+                size="16"
+              />
+            </div>
+            <div class="policy-item-copy">
+              <strong>可回退</strong>
+              <span>云端内容覆盖本地前会自动留存快照，可一键找回。</span>
+            </div>
+          </div>
+        </div>
+      </section>
     </div>
   </div>
 </template>
@@ -173,12 +222,21 @@ import { setSyncEnabled, setSyncSecret, validateSyncSecret, watchSyncState } fro
 export default {
   name: "SettingsPage",
   data() {
-    return { previousTitle: null, syncEnabled: false, secretInput: "", hasSecret: false, secretValid: false, validationState: "idle", validationText: "输入密钥后验证云端连接", unsubscribeSyncState: null, validationTimer: null };
+    return {
+      previousTitle: null,
+      syncEnabled: false,
+      secretInput: "",
+      hasSecret: false,
+      secretValid: false,
+      validationState: "idle",
+      validationText: "输入密钥后验证云端连接",
+      unsubscribeSyncState: null,
+      validationTimer: null,
+    };
   },
   mounted() {
     this.previousTitle = document.title;
     document.title = "设置";
-    document.documentElement.classList.add("settings-route-active");
     this.unsubscribeSyncState = watchSyncState(({ enabled, secret }) => {
       this.syncEnabled = enabled;
       this.secretInput = secret;
@@ -188,11 +246,10 @@ export default {
   },
   beforeUnmount() {
     document.title = this.previousTitle;
-    document.documentElement.classList.remove("settings-route-active");
     if (this.validationTimer) clearTimeout(this.validationTimer);
+    this.unsubscribeSyncState?.();
   },
   methods: {
-    goHome() { this.$router.push("/"); },
     toggleSync() {
       const next = !this.syncEnabled;
       setSyncEnabled(next);
@@ -202,7 +259,11 @@ export default {
     handleSecretInput() {
       this.secretValid = false;
       if (this.validationTimer) clearTimeout(this.validationTimer);
-      if (!this.secretInput.trim()) { this.validationState = "idle"; this.validationText = "输入密钥后验证云端连接"; return; }
+      if (!this.secretInput.trim()) {
+        this.validationState = "idle";
+        this.validationText = "输入密钥后验证云端连接";
+        return;
+      }
       this.validationState = "checking";
       this.validationText = "正在校验密钥…";
       this.validationTimer = setTimeout(() => this.validateSecret(this.secretInput), 600);
@@ -210,7 +271,15 @@ export default {
     async validateSecret(secret) {
       const result = await validateSyncSecret(secret);
       this.validationState = result.ok ? "valid" : result.reason;
-      this.validationText = result.ok ? "密钥正确，云端连接可用" : result.reason === "invalid" ? "密钥不正确" : result.reason === "server" ? "云端服务异常" : result.reason === "network" ? "无法连接云端" : "云端接口返回异常";
+      this.validationText = result.ok
+        ? "密钥正确，云端连接可用"
+        : result.reason === "invalid"
+          ? "密钥不正确"
+          : result.reason === "server"
+            ? "云端服务异常"
+            : result.reason === "network"
+              ? "无法连接云端"
+              : "云端接口返回异常";
       this.secretValid = result.ok;
     },
     async validateAndSave() {
@@ -228,109 +297,479 @@ export default {
       this.validationState = "valid";
       this.validationText = "密钥正确，云端连接已启用";
     },
-    disableSync() { setSyncEnabled(false); this.syncEnabled = false; },
-    clearSecret() { setSyncEnabled(false); setSyncSecret(""); this.syncEnabled = false; this.secretInput = ""; this.hasSecret = false; this.secretValid = false; this.validationState = "idle"; this.validationText = "输入密钥后验证云端连接"; },
+    clearSecret() {
+      setSyncEnabled(false);
+      setSyncSecret("");
+      this.syncEnabled = false;
+      this.secretInput = "";
+      this.hasSecret = false;
+      this.secretValid = false;
+      this.validationState = "idle";
+      this.validationText = "输入密钥后验证云端连接";
+    },
   },
 };
 </script>
 
-<style>
-html.settings-route-active{overflow:hidden}
-html,body,#app{margin:0;min-width:320px;width:100%;min-height:100%}
-
-.settings-page{
-  height:100dvh;
-  overflow-x:hidden;overflow-y:auto;scrollbar-width:none;
-  background:#111;
-  color:#f5f5f5;
-  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif;
-  -webkit-font-smoothing:antialiased;
+<style scoped>
+/* ── 顶栏（与主页同构）── */
+.board-app-bar {
+  backdrop-filter: blur(12px);
+  background: rgba(18, 18, 18, 0.96) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
-.settings-page::-webkit-scrollbar{display:none;width:0;height:0}
 
-.settings-topbar{
-  position:sticky;top:0;z-index:10;
-  border-bottom:1px solid rgba(255,255,255,.08);
-  background:rgba(18,18,18,.96);
-  backdrop-filter:blur(12px);
+.app-bar-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  width: 100%;
+  max-width: 1680px;
+  margin: 0 auto;
+  padding: 0 22px 0 42px;
 }
-.settings-topbar-inner{display:flex;align-items:center;gap:14px;width:100%;min-height:64px;padding:0 22px;box-sizing:border-box}
-.settings-back-button{display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;border:0;border-radius:8px;background:transparent;color:rgba(255,255,255,.78);cursor:pointer;transition:background-color .18s ease,color .18s ease}
-.settings-back-button:hover{background:rgba(255,255,255,.065);color:rgba(255,255,255,.96)}
-.settings-title{color:#f5f5f5;font-size:18px;font-weight:700}
 
-.settings-workspace{display:grid;grid-template-columns:200px minmax(0,1fr);min-height:calc(100dvh - 64px)}
-.settings-sidebar{position:sticky;top:64px;align-self:start;height:calc(100dvh - 64px);overflow-y:auto;scrollbar-width:none;padding:16px 10px;border-right:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.015)}
-.settings-nav-item{display:flex;align-items:center;gap:10px;width:100%;min-height:40px;margin-bottom:2px;padding:0 12px;border:0;border-radius:6px;background:transparent;color:rgba(255,255,255,.72);font:inherit;font-size:14px;font-weight:500;text-align:left;cursor:pointer;transition:background-color .18s ease,color .18s ease}
-.settings-nav-item:hover{background:rgba(255,255,255,.06);color:#fff}
-.settings-nav-item-active{background:rgba(255,255,255,.08);color:#fff;font-weight:600}
-
-.settings-main{width:min(1180px,calc(100% - 48px));padding:28px 0 64px;margin:0 auto}
-.settings-main-heading{margin-bottom:18px;color:#f5f5f5}
-.settings-main-heading h1{margin:0;font-size:20px;font-weight:700}
-
-.settings-card{margin-bottom:14px;padding:20px;border:1px solid rgba(255,255,255,.08);border-radius:8px;background:#171717}
-.settings-card-title-row{display:flex;align-items:center;gap:10px;margin-bottom:16px;color:#f5f5f5}
-.settings-card-title-row h2{margin:0;font-size:16px;font-weight:700}
-.settings-state{margin-left:auto;padding:2px 10px;border-radius:99px;background:rgba(255,255,255,.08);color:rgba(255,255,255,.5);font-size:12px;font-weight:600}
-.settings-state-on{background:rgba(255,255,255,.12);color:rgba(255,255,255,.85)}
-
-
-.settings-sync-row{display:flex;align-items:center;justify-content:space-between;gap:16px}
-.settings-sync-row h3{margin:0 0 4px;color:#f5f5f5;font-size:15px;font-weight:600}
-.settings-sync-row p{margin:0;color:rgba(255,255,255,.5);font-size:13px}
-.settings-switch{position:relative;flex:0 0 auto;width:48px;height:44px;padding:10px 2px;box-sizing:border-box;border:0;border-radius:8px;background:transparent;cursor:pointer}
-.settings-switch::before{content:'';position:absolute;top:50%;left:2px;right:2px;height:24px;transform:translateY(-50%);border-radius:12px;background:#262626;transition:background-color .2s ease}
-.settings-switch-knob{position:relative;z-index:1;display:block;width:20px;height:20px;margin-left:0;border-radius:50%;background:#777;box-shadow:0 1px 3px rgba(0,0,0,.4);transition:transform .2s ease,background-color .2s ease,margin-left .2s ease}
-.settings-switch-on::before{background:rgba(255,255,255,.22)}
-.settings-switch-on .settings-switch-knob{transform:translateX(24px);background:#fff}
-
-.settings-divider{height:1px;margin:16px 0;background:rgba(255,255,255,.08)}
-.settings-field-label{display:block;margin-bottom:6px;color:rgba(255,255,255,.65);font-size:13px;font-weight:600}
-.settings-key-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px}
-.settings-key-input{width:100%;height:40px;box-sizing:border-box;padding:0 12px;border:1px solid rgba(255,255,255,.12);border-radius:6px;outline:none;background:#202020;color:#f5f5f5;font:inherit;font-size:14px;transition:border-color .18s ease}
-.settings-key-input:focus{border-color:rgba(255,255,255,.3)}
-.settings-key-input::placeholder{color:rgba(255,255,255,.35)}
-.settings-validate-button{min-width:100px;height:40px;padding:0 16px;border:0;border-radius:6px;background:rgba(255,255,255,.12);color:#f5f5f5;font:inherit;font-size:13px;font-weight:600;cursor:pointer;transition:background-color .18s ease}
-.settings-validate-button:hover:not(:disabled){background:rgba(255,255,255,.18)}
-.settings-validate-button:disabled{cursor:not-allowed;opacity:.35}
-
-.settings-validation{display:flex;align-items:center;gap:6px;min-height:26px;margin-top:8px;font-size:13px;color:rgba(255,255,255,.5)}
-.settings-validation-valid{color:rgba(255,255,255,.8)}
-.settings-validation-invalid{color:rgba(255,255,255,.6)}
-.settings-validation-server,.settings-validation-network,.settings-validation-unexpected{color:rgba(255,255,255,.55)}
-.settings-validation-checking .mdi-loading{animation:settings-spin .9s linear infinite}
-@keyframes settings-spin{to{transform:rotate(360deg)}}
-
-.settings-actions{display:flex;gap:8px;margin-top:10px}
-.settings-action{min-height:36px;padding:0 14px;border:1px solid rgba(255,255,255,.12);border-radius:6px;font:inherit;font-size:13px;font-weight:600;cursor:pointer;transition:background-color .18s ease,color .18s ease}
-.settings-action-danger{background:transparent;color:rgba(255,255,255,.65)}
-.settings-action-danger:hover:not(:disabled){background:rgba(255,255,255,.06);color:rgba(255,255,255,.9)}
-.settings-action-muted{background:transparent;color:rgba(255,255,255,.55)}
-.settings-action-muted:hover:not(:disabled){background:rgba(255,255,255,.06);color:rgba(255,255,255,.85)}
-.settings-action:disabled{cursor:not-allowed;opacity:.3}
-
-.settings-policy-row{display:flex;align-items:center;gap:10px;min-height:44px;padding:4px;border-top:1px solid rgba(255,255,255,.06);color:rgba(255,255,255,.65);font-size:13px}
-.settings-policy-row:first-of-type{border-top:0}
-.settings-policy-row strong{margin-right:6px;color:rgba(255,255,255,.88);font-weight:700}
-
-@media(max-width:900px){
-  .settings-workspace{grid-template-columns:1fr}
-  .settings-sidebar{position:static;height:auto;display:flex;gap:6px;padding:8px 16px;overflow-x:auto;border-right:0;border-bottom:1px solid rgba(255,255,255,.08)}
-  .settings-nav-item{flex:0 0 auto;width:auto;min-height:38px;margin:0;padding:0 14px}
-  .settings-main{width:calc(100% - 32px);padding-top:22px}
+.app-bar-title {
+  color: #f5f5f5;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.2;
 }
-@media(max-width:600px){
-  .settings-topbar-inner{padding:0 16px}
-  .settings-main{width:calc(100% - 32px);padding-top:18px}
-  .settings-card{padding:16px}
-  .settings-key-row{grid-template-columns:1fr}
-  .settings-validate-button{min-height:40px}
-  .settings-actions{display:grid;grid-template-columns:1fr}
-  .settings-action{width:100%}
-  .settings-main-heading h1{font-size:18px}
+
+.app-bar-actions {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 10px;
 }
-@media(prefers-reduced-motion:reduce){
-  .settings-switch-knob,.settings-switch,.settings-nav-item,.settings-key-input,.settings-validate-button,.settings-action,.settings-back-button,.settings-validation-checking .mdi-loading{transition:none;animation:none}
+
+.nav-button {
+  display: inline-flex;
+  min-height: 36px;
+  align-items: center;
+  gap: 2px;
+  padding: 0 11px 0 7px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.035);
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  transition:
+    transform 180ms ease,
+    border-color 180ms ease,
+    background-color 180ms ease,
+    color 180ms ease;
+}
+
+.nav-button:hover {
+  transform: translateY(-1px);
+  border-color: rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.065);
+  color: rgba(255, 255, 255, 0.96);
+}
+
+/* ── 滚动区：占满剩余视口，内部滚动，不出现右侧滚动条 ── */
+.settings-scroll {
+  height: calc(100dvh - 64px);
+  overflow-y: auto;
+  overflow-x: clip;
+  scrollbar-width: none;
+  overscroll-behavior: contain;
+}
+.settings-scroll::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+/* ── 主体：双栏网格 + 策略卡；内容不足一屏时垂直居中，超出则自然滚动 ── */
+.settings-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 1200px;
+  min-height: 100%;
+  margin: 0 auto;
+  padding: 24px 20px;
+}
+
+/* margin:auto 让内容块在不足一屏时上下均分留白，超出时归零不裁切 */
+.settings-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+  margin-top: auto;
+}
+
+.panel-policy {
+  margin-bottom: auto;
+}
+
+/* ── 卡片 ── */
+.panel {
+  display: flex;
+  flex-direction: column;
+  padding: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  background: #171717;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.12);
+}
+
+.panel-head {
+  display: flex;
+  flex: 1 0 auto;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.panel-icon {
+  display: inline-flex;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  background: #202020;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.panel-copy {
+  min-width: 160px;
+  flex: 1 1 200px;
+}
+
+.panel-title {
+  margin: 0;
+  color: #f5f5f5;
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.panel-desc {
+  margin: 4px 0 0;
+  color: rgba(255, 255, 255, 0.56);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* ── 状态胶囊 ── */
+.status-chip {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  padding: 4px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.56);
+  font-size: 12px;
+  font-weight: 600;
+}
+.status-chip::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.status-on {
+  border-color: rgba(48, 209, 88, 0.35);
+  background: rgba(48, 209, 88, 0.1);
+  color: #30d158;
+}
+.status-wait {
+  border-color: rgba(255, 159, 10, 0.35);
+  background: rgba(255, 159, 10, 0.1);
+  color: #ff9f0a;
+}
+
+/* ── 开关行 ── */
+.toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.toggle-label {
+  color: #f5f5f5;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.switch {
+  position: relative;
+  flex: 0 0 auto;
+  width: 52px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.switch::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 2px;
+  right: 2px;
+  height: 30px;
+  transform: translateY(-50%);
+  border-radius: 15px;
+  background: #3a3a3c;
+  transition: background-color 0.2s ease;
+}
+.switch-knob {
+  position: relative;
+  z-index: 1;
+  display: block;
+  width: 26px;
+  height: 26px;
+  margin-left: 4px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+  transition: transform 0.2s cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+.switch-on::before { background: #34c759; }
+.switch-on .switch-knob { transform: translateX(20px); }
+
+/* ── 密钥表单 ── */
+.key-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.field-label {
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.key-row {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.key-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 44px;
+  padding: 0 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  background: #1d1d1d;
+  color: #f2f2f2;
+  font: inherit;
+  font-size: 16px;
+  outline: none;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+.key-input:focus {
+  border-color: rgba(196, 211, 238, 0.28);
+  box-shadow: 0 0 0 1px rgba(196, 211, 238, 0.14);
+}
+.key-input::placeholder { color: rgba(255, 255, 255, 0.42); }
+
+.validate-btn {
+  flex: 0 0 auto;
+  min-height: 44px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 8px;
+  background: #f3f3f3;
+  color: #121212;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: opacity 0.18s ease;
+}
+.validate-btn:hover:not(:disabled) { opacity: 0.88; }
+.validate-btn:disabled { cursor: not-allowed; opacity: 0.4; }
+
+.validation {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 20px;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.46);
+}
+.validation-valid { color: #30d158; }
+.validation-invalid { color: #ff453a; }
+.validation-server, .validation-network, .validation-unexpected { color: #ff9f0a; }
+.validation-checking .mdi-loading { animation: spin 0.9s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.clear-secret {
+  align-self: flex-start;
+  min-height: 44px;
+  padding: 0 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  background: #202020;
+  color: #ffb7b7;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.18s ease, border-color 0.18s ease;
+}
+.clear-secret:hover {
+  background: #262626;
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+/* ── 数据策略 ── */
+.policy-list {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.policy-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+}
+
+.policy-item-icon {
+  display: inline-flex;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 7px;
+  background: #202020;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.policy-item-copy {
+  min-width: 0;
+}
+
+.policy-item-copy strong {
+  display: block;
+  margin-bottom: 2px;
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.policy-item-copy span {
+  color: rgba(255, 255, 255, 0.46);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+/* ── 桌面：双栏 + 策略三列 ── */
+@media (min-width: 900px) {
+  .settings-body {
+    gap: 18px;
+    padding: 32px;
+  }
+
+  .settings-grid {
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+    gap: 18px;
+  }
+
+  .panel {
+    padding: 24px;
+  }
+
+  .policy-list {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 18px;
+  }
+}
+
+/* ── 手机：密钥行纵向堆叠 ── */
+@media (max-width: 700px) {
+  .app-bar-inner {
+    padding: 0 14px 0 20px;
+  }
+
+  .app-bar-title {
+    font-size: 18px;
+  }
+
+  .key-row {
+    flex-direction: column;
+  }
+
+  .validate-btn {
+    width: 100%;
+  }
+}
+
+/* ── 手表/极窄：收紧间距，头部自然换行 ── */
+@media (max-width: 380px) {
+  .settings-body {
+    gap: 12px;
+    padding: 16px 12px;
+  }
+
+  .settings-grid {
+    gap: 12px;
+  }
+
+  .panel {
+    padding: 14px;
+  }
+
+  .panel-copy {
+    min-width: 130px;
+    flex-basis: 160px;
+  }
+
+  .panel-title {
+    font-size: 16px;
+  }
+
+  .panel-desc {
+    font-size: 12px;
+  }
+
+  .toggle-row,
+  .key-form,
+  .policy-list {
+    margin-top: 12px;
+    padding-top: 12px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .switch-knob, .switch::before, .validation-checking .mdi-loading {
+    transition: none;
+    animation: none;
+  }
 }
 </style>

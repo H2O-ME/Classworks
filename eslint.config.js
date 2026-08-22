@@ -64,6 +64,7 @@ export default [
         SharedWorker: 'readonly',
         // Fetch API
         AbortController: 'readonly',
+        AbortSignal: 'readonly',
         TextEncoder: 'readonly',
         TextDecoder: 'readonly',
         globalThis: 'readonly',

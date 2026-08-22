@@ -15,12 +15,37 @@ export default defineConfig(({ mode }) => {
   // ponytail: 本地 dev mock 代替边缘函数，持久化仅内存（重启丢失），够校验和开发用
   let devCache = null;
 
-  const DATE_KEY_RE = /^\d{8}$/;
   function isPlainObject(value) {
     return value !== null && typeof value === "object" && !Array.isArray(value) && (Object.getPrototypeOf(value) === Object.prototype || Object.getPrototypeOf(value) === null);
   }
-  function isValidDates(dates) {
-    return isPlainObject(dates) && Object.entries(dates).every(([date, entry]) => DATE_KEY_RE.test(date) && isPlainObject(entry) && isPlainObject(entry.homework) && typeof entry.updatedAt === "string" && Number.isFinite(Date.parse(entry.updatedAt)));
+  // 任意版本 KV 文档 → v3（脏集增量同步格式），与边缘函数 toV3 一致
+  function toV3(raw) {
+    const v3 = { v: 3, entries: {} };
+    if (!isPlainObject(raw)) return v3;
+    if (raw.v === 3 && isPlainObject(raw.entries)) return { v: 3, entries: raw.entries };
+    if (isPlainObject(raw.dates)) {
+      for (const [date, day] of Object.entries(raw.dates)) {
+        if (!isPlainObject(day)) continue;
+        for (const [kind, cells] of Object.entries(day)) {
+          if (!isPlainObject(cells)) continue;
+          for (const [subject, cell] of Object.entries(cells)) {
+            if (!isPlainObject(cell)) continue;
+            const del = kind === "subjects" && cell.del === true;
+            v3.entries[`${date}|${subject}`] = {
+              content: del ? "" : (cell.content || ""),
+              options: isPlainObject(cell.options) ? cell.options : {},
+            };
+          }
+        }
+      }
+    }
+    return v3;
+  }
+  function isValidChanges(changes) {
+    return isPlainObject(changes) && Object.entries(changes).every(([key, cell]) => (
+      typeof key === "string" && key.includes("|")
+      && isPlainObject(cell) && typeof cell.content === "string" && isPlainObject(cell.options)
+    ));
   }
 
   return {
@@ -43,7 +68,7 @@ export default defineConfig(({ mode }) => {
           }
           if (req.method === "GET") {
             res.setHeader("Content-Type", "application/json; charset=UTF-8");
-            return res.end(JSON.stringify(devCache ?? { empty: true }));
+            return res.end(JSON.stringify(toV3(devCache)));
           }
           if (req.method === "PUT") {
             let body = "";
@@ -51,20 +76,19 @@ export default defineConfig(({ mode }) => {
             req.on("end", () => {
               let payload;
               try { payload = JSON.parse(body); } catch { payload = null; }
-              if (!payload || !isValidDates(payload.dates)) {
+              if (!payload || !isValidChanges(payload.changes)) {
                 res.statusCode = 400;
                 res.setHeader("Content-Type", "application/json; charset=UTF-8");
-                return res.end(JSON.stringify({ error: "missing dates" }));
+                return res.end(JSON.stringify({ error: "missing changes" }));
               }
-              const current = isValidDates(devCache?.dates) ? devCache : { dates: {} };
-              const merged = { ...current.dates };
-              for (const [date, incoming] of Object.entries(payload.dates)) {
-                const existing = merged[date];
-                if (!existing || Date.parse(incoming.updatedAt) >= Date.parse(existing.updatedAt)) merged[date] = incoming;
+              // 读当前（旧格式惰性转 v3）→ 逐条覆盖 → 写回 → 返回合并后完整文档
+              const v3 = toV3(devCache);
+              for (const [key, cell] of Object.entries(payload.changes)) {
+                v3.entries[key] = { content: String(cell.content), options: isPlainObject(cell.options) ? cell.options : {} };
               }
-              devCache = { savedAt: new Date().toISOString(), dates: merged };
+              devCache = { v: 3, savedAt: new Date().toISOString(), entries: v3.entries };
               res.setHeader("Content-Type", "application/json; charset=UTF-8");
-              return res.end(JSON.stringify({ savedAt: devCache.savedAt }));
+              return res.end(JSON.stringify(devCache));
             });
             return;
           }
