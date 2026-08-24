@@ -39,60 +39,27 @@
         v-if="sortedItems.length === 0"
         class="empty-state"
       >
-        <div class="empty-stage">
-          <div class="empty-commandbar">
-            <div class="commandbar-copy">
-              <div class="commandbar-label">
-                作业看板
-              </div>
-              <div class="commandbar-title">
-                {{ emptyTitle }}
-              </div>
-            </div>
-
-            <div class="commandbar-stats">
-              <div class="commandbar-stat">
-                <span>日期</span>
-                <strong>{{ dateLabel }}</strong>
-              </div>
-              <div class="commandbar-stat">
-                <span>已录入</span>
-                <strong>{{ homeworkCount }} 项</strong>
-              </div>
-              <div class="commandbar-stat">
-                <span>入口</span>
-                <strong>{{ availableSubjects.length }} 科</strong>
-              </div>
-            </div>
+        <div class="empty-hero">
+          <div class="empty-hero-date">
+            {{ dateLabel }} · 星期{{ weekdayLabel }}
           </div>
+          <h1 class="empty-hero-title">
+            {{ emptyTitle }}
+          </h1>
+        </div>
 
-          <div class="subject-dock">
-            <div class="subject-dock-header">
-              <div class="subject-dock-title">
-                快速开始
-              </div>
-              <div class="subject-dock-meta">
-                {{ availableSubjects.length }} 个学科
-              </div>
-            </div>
+        <div class="empty-divider">
+          <span>选择学科开始录入</span>
+        </div>
 
-            <div class="subject-dock-list">
-              <button
-                v-for="(subject, index) in availableSubjects"
-                :key="subject.name"
-                type="button"
-                class="subject-dock-item"
-                :style="{ '--entry-delay': `${index * 28}ms` }"
-                @click="openDialog(subject.name)"
-              >
-                <span class="subject-dock-name">{{ subject.name }}</span>
-                <v-icon
-                  icon="mdi-plus"
-                  size="18"
-                />
-              </button>
-            </div>
-          </div>
+        <div class="empty-quick-grid">
+          <SubjectAddCard
+            v-for="(subject, index) in availableSubjects"
+            :key="subject.name"
+            :subject="subject"
+            :style="{ '--tile-delay': `${index * 40}ms` }"
+            @add="openDialog(subject.name)"
+          />
         </div>
       </section>
 
@@ -130,52 +97,29 @@
     @copy-to-today="copyHomeworkToToday"
   />
 
-  <!-- 云端同步提示（持续显示，点击任意处消失） -->
-  <transition name="sync-toast">
-    <aside
-      v-if="syncNoticeVisible"
-      class="sync-toast"
-      role="status"
-      aria-live="assertive"
-      @click="dismissSyncNotice"
-    >
-      <div class="sync-toast-mark">
-        <v-icon
-          icon="mdi-cloud-check-outline"
-          size="18"
-        />
-      </div>
-      <strong>检测到云端更新</strong>
-      <button
-        class="sync-toast-rollback"
-        type="button"
-        @click.stop="handleRollbackLatest"
-      >
-        回退
-      </button>
-    </aside>
-  </transition>
+  <!-- 云端同步提示（持续显示，点击任意处或按钮后消失） -->
+  <AppToast
+    :show="syncNoticeVisible"
+    message="检测到云端更新"
+    persistent
+    action="回退"
+    @action="handleRollbackLatest"
+    @dismiss="dismissSyncNotice"
+  />
 
-  <!-- 已同步到云端提示 -->
-  <transition name="sync-toast">
-    <aside
-      v-if="syncPushedToast"
-      class="sync-pushed-toast"
-      role="status"
-    >
-      <v-icon
-        icon="mdi-cloud-check-outline"
-        size="18"
-      />
-      <span>已同步到云端</span>
-    </aside>
-  </transition>
+  <!-- 已同步到云端提示（自动消失） -->
+  <AppToast
+    :show="syncPushedToast"
+    message="已同步到云端"
+    @dismiss="dismissPushedToast"
+  />
 </template>
 
 <script>
 import { defineAsyncComponent } from "vue";
 import HomeSkeleton from "@/components/common/HomeSkeleton.vue";
 import HomeworkGrid from "@/components/home/HomeworkGrid.vue";
+import SubjectAddCard from "@/components/home/SubjectAddCard.vue";
 import {
   formatDateKey,
   getDefaultSubjects,
@@ -183,7 +127,7 @@ import {
   getUnusedSubjects,
   normalizeBoardData,
 } from "@/utils/board";
-import { getData, setData, addDirty } from "@/utils/storage";
+import { getData, setData, addDirty, snapshotDate } from "@/utils/storage";
 import {
   rollbackToLatest,
   scheduleSyncNow,
@@ -203,6 +147,7 @@ export default {
     HomeworkEditDialog,
     HomeworkGrid,
     HomeSkeleton,
+    SubjectAddCard,
   },
   data() {
     return {
@@ -220,8 +165,8 @@ export default {
       fontSizeLevel: getSetting("display.fontSizeLevel") || 0,
       syncNoticeVisible: false,
       syncPushedToast: false,
-      syncPushedTimer: null,
       updatedCardKeys: [],
+      previousTitle: null,
       unsubscribeSyncState: null,
     };
   },
@@ -236,14 +181,14 @@ export default {
       const date = this.selectedDateObj;
       return `${date.getMonth() + 1} 月 ${date.getDate()} 日`;
     },
+    weekdayLabel() {
+      return ["日", "一", "二", "三", "四", "五", "六"][this.selectedDateObj.getDay()];
+    },
     sortedItems() {
       return getSortedHomeworkItems(this.boardData, this.availableSubjects);
     },
     unusedSubjects() {
       return getUnusedSubjects(this.boardData, this.availableSubjects);
-    },
-    homeworkCount() {
-      return this.sortedItems.length;
     },
     contentStyle() {
       return { fontSize: `${this.currentFontSizeValue}px` };
@@ -253,16 +198,19 @@ export default {
     },
   },
   async mounted() {
+    this.previousTitle = document.title;
+    document.title = "作业看板";
     try {
       await this.initializeData();
       this.dataReady = true;
       this.unsubscribeSyncState = watchSyncState(({ enabled, secret }) => {
-        stopPeriodicSync();
         if (enabled && secret) {
           startPeriodicSync({
             onPulled: (pulledDates) => this.handlePulledDates(pulledDates),
             onConflict: (conflictKeys) => this.handleConflicts(conflictKeys),
           });
+        } else {
+          stopPeriodicSync();
         }
       });
     } catch (error) {
@@ -270,14 +218,24 @@ export default {
     }
   },
   beforeUnmount() {
+    document.title = this.previousTitle;
     stopPeriodicSync();
     this.unsubscribeSyncState?.();
-    if (this.syncPushedTimer) {
-      clearTimeout(this.syncPushedTimer);
-      this.syncPushedTimer = null;
-    }
   },
   methods: {
+    syncAfterEdit() {
+      scheduleSyncNow({
+        onPulled: (pulledDates) => this.handlePulledDates(pulledDates),
+        onPushed: () => this.showPushedToast(),
+        onConflict: (conflictKeys) => this.handleConflicts(conflictKeys),
+      });
+    },
+    flashUpdatedCards() {
+      this.updatedCardKeys = this.sortedItems.map((item) => item.key);
+      setTimeout(() => {
+        this.updatedCardKeys = [];
+      }, 1000);
+    },
     async initializeData() {
       const urlParams = new URLSearchParams(window.location.search);
       const dateFromUrl = urlParams.get("date");
@@ -285,10 +243,12 @@ export default {
       let currentDate = today;
 
       if (dateFromUrl && /^\d{8}$/.test(dateFromUrl)) {
-        const year = dateFromUrl.slice(0, 4);
-        const month = dateFromUrl.slice(4, 6);
-        const day = dateFromUrl.slice(6, 8);
-        currentDate = new Date(`${year}-${month}-${day}`);
+        // 按本地时区分量构造：new Date("YYYY-MM-DD") 按 UTC 解析，UTC 以西会错一天
+        currentDate = new Date(
+          Number(dateFromUrl.slice(0, 4)),
+          Number(dateFromUrl.slice(4, 6)) - 1,
+          Number(dateFromUrl.slice(6, 8)),
+        );
       }
 
       this.selectedDateObj = currentDate;
@@ -342,11 +302,7 @@ export default {
       if (subjectChanged) {
         await addDirty([`${this.dateString}|${subject}`]);
       }
-      scheduleSyncNow({
-        onPulled: (pulledDates) => this.handlePulledDates(pulledDates),
-        onPushed: () => this.showPushedToast(),
-        onConflict: (conflictKeys) => this.handleConflicts(conflictKeys),
-      });
+      this.syncAfterEdit();
     },
     zoom(direction) {
       this.fontSizeLevel = direction === "up" ? Math.min(this.fontSizeLevel + 1, 24) : Math.max(this.fontSizeLevel - 1, -4);
@@ -379,47 +335,42 @@ export default {
         this.selectedDateObj = today;
         this.dateString = formatDateKey(today);
         this.isToday = true;
-
-        // 复制前先读「今天」已存的数据（boardData 此刻还是源日期的）：内容变化的学科标脏；
-        // 今天原有、源里没有的学科会被整日替换删掉 → 也标脏推空（墓碑），否则云端会复活它们
-        const previous = normalizeBoardData(await getData(`classworks-data-${this.dateString}`)).homework;
-        const dirtyEntries = [];
-        for (const [key, value] of Object.entries(sourceHomework)) {
-          if (!value?.content?.trim()) continue;
-          if ((previous[key]?.content || "") !== value.content) dirtyEntries.push(`${this.dateString}|${key}`);
-        }
-        for (const [key, value] of Object.entries(previous)) {
-          if (value?.content?.trim() && !sourceHomework[key]?.content?.trim()) {
-            dirtyEntries.push(`${this.dateString}|${key}`);
-          }
-        }
-
-        this.boardData.homework = Object.fromEntries(
-          Object.entries(sourceHomework).filter(([, value]) => value?.content?.trim()),
-        );
-        const saved = await this.uploadData();
-        if (!saved) return;
-        if (dirtyEntries.length) {
-          await addDirty(dirtyEntries);
-        }
-        scheduleSyncNow({
-          onPulled: (pulledDates) => this.handlePulledDates(pulledDates),
-          onPushed: () => this.showPushedToast(),
-          onConflict: (conflictKeys) => this.handleConflicts(conflictKeys),
-        });
+        await this.replaceBoardWith(sourceHomework);
       } catch (error) {
         console.error("复制到今天失败:", error);
       } finally {
         this.loading.copyToToday = false;
       }
     },
+    // 用 sourceHomework 整日替换当前查看日：先留快照防误覆盖；内容变化/被删学科标脏（墓碑防云端复活），写回并触发同步
+    async replaceBoardWith(sourceHomework) {
+      const previous = normalizeBoardData(await getData(`classworks-data-${this.dateString}`)).homework;
+      const dirtyEntries = [];
+      for (const [key, value] of Object.entries(sourceHomework)) {
+        if (!value?.content?.trim()) continue;
+        if ((previous[key]?.content || "") !== value.content) dirtyEntries.push(`${this.dateString}|${key}`);
+      }
+      for (const [key, value] of Object.entries(previous)) {
+        if (value?.content?.trim() && !sourceHomework[key]?.content?.trim()) {
+          dirtyEntries.push(`${this.dateString}|${key}`);
+        }
+      }
+
+      await snapshotDate(this.dateString);
+      this.boardData.homework = Object.fromEntries(
+        Object.entries(sourceHomework).filter(([, value]) => value?.content?.trim()),
+      );
+      const saved = await this.uploadData();
+      if (!saved) return;
+      if (dirtyEntries.length) {
+        await addDirty(dirtyEntries);
+      }
+      this.syncAfterEdit();
+    },
     async handlePulledDates(pulledDates) {
       if (!pulledDates?.includes(this.dateString)) return;
       await this.downloadData();
-      this.updatedCardKeys = this.sortedItems.map((item) => item.key);
-      setTimeout(() => {
-        this.updatedCardKeys = [];
-      }, 1000);
+      this.flashUpdatedCards();
       this.syncNoticeVisible = true;
     },
     handleConflicts(conflictKeys) {
@@ -434,11 +385,9 @@ export default {
     },
     showPushedToast() {
       this.syncPushedToast = true;
-      if (this.syncPushedTimer) clearTimeout(this.syncPushedTimer);
-      this.syncPushedTimer = setTimeout(() => {
-        this.syncPushedToast = false;
-        this.syncPushedTimer = null;
-      }, 2500);
+    },
+    dismissPushedToast() {
+      this.syncPushedToast = false;
     },
     async handleRollbackLatest() {
       this.dismissSyncNotice();
@@ -448,40 +397,13 @@ export default {
       });
       if (!result.ok) return;
       await this.downloadData();
-      this.updatedCardKeys = this.sortedItems.map((item) => item.key);
-      setTimeout(() => {
-        this.updatedCardKeys = [];
-      }, 1000);
+      this.flashUpdatedCards();
     },
   },
 };
 </script>
 
 <style scoped>
-.board-app-bar {
-  backdrop-filter: blur(12px);
-  background: rgba(18, 18, 18, 0.96) !important;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.app-bar-inner {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 20px;
-  width: 100%;
-  max-width: 1680px;
-  margin: 0 auto;
-  padding: 0 22px 0 42px;
-}
-
-.app-bar-title {
-  color: #f5f5f5;
-  font-size: 20px;
-  font-weight: 700;
-  line-height: 1.2;
-}
-
 .date-pill {
   flex: 0 0 auto;
   padding: 7px 13px;
@@ -491,13 +413,6 @@ export default {
   color: rgba(255, 255, 255, 0.88);
   font-size: 13px;
   font-weight: 600;
-}
-
-.app-bar-actions {
-  display: inline-flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 10px;
 }
 
 .settings-button {
@@ -526,7 +441,7 @@ export default {
 }
 
 .board-shell {
-  min-height: calc(100dvh - 64px);
+  min-height: calc(100dvh - 64px - var(--sat, 0px));
 }
 
 .board-shell-ready {
@@ -535,151 +450,82 @@ export default {
 
 .board-container {
   max-width: 1720px;
-  min-height: calc(100dvh - 64px);
+  min-height: calc(100dvh - 64px - var(--sat, 0px));
   margin: 0 auto;
-  padding: 20px 32px 76px;
+  padding: 20px 32px calc(76px + var(--sab, 0px));
   /* ponytail: 仅裁横向；纵向 content 自然撑高 body，否则移动端内容超出会被 clip 截断且无法滚动 */
   overflow-x: clip;
 }
 
+/* ── 开屏空态:金字塔构图 —— 日期胶囊/大标题/主按钮居中,学科卡 3×2 阵列收底 ── */
 .empty-state {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-height: min(580px, calc(100dvh - 210px));
-}
-
-.empty-stage {
-  display: grid;
-  grid-template-columns: minmax(0, 1.08fr) minmax(520px, 0.92fr);
-  gap: 18px;
-  width: 100%;
-  height: min(540px, calc(100dvh - 230px));
-  min-height: 460px;
-  max-height: 540px;
-}
-
-.empty-commandbar,
-.subject-dock {
-  border: 1px solid rgba(255, 255, 255, 0.055);
-  border-radius: 8px;
-  background: #171717;
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.12);
-}
-
-.empty-commandbar {
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
   gap: 30px;
-  padding: clamp(22px, 2vw, 30px);
+  min-height: min(600px, calc(100dvh - 220px));
   animation: fade-up 0.34s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-.commandbar-label {
-  margin-bottom: 16px;
-  color: rgba(255, 255, 255, 0.5);
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.commandbar-title {
-  color: #f5f5f5;
-  font-size: clamp(40px, 3.35vw, 58px);
-  font-weight: 800;
-  line-height: 1.08;
-}
-
-.commandbar-stats {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(132px, 1fr));
-  gap: 10px;
-}
-
-.commandbar-stat {
-  display: grid;
-  gap: 8px;
-  min-height: 68px;
-  padding: 14px 16px;
-  border: 1px solid rgba(255, 255, 255, 0.055);
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.025);
-}
-
-.commandbar-stat span {
-  color: rgba(255, 255, 255, 0.46);
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.commandbar-stat strong {
-  color: rgba(255, 255, 255, 0.9);
-  font-size: 18px;
-  line-height: 1.1;
-}
-
-.subject-dock {
-  display: grid;
-  grid-template-rows: auto 1fr;
-  gap: 14px;
-  padding: clamp(20px, 1.8vw, 24px);
-  animation: fade-up 0.42s cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.subject-dock-header {
+.empty-hero {
   display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 16px;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  text-align: center;
 }
 
-.subject-dock-title {
-  color: #f1f1f1;
-  font-size: 20px;
-  font-weight: 700;
-}
-
-.subject-dock-meta {
-  flex: 0 0 auto;
-  color: rgba(255, 255, 255, 0.46);
-  font-size: 12px;
+.empty-hero-date {
+  padding: 7px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.03);
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 13px;
   font-weight: 600;
+  letter-spacing: 0.08em;
 }
 
-.subject-dock-list {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  grid-auto-rows: minmax(76px, 1fr);
-  gap: 10px;
+.empty-hero-title {
+  margin: 20px 0 0;
+  color: #f5f5f5;
+  font-size: clamp(32px, 3.4vw, 46px);
+  font-weight: 800;
+  line-height: 1.15;
 }
 
-.subject-dock-item {
+
+
+/* 细线分隔语:给主按钮与学科阵列一段呼吸 */
+.empty-divider {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 0 18px 0 20px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 6px;
-  background: #202020;
-  color: #f0f0f0;
-  opacity: 0;
-  transform: translateY(10px);
-  animation: subject-enter 0.34s cubic-bezier(0.22, 1, 0.36, 1) forwards;
-  animation-delay: var(--entry-delay, 0ms);
-  transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.2s ease, background-color 0.2s ease;
+  gap: 16px;
+  width: 100%;
+  max-width: 760px;
+  color: rgba(255, 255, 255, 0.34);
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  white-space: nowrap;
 }
 
-.subject-dock-item:hover {
-  transform: translateY(-1px);
-  border-color: rgba(255, 255, 255, 0.14);
-  background: #252525;
+.empty-divider::before,
+.empty-divider::after {
+  content: "";
+  flex: 1 1 auto;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.08);
 }
 
-.subject-dock-name {
-  min-width: 0;
-  font-size: 17px;
-  font-weight: 700;
+/* 学科卡固定 3 列(6 科 = 2×3 阵列),不再一条横排摊开 */
+.empty-quick-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  width: 100%;
+  max-width: 760px;
 }
 
 .populated-board {
@@ -696,23 +542,11 @@ export default {
   to { opacity: 1; transform: translateY(0); }
 }
 
-@keyframes subject-enter {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
 @media (prefers-reduced-motion: reduce) {
   .board-shell-ready,
-  .empty-commandbar,
-  .populated-board,
-  .subject-dock,
-  .subject-dock-item {
+  .empty-state,
+  .populated-board {
     animation: none;
-  }
-
-  .subject-dock-item {
-    opacity: 1;
-    transform: none;
   }
 }
 
@@ -720,173 +554,38 @@ export default {
   .board-container {
     padding-inline: 24px;
   }
-
-  .empty-stage {
-    grid-template-columns: minmax(0, 1fr) minmax(440px, 0.8fr);
-  }
-}
-
-@media (max-width: 1080px) {
-  .empty-state {
-    min-height: auto;
-  }
-
-  .empty-stage {
-    height: auto;
-    min-height: auto;
-    grid-template-columns: 1fr;
-  }
-
-  .commandbar-stats {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .sync-toast,
-  .sync-pushed-toast {
-    transition: none;
-  }
 }
 
 @media (max-width: 700px) {
-  .sync-toast {
-    right: 14px;
-    bottom: 84px;
-    left: 14px;
-    max-width: none;
-  }
-
-  .sync-pushed-toast {
-    right: 14px;
-    bottom: 84px;
-    left: 14px;
-    width: auto;
-  }
-
-  .sync-toast strong {
-    white-space: normal;
-    overflow: visible;
-    text-overflow: clip;
-  }
-
-  .sync-toast-rollback {
-    margin-left: auto;
-  }
-
-  .app-bar-inner {
-    padding: 0 14px 0 20px;
-  }
-
-  .app-bar-title {
-    font-size: 18px;
-  }
-
   .date-pill {
     display: none;
   }
 
+  .empty-quick-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .board-container {
-    padding: 20px 14px 106px;
+    padding: 16px 14px calc(106px + var(--sab, 0px));
   }
 
-  .commandbar-stats,
-  .subject-dock-list {
-    grid-template-columns: 1fr;
+  /* 移动端空态：标题与卡片阵列收拢，避免首屏滚动 */
+  .empty-state {
+    gap: 22px;
+    min-height: min(520px, calc(100dvh - 200px));
   }
 
-  .subject-dock-item {
-    min-height: 58px;
-    padding: 0 14px;
+  .empty-hero-title {
+    margin-top: 14px;
+    font-size: clamp(26px, 7vw, 34px);
   }
-}
 
-.sync-toast {
-  position: fixed;
-  right: 18px;
-  bottom: 18px;
-  z-index: 120;
-  display: inline-flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px 10px;
-  max-width: min(420px, calc(100vw - 36px));
-  padding: 11px 14px;
-  border-radius: 9px;
-  background: #1e3a5f;
-  color: #dce8f5;
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.22);
-  cursor: pointer;
-}
+  .empty-divider {
+    font-size: 11.5px;
+  }
 
-.sync-toast-mark {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: rgba(255, 255, 255, 0.9);
-}
-
-.sync-toast strong {
-  flex: 0 1 auto;
-  min-width: 0;
-  color: #f2f7fb;
-  font-size: 13px;
-  font-weight: 700;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.sync-toast-rollback {
-  min-height: 28px;
-  padding: 0 9px;
-  border: 1px solid rgba(255, 255, 255, 0.22);
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.12);
-  color: #fff;
-  font-family: inherit;
-  font-size: 12px;
-  font-weight: 700;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.sync-toast-rollback:hover {
-  background: rgba(255, 255, 255, 0.2);
-}
-
-.sync-toast-enter-active,
-.sync-toast-leave-active {
-  transition:
-    opacity 0.24s ease,
-    transform 0.24s cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.sync-toast-enter-from,
-.sync-toast-leave-to {
-  opacity: 0;
-  transform: translateY(6px);
-}
-
-.sync-pushed-toast {
-  position: fixed;
-  right: 18px;
-  bottom: 18px;
-  z-index: 120;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 14px;
-  border-radius: 9px;
-  background: #1e3a5f;
-  color: #dce8f5;
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.22);
-}
-
-.sync-pushed-toast span {
-  color: #f2f7fb;
-  font-size: 13px;
-  font-weight: 700;
+  .empty-quick-grid {
+    gap: 12px;
+  }
 }
 </style>

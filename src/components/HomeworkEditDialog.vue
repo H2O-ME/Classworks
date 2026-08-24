@@ -1,106 +1,69 @@
 <template>
   <v-dialog
     v-model="dialogVisible"
-    :fullscreen="isMobile"
-    max-width="1180"
+    :fullscreen="mobile"
+    max-width="720"
     width="92%"
-    scrim="rgba(8, 8, 8, 0.62)"
+    scrim="rgba(8, 8, 8, 0.66)"
     transition="dialog-transition"
-    @click:outside="handleClose"
-    @keydown.esc="handleClose"
   >
     <v-card
+      ref="dialogCard"
       class="editor-card"
+      :class="{ 'editor-card-mobile': mobile }"
       border
       rounded="lg"
     >
-      <div class="dialog-header">
+      <div
+        class="dialog-header"
+        title="拖动可移动"
+        @pointerdown="startDrag"
+      >
         <div class="dialog-title">
           {{ title }}
         </div>
-        <div class="dialog-actions">
-          <v-btn
-            class="dialog-btn dialog-btn-ghost"
-            variant="text"
-            @click="handleClose"
-          >
-            {{ copy.close }}
-          </v-btn>
-          <v-btn
-            class="dialog-btn dialog-btn-solid"
-            variant="flat"
-            @click="handleSaveAndClose"
-          >
-            {{ copy.save }}
-          </v-btn>
-        </div>
+        <v-btn
+          class="dialog-close"
+          icon="mdi-close"
+          variant="text"
+          :aria-label="copy.close"
+          @click="persistAndClose"
+        />
       </div>
 
       <v-card-text class="dialog-body">
-        <div class="editor-column">
-          <div class="panel-header">
-            <div>
-              <div class="panel-eyebrow">
-                编辑内容
-              </div>
-            </div>
-            <div class="panel-badge">
-              {{ content.length }} 字
-            </div>
-          </div>
-
-          <div class="editor-field">
-            <textarea
-              ref="inputRef"
-              v-model="content"
-              class="editor-textarea"
-              :placeholder="copy.placeholder"
-              rows="10"
+        <div class="editor-well">
+          <textarea
+            ref="inputRef"
+            v-model="content"
+            class="editor-textarea"
+            :placeholder="copy.placeholder"
+            @keydown.ctrl.enter.prevent="persistAndClose"
+          />
+          <button
+            type="button"
+            class="tool-chip"
+            @click="pasteFromClipboard"
+          >
+            <v-icon
+              icon="mdi-content-paste"
+              size="16"
             />
-          </div>
-
-          <div class="editor-footer">
-            <div class="tools-row">
-              <div class="tools-grid">
-                <button
-                  v-for="text in quickTexts"
-                  :key="text"
-                  type="button"
-                  class="tool-chip"
-                  @click="insertAtCursor(text)"
-                >
-                  {{ text }}
-                </button>
-                <button
-                  type="button"
-                  class="tool-chip tool-chip-utility"
-                  @click="insertAtCursor('\n')"
-                >
-                  {{ copy.newline }}
-                </button>
-                <button
-                  type="button"
-                  class="tool-chip tool-chip-utility"
-                  @click="pasteFromClipboard"
-                >
-                  {{ copy.paste }}
-                </button>
-                <button
-                  type="button"
-                  class="tool-chip tool-chip-utility tool-chip-danger"
-                  @click="clearContent"
-                >
-                  {{ copy.clear }}
-                </button>
-              </div>
-
-              <div class="dialog-meta">
-                <span>{{ dirty ? copy.dirty : copy.synced }}</span>
-              </div>
-            </div>
-          </div>
+            <span>{{ copy.paste }}</span>
+          </button>
         </div>
       </v-card-text>
+
+      <div class="editor-footer">
+        <v-btn
+          class="dialog-btn-solid"
+          variant="flat"
+          title="Ctrl+Enter"
+          @click="persistAndClose"
+        >
+          {{ copy.save }}
+        </v-btn>
+      </div>
     </v-card>
   </v-dialog>
 </template>
@@ -110,9 +73,16 @@ import {
   buildSavePayload,
   createEditorState,
   EDITOR_COPY,
-  QUICK_INSERT_TEXTS,
 } from "@/utils/homeworkEditor";
 import { useDisplay } from "vuetify";
+
+// 解析 "matrix(a,b,c,d,tx,ty)" 的平移分量；transform 为空/无效时按 0,0 处理
+function parseTransform(transform) {
+  const matched = /matrix\([^)]*\)/.exec(transform || "");
+  if (!matched) return { x: 0, y: 0 };
+  const parts = matched[0].replace(/^matrix\(|\)$/g, "").split(",").map(Number);
+  return { x: parts[4] || 0, y: parts[5] || 0 };
+}
 
 export default {
   name: "HomeworkEditDialog",
@@ -129,14 +99,11 @@ export default {
   data() {
     return {
       ...createEditorState(),
-      quickTexts: QUICK_INSERT_TEXTS,
       copy: EDITOR_COPY,
+      drag: null,
     };
   },
   computed: {
-    isMobile() {
-      return this.mobile;
-    },
     dialogVisible: {
       get() {
         return this.modelValue;
@@ -150,31 +117,59 @@ export default {
     modelValue(value) {
       if (value) {
         Object.assign(this, createEditorState(this.initialContent));
-        this.$nextTick(() => this.$refs.inputRef?.focus());
+        this.$nextTick(() => {
+          // 清掉上次拖拽残留的内联 transform/transition，保证居中与进入过渡
+          const overlay = this.$refs.dialogCard?.$el?.closest(".v-overlay__content");
+          overlay?.style && (overlay.style.transform = "");
+          overlay?.style && (overlay.style.transition = "");
+          this.$refs.inputRef?.focus();
+        });
+      } else if (this.dirty) {
+        // ESC / 点击遮罩由 v-dialog 直接关窗、不经按钮：兜底落一版内容，未保存修改不丢
+        this.$emit("save", buildSavePayload(this.content));
+        this.dirty = false;
       }
     },
     content() {
       this.updateDirtyState();
     },
   },
+  beforeUnmount() {
+    this.endDrag();
+  },
   methods: {
+    // 拖拽移动对话框：基于初始 transform 累加位移（v-overlay 用 transform 定位居中，直接覆写会甩飞）
+    startDrag(event) {
+      if (this.mobile || event.button !== 0) return;
+      const overlay = this.$refs.dialogCard?.$el?.closest(".v-overlay__content");
+      if (!overlay) return;
+      const transform = window.getComputedStyle(overlay).transform || "";
+      const base = parseTransform(transform);
+      this.drag = { overlay, startX: event.clientX, startY: event.clientY, baseX: base.x, baseY: base.y };
+      overlay.style.transition = "none";
+      window.addEventListener("pointermove", this.onDrag);
+      window.addEventListener("pointerup", this.endDrag);
+      event.preventDefault();
+    },
+    onDrag(event) {
+      if (!this.drag) return;
+      const { overlay, startX, startY, baseX, baseY } = this.drag;
+      overlay.style.transform = `translate(${baseX + event.clientX - startX}px, ${baseY + event.clientY - startY}px)`;
+    },
+    endDrag() {
+      if (!this.drag) return;
+      this.drag = null;
+      window.removeEventListener("pointermove", this.onDrag);
+      window.removeEventListener("pointerup", this.endDrag);
+    },
     updateDirtyState() {
       this.dirty = this.content !== this.initialContent;
-    },
-    handleSaveAndClose() {
-      this.persistAndClose();
-    },
-    handleClose() {
-      this.persistAndClose();
     },
     // $emit 不返回 Promise：父组件的异步保存在后台继续，这里直接关窗（主页有「已同步到云端」提示兜底）
     persistAndClose() {
       this.$emit("save", buildSavePayload(this.content));
+      this.dirty = false; // 置 false 防止 watch(modelValue=false) 兜底再发一次
       this.dialogVisible = false;
-    },
-    clearContent() {
-      this.content = "";
-      this.$nextTick(() => this.$refs.inputRef?.focus());
     },
     async pasteFromClipboard() {
       try {
@@ -206,188 +201,167 @@ export default {
 </script>
 
 <style scoped>
+/* 大屏编辑器：整卡即编辑面 —— 紧凑头部 + 大字编辑井 + 底部操作条 */
 .editor-card {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   background: #171717 !important;
   border-color: rgba(255, 255, 255, 0.08) !important;
-  border-radius: 10px !important;
-  box-shadow: 0 22px 46px rgba(0, 0, 0, 0.26);
+  border-radius: 16px !important;
+  box-shadow: 0 24px 56px rgba(0, 0, 0, 0.32);
   animation: dialog-card-in 0.28s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .dialog-header {
   display: flex;
+  flex: 0 0 auto;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  padding: 16px 18px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  gap: 12px;
+  padding: 12px 12px 8px 20px;
+  cursor: grab;
+  user-select: none;
+}
+.dialog-header:active {
+  cursor: grabbing;
 }
 
 .dialog-title {
-  color: #f1f1f1;
-  font-size: 20px;
-  font-weight: 800;
-}
-
-.dialog-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.dialog-btn {
-  min-height: 34px;
-  border-radius: 7px !important;
-  font-weight: 800;
-}
-
-.dialog-btn-ghost {
-  color: rgba(255, 255, 255, 0.82) !important;
-}
-
-.dialog-btn-solid {
-  background: #f3f3f3 !important;
-  color: #121212 !important;
-}
-
-.dialog-body {
-  background: #171717;
-  padding: 14px !important;
-}
-
-.editor-column {
-  display: flex;
-  flex: 1 1 auto;
+  position: relative;
   min-width: 0;
-  flex-direction: column;
-}
-
-.panel-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 10px;
-  padding: 0 2px;
-}
-
-.panel-eyebrow {
-  color: rgba(255, 255, 255, 0.92);
-  font-size: 15px;
+  padding-left: 12px;
+  color: #f1f1f1;
+  font-size: 17px;
   font-weight: 800;
   line-height: 1.2;
 }
 
-.panel-badge {
-  flex: 0 0 auto;
-  padding: 6px 9px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.03);
-  color: rgba(255, 255, 255, 0.7);
-  font-size: 12px;
-  font-weight: 700;
+.dialog-title::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 4px;
+  height: 16px;
+  border-radius: 3px;
+  background: #aebfdd;
+  transform: translateY(-50%);
 }
 
-.editor-field {
-  border-radius: 9px;
+.dialog-close {
+  flex: 0 0 auto;
+  width: 32px !important;
+  height: 32px !important;
+  border-radius: 8px;
+  color: rgba(255, 255, 255, 0.6) !important;
+}
+
+.dialog-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 0 16px !important;
+}
+
+/* 编辑井：一整块浅凹面承载输入，粘贴浮在右下角 */
+.editor-well {
+  position: relative;
+  height: clamp(220px, 36vh, 380px);
+  padding: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  background: #1a1a1a;
+  transition: border-color 0.2s ease;
+}
+
+.editor-well:focus-within {
+  border-color: rgba(174, 191, 221, 0.28);
 }
 
 .editor-textarea {
   display: block;
-  position: relative;
-  z-index: 1;
   width: 100%;
-  height: clamp(280px, 42vh, 390px);
-  resize: vertical;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 9px;
-  padding: 14px 16px;
-  background: #1d1d1d;
+  height: 100%;
+  /* 底部留出浮层粘贴键的高度，末行不被遮 */
+  padding: 16px 18px 56px;
+  border: 0;
+  background: transparent;
   color: #f2f2f2;
   font: inherit;
-  line-height: 1.75;
+  /* 固定字号：编辑在近处进行，小于看板展示字号，不跟随缩放设置 */
+  font-size: 15px;
+  line-height: 1.8;
+  caret-color: #aebfdd;
   outline: none;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  resize: none;
 }
 
-.editor-textarea:focus {
-  border-color: rgba(196, 211, 238, 0.28);
-  box-shadow: 0 0 0 1px rgba(196, 211, 238, 0.14);
+.editor-textarea::placeholder {
+  color: rgba(255, 255, 255, 0.3);
+}
+
+/* 粘贴：编辑井右下角半透明浮层，不占底部操作区 */
+.tool-chip {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  background: rgba(23, 23, 23, 0.88);
+  backdrop-filter: blur(6px);
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 12.5px;
+  font-weight: 700;
+  transition: background-color 0.18s ease, border-color 0.18s ease;
+}
+
+.tool-chip:hover {
+  border-color: rgba(255, 255, 255, 0.22);
+  background: rgba(38, 38, 38, 0.92);
 }
 
 .editor-footer {
   display: flex;
+  flex: 0 0 auto;
   flex-direction: column;
-  gap: 8px;
-  margin-top: 10px;
-  padding: 10px 12px 0;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 10px 16px 16px;
   border-top: 1px solid rgba(255, 255, 255, 0.06);
 }
 
-.tools-row {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
+/* 通栏单一主操作：保存条 */
+.dialog-btn-solid {
+  width: 100%;
+  min-height: 44px;
+  border-radius: 10px !important;
+  background: #f3f3f3 !important;
+  color: #121212 !important;
+  font-size: 15px !important;
+  font-weight: 800;
+  letter-spacing: 0.02em;
 }
 
-.dialog-meta {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-  min-width: 0;
-  padding-top: 6px;
-  white-space: nowrap;
-  color: rgba(255, 255, 255, 0.5);
-  font-size: 12px;
-  text-align: right;
+/* ── 手机全屏：铺满整屏，编辑井撑开、操作沉底 ── */
+.editor-card-mobile {
+  height: 100%;
+  border-radius: 0 !important;
 }
 
-.tools-grid {
+.editor-card-mobile .dialog-body {
   display: flex;
-  flex-wrap: wrap;
-  gap: 7px;
-  align-items: center;
-  justify-content: flex-start;
-  min-width: 0;
+}
+
+.editor-card-mobile .editor-well {
   flex: 1 1 auto;
-}
-
-.tool-chip {
-  flex: 0 0 auto;
-  min-height: 36px;
-  padding: 0 12px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 7px;
-  background: #202020;
-  color: #ededed;
-  font-size: 13px;
-  font-weight: 700;
-  transition: background-color 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
-}
-
-.tool-chip:hover {
-  transform: translateY(-1px);
-  border-color: rgba(255, 255, 255, 0.14);
-  background: #262626;
-}
-
-.tool-chip-danger {
-  color: #ffb7b7;
-}
-
-.tool-chip-utility {
-  border-color: rgba(160, 186, 230, 0.18);
-  background: linear-gradient(180deg, #242832, #1d2028);
-  color: rgba(235, 242, 255, 0.96);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
-}
-
-.tool-chip-utility:hover {
-  border-color: rgba(182, 206, 247, 0.3);
-  background: linear-gradient(180deg, #2a3040, #222734);
+  height: auto;
+  min-height: 220px;
 }
 
 @keyframes dialog-card-in {
@@ -404,43 +378,6 @@ export default {
 @media (prefers-reduced-motion: reduce) {
   .editor-card {
     animation: none;
-  }
-}
-
-@media (max-width: 900px) {
-  .dialog-header {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .dialog-actions {
-    justify-content: flex-end;
-  }
-
-  .editor-footer {
-    gap: 12px;
-  }
-
-  .tools-row {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .tools-grid,
-  .dialog-meta {
-    width: 100%;
-  }
-
-  .dialog-meta {
-    align-items: flex-start;
-    justify-content: flex-start;
-    padding-top: 0;
-    gap: 4px;
-    text-align: left;
-  }
-
-  .editor-textarea {
-    height: 250px;
   }
 }
 </style>

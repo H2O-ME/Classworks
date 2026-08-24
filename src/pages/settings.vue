@@ -214,10 +214,20 @@
       </section>
     </div>
   </div>
+
+  <!-- 密钥校验结果：一次性浮动提示，不占卡片布局 -->
+  <AppToast
+    :show="secretToastVisible"
+    :message="secretToastText"
+    icon="mdi-check-circle-outline"
+    @dismiss="secretToastVisible = false"
+  />
 </template>
 
 <script>
 import { setSyncEnabled, setSyncSecret, validateSyncSecret, watchSyncState } from "@/utils/sync";
+
+const FAIL_TEXT = { invalid: "密钥不正确", server: "云端服务异常", network: "无法连接云端" };
 
 export default {
   name: "SettingsPage",
@@ -230,6 +240,8 @@ export default {
       secretValid: false,
       validationState: "idle",
       validationText: "输入密钥后验证云端连接",
+      secretToastVisible: false,
+      secretToastText: "",
       unsubscribeSyncState: null,
       validationTimer: null,
     };
@@ -243,6 +255,10 @@ export default {
       this.hasSecret = !!secret;
       if (!secret) this.secretValid = false;
     });
+    // 已有已存密钥 → 自动校验，重开页面也能恢复"已连接"而不是停在"待校验"
+    this.$nextTick(() => {
+      if (this.hasSecret) this.validateSecret(this.secretInput);
+    });
   },
   beforeUnmount() {
     document.title = this.previousTitle;
@@ -250,10 +266,14 @@ export default {
     this.unsubscribeSyncState?.();
   },
   methods: {
+    // 成功反馈走公共 AppToast：常驻长文案会把连接密钥卡片撑高，双栏 grid 拉伸导致布局跳动
+    showSecretToast(text) {
+      this.secretToastText = text;
+      this.secretToastVisible = true;
+    },
     toggleSync() {
       const next = !this.syncEnabled;
       setSyncEnabled(next);
-      this.syncEnabled = next;
       if (next && !this.secretInput.trim()) this.$nextTick(() => this.$refs.syncSecret?.focus());
     },
     handleSecretInput() {
@@ -269,35 +289,42 @@ export default {
       this.validationTimer = setTimeout(() => this.validateSecret(this.secretInput), 600);
     },
     async validateSecret(secret) {
-      this.applyValidationResult(await validateSyncSecret(secret));
+      const result = await validateSyncSecret(secret);
+      // 自动校验通过即持久化（输入即保存），否则关闭重开密钥不保留
+      if (result.ok) this.confirmSaved(secret);
+      this.applyValidationResult(result, "密钥正确，云端连接可用");
     },
     applyValidationResult(result, okText = "密钥正确，云端连接可用") {
-      this.validationState = result.ok ? "valid" : result.reason;
-      this.validationText = result.ok
-        ? okText
-        : result.reason === "invalid"
-          ? "密钥不正确"
-          : result.reason === "server"
-            ? "云端服务异常"
-            : result.reason === "network"
-              ? "无法连接云端"
-              : "云端接口返回异常";
       this.secretValid = result.ok;
+      // 成功：toast 显示完整结果，内联只留短文案，避免长文案撑高卡片
+      // 失败：内联保留具体原因（密钥/服务/网络），就地可见
+      if (result.ok) {
+        this.validationState = "valid";
+        this.validationText = result.okText || "密钥有效";
+        this.showSecretToast(okText);
+      } else {
+        this.validationState = result.reason;
+        this.validationText = FAIL_TEXT[result.reason] || "云端接口返回异常";
+      }
+    },
+    // 校验通过后落盘：写密钥、标记已存；同步开关状态由开关/按钮独立控制
+    confirmSaved(secret) {
+      setSyncSecret(secret);
+      this.secretInput = secret;
+      this.hasSecret = true;
+      this.secretValid = true;
     },
     async validateAndSave() {
       const secret = this.secretInput.trim();
       if (!secret) return;
+      if (this.validationTimer) clearTimeout(this.validationTimer);
       this.validationState = "checking";
       this.validationText = "正在校验密钥…";
       const result = await validateSyncSecret(secret);
       if (!result.ok) { this.applyValidationResult(result); return; }
-      setSyncSecret(secret);
+      this.confirmSaved(secret);
       setSyncEnabled(true);
-      this.secretInput = secret;
-      this.hasSecret = true;
-      this.secretValid = true;
-      this.validationState = "valid";
-      this.validationText = "密钥正确，云端连接已启用";
+      this.applyValidationResult({ ok: true, okText: "已保存" }, "密钥正确，云端连接已启用");
     },
     clearSecret() {
       setSyncEnabled(false);
@@ -314,37 +341,7 @@ export default {
 </script>
 
 <style scoped>
-/* ── 顶栏（与主页同构）── */
-.board-app-bar {
-  backdrop-filter: blur(12px);
-  background: rgba(18, 18, 18, 0.96) !important;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.app-bar-inner {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 20px;
-  width: 100%;
-  max-width: 1680px;
-  margin: 0 auto;
-  padding: 0 22px 0 42px;
-}
-
-.app-bar-title {
-  color: #f5f5f5;
-  font-size: 20px;
-  font-weight: 700;
-  line-height: 1.2;
-}
-
-.app-bar-actions {
-  display: inline-flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 10px;
-}
+/* 顶栏共用样式（board-app-bar / app-bar-*）在 src/styles/index.scss */
 
 .nav-button {
   display: inline-flex;
@@ -375,7 +372,7 @@ export default {
 
 /* ── 滚动区：占满剩余视口，内部滚动，不出现右侧滚动条 ── */
 .settings-scroll {
-  height: calc(100dvh - 64px);
+  height: calc(100dvh - 64px - var(--sat, 0px));
   overflow-y: auto;
   overflow-x: clip;
   scrollbar-width: none;
@@ -401,11 +398,13 @@ export default {
 }
 
 /* margin:auto 让内容块在不足一屏时上下均分留白，超出时归零不裁切 */
+/* align-items:start：卡片按自身内容定高，避免内容少的卡片被等高拉伸出大片空白 */
 .settings-grid {
   display: grid;
   grid-template-columns: 1fr;
   gap: 16px;
   margin-top: auto;
+  align-items: start;
 }
 
 .panel-policy {
@@ -715,14 +714,6 @@ export default {
 
 /* ── 手机：密钥行纵向堆叠 ── */
 @media (max-width: 700px) {
-  .app-bar-inner {
-    padding: 0 14px 0 20px;
-  }
-
-  .app-bar-title {
-    font-size: 18px;
-  }
-
   .key-row {
     flex-direction: column;
   }

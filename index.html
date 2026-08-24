@@ -3,8 +3,49 @@
   <head>
     <meta charset="UTF-8">
     <link rel="icon" href="/favicon.ico">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="mobile-web-app-capable" content="yes">
     <title>Classworks 作业板</title>
+    <!-- 内联开屏：外链 CSS 到达前先铺深色底防白屏闪烁；.boot-splash 在 Vue 挂载时被整体替换 -->
+    <style>
+      html {
+        background: #111111;
+        color-scheme: dark;
+      }
+
+      .boot-splash {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #111111;
+      }
+
+      .boot-splash::after {
+        content: "";
+        width: 34px;
+        height: 34px;
+        border: 3px solid rgba(255, 255, 255, 0.12);
+        border-top-color: rgba(174, 191, 221, 0.9);
+        border-radius: 50%;
+        animation: boot-spin 0.8s linear infinite;
+      }
+
+      @keyframes boot-spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .boot-splash::after {
+          animation: none;
+        }
+      }
+    </style>
 
     <meta name="description" content="基于 Classworks 开源项目修改的班级作业板工具，支持记录、查看并管理作业。" />
     <meta name="keywords" content="Classworks,作业板,班级大屏,作业管理,开源分支,THW" />
@@ -32,7 +73,12 @@
   </head>
   <body>
 
-    <div id="app"></div>
+    <div id="app">
+      <div
+        class="boot-splash"
+        aria-hidden="true"
+      />
+    </div>
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>

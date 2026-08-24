@@ -1,49 +1,18 @@
 // 脏集增量同步协议 v3 自检（无依赖，node 直接运行：node scripts/sync-check.mjs）
 // 覆盖 7 个核心场景：v1/v2→v3 转换、单科推送不碰他科、清空(墓碑)传播、
 // 双端并发同科后推者赢、服务端竞态丢写自愈、空设备只拉不推、整日回退标脏并集。
-// 说明：sync.js/storage.js 依赖 idb，node 下无法 import，这里按同一份协议
-// 复刻纯逻辑做黑盒断言，与 src/utils/sync.js / edge-functions/kv/homework.js 对齐。
+// 说明：协议纯函数（normalizeCloudDoc 等）直接 import 真实现；sync.js/storage.js 依赖 idb
+// 无法在 node 里 import，推/拉编排仍按同一份协议复刻逻辑做黑盒断言。
 import assert from "node:assert/strict";
-import { classifySyncResponse } from "../src/utils/syncClassify.js";
+import { classifySyncResponse, isPlainObject, normalizeCloudDoc } from "../src/utils/syncProtocol.js";
 
-function isPlainObject(value) {
-  return value !== null && typeof value === "object" && !Array.isArray(value)
-    && (Object.getPrototypeOf(value) === Object.prototype || Object.getPrototypeOf(value) === null);
-}
-
-// ── 与边缘函数 toV3 / vite mock toV3 一致：任意版本 KV 文档 → v3 entries ──
-function toV3(raw) {
-  const v3 = { v: 3, entries: {} };
-  if (!isPlainObject(raw)) return v3;
-  if (raw.v === 3 && isPlainObject(raw.entries)) return { v: 3, entries: raw.entries };
-  if (isPlainObject(raw.dates)) {
-    for (const [date, day] of Object.entries(raw.dates)) {
-      if (!isPlainObject(day)) continue;
-      const homework = isPlainObject(day.homework) ? day.homework : {};
-      for (const [subject, cell] of Object.entries(homework)) {
-        if (isPlainObject(cell)) {
-          v3.entries[`${date}|${subject}`] = { content: cell.content || "", options: isPlainObject(cell.options) ? cell.options : {} };
-        }
-      }
-      const subjects = isPlainObject(day.subjects) ? day.subjects : {};
-      for (const [subject, cell] of Object.entries(subjects)) {
-        if (isPlainObject(cell)) {
-          // v2 的 del:true（墓碑）→ 空条目，保住"曾写过"语义
-          v3.entries[`${date}|${subject}`] = { content: cell.del === true ? "" : (cell.content || ""), options: {} };
-        }
-      }
-    }
-  }
-  return v3;
-}
-
-// ── 服务端 PUT：逐条覆盖 changes，报文外条目一概不碰，返回合并后 v3 文档 ──
+// ── 服务端 PUT：逐条覆盖 changes，报文外条目一概不碰，返回合并后文档 ──
 function serverPut(currentDoc, changes) {
-  const v3 = toV3(currentDoc);
+  const entries = { ...normalizeCloudDoc(currentDoc).entries };
   for (const [key, cell] of Object.entries(changes)) {
-    v3.entries[key] = { content: String(cell.content), options: isPlainObject(cell.options) ? cell.options : {} };
+    entries[key] = { content: String(cell.content), options: isPlainObject(cell.options) ? cell.options : {} };
   }
-  return v3;
+  return { entries };
 }
 
 // ── 客户端应用云端到本地：local 为 { <date>: { homework: { <学科>: {content,options} } } } ──
@@ -77,7 +46,7 @@ function applyCloud(local, cloudEntries, skipKeys) {
 
 // ── 场景 1：空设备只拉不推 ──
 {
-  const cloud = toV3({ dates: { 20260821: { homework: { 数学: { content: "P29" }, 物理: { content: "" } } } } });
+  const cloud = normalizeCloudDoc({ dates: { 20260821: { homework: { 数学: { content: "P29" }, 物理: { content: "" } } } } });
   const local = {};
   const { local: after, pulledDates } = applyCloud(local, cloud.entries, []);
   assert.deepEqual(pulledDates, ["20260821"]);
@@ -90,7 +59,7 @@ function applyCloud(local, cloudEntries, skipKeys) {
 
 // ── 场景 2：单科推送只取该科，不碰他科 ──
 {
-  const current = toV3({ dates: { 20260821: { homework: { 数学: { content: "旧", options: {} }, 物理: { content: "物理题", options: {} } } } } });
+  const current = normalizeCloudDoc({ dates: { 20260821: { homework: { 数学: { content: "旧", options: {} }, 物理: { content: "物理题", options: {} } } } } });
   const after = serverPut(current, { "20260821|数学": { content: "新数学", options: {} } });
   assert.equal(after.entries["20260821|数学"].content, "新数学");
   assert.equal(after.entries["20260821|物理"].content, "物理题"); // 报文外的条目不碰
@@ -135,12 +104,12 @@ function applyCloud(local, cloudEntries, skipKeys) {
 // ── 场景 6：v1/v2 → v3 迁移 ──
 {
   const v1 = { dates: { 20260821: { homework: { 数学: { content: "P1", options: {} }, 物理: { content: "", options: {} } } } } };
-  const v3 = toV3(v1);
+  const v3 = normalizeCloudDoc(v1);
   assert.equal(v3.entries["20260821|数学"].content, "P1");
   assert.equal(v3.entries["20260821|物理"].content, ""); // 曾出现过的空内容保留成条目（"曾写过"语义）
   assert.equal(Object.keys(v3.entries).length, 2);
   const v2 = { dates: { 20260821: { subjects: { 化学: { content: "C", del: false }, 生物: { content: "B", del: true } } } } };
-  const v3b = toV3(v2);
+  const v3b = normalizeCloudDoc(v2);
   assert.equal(v3b.entries["20260821|化学"].content, "C");
   assert.equal(v3b.entries["20260821|生物"].content, ""); // del:true → 空条目墓碑
   console.log("✓ 场景6 v1/v2 → v3 迁移");

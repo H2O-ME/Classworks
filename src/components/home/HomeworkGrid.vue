@@ -15,8 +15,13 @@
               v-for="(item, itemIndex) in column"
               :key="item.key"
               class="homework-card"
+              role="button"
+              tabindex="0"
+              :aria-label="`编辑${item.name}作业`"
               :style="{ '--card-delay': `${columnIndex * 56 + itemIndex * 42}ms` }"
               @click="handleCardClick(item.key)"
+              @keydown.enter="handleCardClick(item.key)"
+              @keydown.space.prevent="handleCardClick(item.key)"
             >
               <header class="homework-card-header">
                 <div class="homework-card-subject">
@@ -49,48 +54,26 @@
 
     <section
       v-if="unusedSubjects.length"
-      class="subject-quick-add"
+      class="subject-add-tiles"
+      aria-label="添加学科作业"
     >
-      <div class="subject-quick-add-surface">
-        <div class="subject-quick-add-header">
-          <div class="subject-quick-add-mark">
-            <v-icon
-              icon="mdi-plus"
-              size="16"
-            />
-          </div>
-          <div class="subject-quick-add-title">
-            继续添加
-          </div>
-          <div class="subject-quick-add-count">
-            {{ unusedSubjects.length }} 科
-          </div>
-        </div>
-
-        <div class="subject-quick-add-list">
-          <button
-            v-for="(subject, index) in unusedSubjects"
-            :key="subject.name"
-            type="button"
-            class="subject-quick-add-button"
-            :style="{ '--quick-delay': `${index * 34}ms` }"
-            @click="handleCardClick(subject.name)"
-          >
-            <span>{{ subject.name }}</span>
-            <v-icon
-              icon="mdi-plus"
-              size="15"
-            />
-          </button>
-        </div>
-      </div>
+      <SubjectAddCard
+        v-for="(subject, index) in unusedSubjects"
+        :key="subject.name"
+        :subject="subject"
+        :style="{ '--tile-delay': `${index * 40}ms` }"
+        @add="handleCardClick(subject.name)"
+      />
     </section>
   </div>
 </template>
 
 <script>
+import SubjectAddCard from "./SubjectAddCard.vue";
+
 export default {
   name: "HomeworkGrid",
+  components: { SubjectAddCard },
   props: {
     sortedItems: { type: Array, required: true },
     unusedSubjects: { type: Array, required: true },
@@ -214,6 +197,12 @@ export default {
   box-shadow: 0 14px 26px rgba(0, 0, 0, 0.14);
 }
 
+/* 键盘聚焦可见反馈：沿用蓝灰主色，不破坏卡片形态 */
+.homework-card:focus-visible {
+  outline: 2px solid rgba(174, 191, 221, 0.6);
+  outline-offset: 1px;
+}
+
 .content-updated .content-line {
   animation: content-line-update 0.9s ease-out;
 }
@@ -260,90 +249,11 @@ export default {
   white-space: pre-wrap;
 }
 
-.subject-quick-add {
-  position: relative;
-  z-index: 1;
-  margin-top: 8px;
-  animation: section-enter 0.38s ease;
-}
-
-.subject-quick-add-surface {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 14px;
-  align-items: center;
-  padding: 14px 16px;
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  border-radius: 9px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.028), rgba(255, 255, 255, 0.012)), rgba(21, 21, 21, 0.95);
-  backdrop-filter: blur(12px);
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.14);
-}
-
-.subject-quick-add-header {
+/* 独立添加入口：单行幽灵胶囊，不进作业卡网格，明显更小更弱 */
+.subject-add-tiles {
   display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 210px;
-}
-
-.subject-quick-add-mark {
-  display: inline-flex;
-  width: 32px;
-  height: 32px;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 7px;
-  background: #202020;
-  color: rgba(255, 255, 255, 0.72);
-}
-
-.subject-quick-add-title {
-  color: #f1f1f1;
-  font-size: 17px;
-  font-weight: 700;
-  line-height: 1.2;
-}
-
-.subject-quick-add-count {
-  margin-left: auto;
-  color: rgba(255, 255, 255, 0.58);
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.subject-quick-add-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
-  gap: 9px;
-}
-
-.subject-quick-add-button {
-  display: inline-flex;
-  width: 100%;
-  min-width: 0;
-  min-height: 46px;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 0 14px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 7px;
-  background: #1f1f1f;
-  color: #ededed;
-  font-weight: 700;
-  opacity: 0;
-  transform: translateY(8px);
-  animation: quick-button-enter 0.32s ease forwards;
-  animation-delay: var(--quick-delay, 0ms);
-  transition: transform 0.18s ease, border-color 0.18s ease, background-color 0.18s ease;
-}
-
-.subject-quick-add-button:hover {
-  transform: translateY(-1px);
-  border-color: rgba(255, 255, 255, 0.13);
-  background: #262626;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 @keyframes card-enter {
@@ -351,20 +261,8 @@ export default {
   to { opacity: 1; transform: translateY(0); }
 }
 
-@keyframes section-enter {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-@keyframes quick-button-enter {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
 @media (prefers-reduced-motion: reduce) {
   .homework-card,
-  .subject-quick-add,
-  .subject-quick-add-button,
   .content-updated .content-line {
     animation: none;
     opacity: 1;
@@ -372,25 +270,36 @@ export default {
   }
 }
 
-@media (max-width: 980px) {
-  .subject-quick-add-surface {
-    grid-template-columns: 1fr;
-  }
-
-  .subject-quick-add-header {
-    min-width: 0;
-  }
-}
-
 @media (max-width: 760px) {
   .board-section {
-    padding-bottom: 104px;
+    padding-bottom: calc(104px + var(--sab, 0px));
   }
 
   .masonry-board.columns-2,
   .masonry-board.columns-3,
   .masonry-board.columns-4 {
     grid-template-columns: 1fr;
+  }
+
+  .masonry-board {
+    gap: 12px;
+  }
+
+  .homework-card {
+    padding: 14px 14px 12px;
+  }
+
+  .homework-card-subject {
+    font-size: 14.5px;
+  }
+
+  .homework-card-content {
+    gap: 8px;
+    line-height: 1.65;
+  }
+
+  .subject-add-tiles {
+    gap: 6px;
   }
 }
 </style>

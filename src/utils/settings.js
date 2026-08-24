@@ -1,12 +1,8 @@
 const SETTINGS_STORAGE_KEY = "classworks:settings";
-const SETTINGS_EVENT = "classworks:settings-change";
 
 const defaultConfig = {
   display: {
     fontSizeLevel: 0,
-  },
-  font: {
-    family: "system",
   },
 };
 
@@ -41,35 +37,6 @@ export function setSetting(key, value) {
 
   config[keys[keys.length - 1]] = cloneValue(value);
   persistUserConfig();
-  emitSettingsChange(key, value);
-}
-
-export function watchSettings(callback) {
-  if (typeof window === "undefined") {
-    callback(getMergedConfig());
-    return () => {};
-  }
-
-  const notify = (event) => {
-    if (event?.type === "storage" && event.key && event.key !== SETTINGS_STORAGE_KEY) {
-      return;
-    }
-
-    if (event?.type === "storage") {
-      userConfig = loadUserConfig();
-    }
-
-    callback(getMergedConfig(), event);
-  };
-
-  window.addEventListener(SETTINGS_EVENT, notify);
-  window.addEventListener("storage", notify);
-  callback(getMergedConfig());
-
-  return () => {
-    window.removeEventListener(SETTINGS_EVENT, notify);
-    window.removeEventListener("storage", notify);
-  };
 }
 
 function loadUserConfig() {
@@ -100,22 +67,6 @@ function persistUserConfig() {
 
 function getMergedConfig() {
   return deepMerge(defaultConfig, userConfig);
-}
-
-function emitSettingsChange(key, value) {
-  if (typeof window === "undefined") {
-    return;
-  }
-
-  window.dispatchEvent(
-    new window.CustomEvent(SETTINGS_EVENT, {
-      detail: {
-        key,
-        value: cloneValue(value),
-        settings: getMergedConfig(),
-      },
-    }),
-  );
 }
 
 function sanitizeConfig(config) {

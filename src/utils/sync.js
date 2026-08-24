@@ -1,11 +1,7 @@
 import { addDirty, getDirty, setDirty, getKeysByPrefix, getData, setData, snapshotDate, listSnapshots, restoreSnapshot } from "./storage";
-import { classifySyncResponse } from "./syncClassify";
+import { classifySyncResponse, isPlainObject, normalizeCloudDoc, parseEntryKey } from "./syncProtocol";
 
-// 脏集增量同步协议（v3）：
-// - 同步单位是「日期|学科」条目（如 "20260821|数学"），"天"不参与同步
-// - 只有脏集里的条目会被上传；没编辑过的学科永远不推（空设备脏集为空，物理上推不出东西）
-// - 拉取后以云端为准覆盖本地，但跳过脏集中的条目；云端条目存在且内容为空 = 被有意清空（墓碑）
-// - 时间戳不参与任何合并；时钟不进协议
+// 脏集增量同步协议 v3（纯函数在 syncProtocol.js，协议说明见该文件）：
 const SYNC_INTERVAL_MS = 60 * 1000;
 const SYNC_ENDPOINT = "/kv/homework";
 const SYNC_SECRET_KEY = "classworks_sync_secret";
@@ -19,57 +15,6 @@ let timerId = null;
 let saveDebounceId = null;
 let syncChain = Promise.resolve();
 let unbindVisibility = null;
-
-function isPlainObject(value) {
-  return value !== null && typeof value === "object" && !Array.isArray(value)
-    && (Object.getPrototypeOf(value) === Object.prototype || Object.getPrototypeOf(value) === null);
-}
-
-// 解析 "日期|学科" 键，返回 { date, subject }；非法键返回 null
-function parseEntryKey(key) {
-  const [date, ...rest] = String(key).split("|");
-  const subject = rest.join("|");
-  return date && subject ? { date, subject } : null;
-}
-
-// 云端文档归一化：任意 v1/v2/v3 结构 → v3 entries
-function normalizeCloudDoc(raw) {
-  const result = { entries: {} };
-  if (!isPlainObject(raw)) return result;
-  if (raw.empty === true) return result;
-
-  if (isPlainObject(raw.entries)) {
-    result.entries = raw.entries;
-    return result;
-  }
-
-  // 旧版按日期命名空间（v1：dates.<date>.homework；v2：dates.<date>.subjects，带 del）
-  if (isPlainObject(raw.dates)) {
-    for (const [date, day] of Object.entries(raw.dates)) {
-      if (!isPlainObject(day)) continue;
-      const homework = isPlainObject(day.homework) ? day.homework : {};
-      for (const [subject, cell] of Object.entries(homework)) {
-        if (isPlainObject(cell)) {
-          result.entries[`${date}|${subject}`] = {
-            content: cell.content || "",
-            options: isPlainObject(cell.options) ? cell.options : {},
-          };
-        }
-      }
-      const subjects = isPlainObject(day.subjects) ? day.subjects : {};
-      for (const [subject, cell] of Object.entries(subjects)) {
-        if (isPlainObject(cell)) {
-          // v2 的 del:true（墓碑）→ 空内容条目，保住"曾写过"语义
-          result.entries[`${date}|${subject}`] = {
-            content: cell.del === true ? "" : (cell.content || ""),
-            options: {},
-          };
-        }
-      }
-    }
-  }
-  return result;
-}
 
 export function getSyncSecret() {
   return localStorage.getItem(SYNC_SECRET_KEY) || "";
@@ -229,10 +174,14 @@ function cloudOptionsFor(cloudCell, cloudEmpty) {
   return cloudEmpty ? {} : (isPlainObject(cloudCell.options) ? cloudCell.options : {});
 }
 
-// 挂起函数：推/拉核对在 runSyncInternal 里统一编排，这里只做首启迁移
-async function runSyncWithMigrate(options) {
-  await migrateFirstRun().catch(() => false);
-  return runSyncInternal(options);
+// 同步入口：串行链，保存与同步互斥；首启迁移（本地无 dirty 键时单向 diff 标脏）后正常同步
+export function syncNow(options = {}) {
+  const task = syncChain.then(async () => {
+    await migrateFirstRun().catch(() => false);
+    return runSyncInternal(options);
+  });
+  syncChain = task.catch(() => {});
+  return task;
 }
 
 // 真正执行推+拉+核对+应用
@@ -242,7 +191,7 @@ async function runSyncInternal(options) {
   const secret = getSyncSecret();
 
   // ── 1. 推（只推脏集） ──
-  let dirty = await getDirty();
+  const dirty = await getDirty();
   const pushedKeys = [];
   if (dirty.length) {
     const changes = await readDirtyChanges(dirty);
@@ -269,9 +218,11 @@ async function runSyncInternal(options) {
         return { status: "error", error };
       }
     }
-    // 全部落库才清空脏集；否则缺席键已重新标脏，留给下一次同步（服务端仍可能丢写）
-    if (allPersisted) await setDirty([]);
-    dirty = await getDirty();
+    // 全部落库才清脏；只摘除本次已推的键——两次网络往返的窗口期内用户新编辑入脏的键不能被连带抹掉
+    if (allPersisted) {
+      const pushed = new Set(Object.keys(changes));
+      await setDirty((await getDirty()).filter((key) => !pushed.has(key)));
+    }
   }
 
   // ── 2. 拉全量 ──
@@ -353,13 +304,6 @@ async function migrateFirstRun() {
   return true;
 }
 
-// 同步入口：串行链，保存与同步互斥（首启迁移后正常同步）
-export function syncNow(options = {}) {
-  const task = syncChain.then(() => runSyncWithMigrate(options));
-  syncChain = task.catch(() => {});
-  return task;
-}
-
 export function scheduleSyncNow(options = {}) {
   if (!isSyncActive()) return;
   clearTimeout(saveDebounceId);
@@ -370,22 +314,18 @@ export function scheduleSyncNow(options = {}) {
   }, 800);
 }
 
-export function startPeriodicSync({ onPulled, onPushed } = {}) {
+export function startPeriodicSync(options = {}) {
   stopPeriodicSync();
   if (!isSyncActive()) return;
-  runSyncWithMigrate({ onPulled, onPushed }).catch((error) => console.warn("首次同步失败:", error));
-  timerId = setInterval(() => {
-    runSyncWithMigrate({ onPulled, onPushed }).catch((error) => console.warn("定时同步失败:", error));
-  }, SYNC_INTERVAL_MS);
+  // 走 syncChain 串行链（与保存触发的同步互斥，避免按日期读改写交错）；options 原样透传，含 onConflict
+  const run = () => syncNow(options).catch((error) => console.warn("周期同步失败:", error));
+  run();
+  timerId = setInterval(run, SYNC_INTERVAL_MS);
 
   const handleVisibility = () => {
-    if (document.visibilityState === "visible") {
-      runSyncWithMigrate({ onPulled, onPushed }).catch((error) => console.warn("回到页面同步失败:", error));
-    }
+    if (document.visibilityState === "visible") run();
   };
-  const handleFocus = () => {
-    runSyncWithMigrate({ onPulled, onPushed }).catch((error) => console.warn("窗口聚焦同步失败:", error));
-  };
+  const handleFocus = () => run();
   document.addEventListener("visibilitychange", handleVisibility);
   window.addEventListener("focus", handleFocus);
   unbindVisibility = () => {
@@ -411,7 +351,7 @@ export async function rollbackToLatest(date, options) {
   return rollbackDate(date, latest, options);
 }
 
-export async function rollbackDate(date, ts, { onPushed } = {}) {
+async function rollbackDate(date, ts, { onPushed } = {}) {
   // 标脏取恢复前后学科并集：被回退掉的学科推空条目（墓碑），否则云端下次拉取会把它们复活
   const before = await getData(`classworks-data-${date}`);
   const beforeSubjects = isPlainObject(before?.homework) ? Object.keys(before.homework) : [];

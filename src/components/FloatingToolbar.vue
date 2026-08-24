@@ -28,59 +28,6 @@
         />
 
         <v-menu
-          v-model="fontMenuOpen"
-          :close-on-content-click="false"
-          location="top center"
-          width="320"
-        >
-          <template #activator="{ props }">
-            <v-btn
-              icon="mdi-format-font"
-              variant="text"
-              :title="`字体：${currentFontName}`"
-              v-bind="props"
-            />
-          </template>
-
-          <div class="font-panel">
-            <div class="font-panel-header">
-              <div class="font-panel-title">
-                选择字体
-              </div>
-            </div>
-
-            <div
-              v-for="(fonts, category) in fontCategories"
-              :key="category"
-              class="font-category"
-            >
-              <div class="category-label">
-                {{ getCategoryLabel(category) }}
-              </div>
-              <div class="font-grid">
-                <button
-                  v-for="font in fonts"
-                  :key="font.id"
-                  type="button"
-                  class="font-card"
-                  :class="{ 'font-card-active': currentFontId === font.id }"
-                  @click="changeFont(font.id)"
-                >
-                  <span
-                    class="font-card-preview"
-                    :style="{ fontFamily: font.fontFamily }"
-                  >Aa</span>
-                  <span class="font-card-copy">
-                    <span class="font-card-name">{{ font.name }}</span>
-                    <span class="font-card-desc">{{ font.description }}</span>
-                  </span>
-                </button>
-              </div>
-            </div>
-          </div>
-        </v-menu>
-
-        <v-menu
           :close-on-content-click="false"
           location="top"
         >
@@ -99,7 +46,7 @@
             <v-date-picker
               :model-value="selectedDate"
               color="primary"
-              @update:model-value="handleDateSelect"
+              @update:model-value="$emit('date-select', $event)"
             />
           </v-card>
         </v-menu>
@@ -131,15 +78,6 @@
 </template>
 
 <script>
-import {
-  getCurrentFont,
-  getFontsByCategory,
-  onFontChange,
-  setFont,
-} from "@/utils/fonts";
-
-const FONT_CATEGORY_LABELS = { system: "系统", modern: "现代", serif: "衬线", mono: "等宽" };
-
 export default {
   name: "FloatingToolbar",
   props: {
@@ -149,50 +87,6 @@ export default {
     currentFontSize: { type: Number, default: 16 },
   },
   emits: ["prev-day", "next-day", "zoom", "date-select", "copy-to-today"],
-  data() {
-    return {
-      fontMenuOpen: false,
-      fontCategories: {},
-      currentFontId: "system",
-      currentFontName: "系统默认",
-      unsubscribeFontChange: null,
-    };
-  },
-  created() {
-    const font = getCurrentFont();
-    this.syncFontState({
-      currentFontId: font.id,
-      currentFontName: font.name,
-      fontCategories: getFontsByCategory(),
-    });
-    this.unsubscribeFontChange = onFontChange((font) => {
-      this.syncFontState({
-        currentFontId: font.id,
-        currentFontName: font.name,
-        fontCategories: getFontsByCategory(),
-      });
-    });
-  },
-  beforeUnmount() {
-    this.unsubscribeFontChange?.();
-  },
-  methods: {
-    syncFontState(state) {
-      this.fontCategories = state.fontCategories;
-      this.currentFontId = state.currentFontId;
-      this.currentFontName = state.currentFontName;
-    },
-    handleDateSelect(date) {
-      this.$emit("date-select", date);
-    },
-    getCategoryLabel(category) {
-      return FONT_CATEGORY_LABELS[category] || category;
-    },
-    async changeFont(fontId) {
-      await setFont(fontId);
-      this.fontMenuOpen = false;
-    },
-  },
 };
 </script>
 
@@ -209,7 +103,7 @@ export default {
 .floating-toolbar {
   position: absolute;
   left: 50%;
-  bottom: 18px;
+  bottom: calc(18px + var(--sab, 0px));
   transform: translateX(-50%);
   padding: 10px 12px;
   border-radius: 8px !important;
@@ -256,7 +150,7 @@ export default {
 .side-action-btn {
   position: absolute;
   right: 20px;
-  bottom: 20px;
+  bottom: calc(20px + var(--sab, 0px));
   pointer-events: auto;
   border: 1px solid rgba(255, 255, 255, 0.08);
   color: #f1f1f1 !important;
@@ -271,93 +165,6 @@ export default {
   overflow: hidden;
   border-radius: 8px !important;
   background: #181818 !important;
-}
-
-.font-panel {
-  padding: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 8px;
-  background: #181818;
-  box-shadow: 0 16px 30px rgba(0, 0, 0, 0.18);
-}
-
-.font-panel-header {
-  margin-bottom: 12px;
-}
-
-.font-panel-title {
-  color: #f0f0f0;
-  font-size: 15px;
-  font-weight: 700;
-}
-
-.font-category + .font-category {
-  margin-top: 10px;
-}
-
-.category-label {
-  margin-bottom: 8px;
-  color: rgba(255, 255, 255, 0.56);
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.font-grid {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.font-card {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  min-width: 0;
-  min-height: 42px;
-  padding: 7px 10px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 6px;
-  background: #202020;
-  color: #ededed;
-  text-align: left;
-  transition: border-color 0.18s ease, background-color 0.18s ease, transform 0.18s ease;
-}
-
-.font-card:hover {
-  transform: translateY(-1px);
-  border-color: rgba(255, 255, 255, 0.14);
-  background: #262626;
-}
-
-.font-card-active {
-  border-color: rgba(176, 192, 222, 0.38);
-  background: #262a31;
-}
-
-.font-card-preview {
-  width: 30px;
-  flex: 0 0 auto;
-  color: #f4f4f4;
-  font-size: 16px;
-  font-weight: 700;
-}
-
-.font-card-copy {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-}
-
-.font-card-name {
-  color: #f1f1f1;
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.font-card-desc {
-  color: rgba(255, 255, 255, 0.48);
-  font-size: 11px;
 }
 
 @keyframes toolbar-rise {
@@ -384,7 +191,7 @@ export default {
 
 @media (max-width: 700px) {
   .floating-toolbar {
-    bottom: 12px;
+    bottom: calc(12px + var(--sab, 0px));
     max-width: calc(100vw - 20px);
   }
 
@@ -405,7 +212,7 @@ export default {
 
   .side-action-btn {
     right: 14px;
-    bottom: 70px;
+    bottom: calc(70px + var(--sab, 0px));
   }
 }
 </style>

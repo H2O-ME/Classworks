@@ -2,15 +2,23 @@ html {
   scroll-behavior: smooth;
 }
 
-/* 覆盖 Vuetify reset 的 html{overflow-y:scroll}：:root 特异性更高可生效，
+/* 覆盖 Vuetify reset 的 html{overflow-y:scroll}：:root 特异性更高可生效,
    又低于 v-dialog 滚动锁 html.overflow-y-hidden(0,1,1)，对话框滚动锁定不受影响 */
 :root {
   overflow-y: auto;
+  /* 刘海屏安全区变量：view 视口 viewport-fit=cover 下内容会顶入圆角/底部横条区，留白统一用这些变量 */
+  --sat: env(safe-area-inset-top, 0px);
+  --sab: env(safe-area-inset-bottom, 0px);
+  --sal: env(safe-area-inset-left, 0px);
+  --sar: env(safe-area-inset-right, 0px);
 }
 
 body {
   margin: 0;
   background: #111111;
+  /* 移动端 PWA：禁双击缩放抖动、去掉点击灰色高亮、下拉回弹交给浏览器滚动而非 body 弹性 */
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: none;
 }
 
 .no-select {
@@ -34,4 +42,49 @@ body {
 
 .main-window::-webkit-scrollbar-thumb:hover {
   background-color: rgba(255, 255, 255, 0.24);
+}
+
+/* ── 页面顶栏（主页/设置页共用）── */
+.board-app-bar {
+  backdrop-filter: blur(12px);
+  background: rgba(18, 18, 18, 0.96) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  /* 刘海屏竖屏：状态栏区域留白，内容整体下移到安全区内 */
+  height: calc(64px + var(--sat, 0px)) !important;
+  padding-top: var(--sat, 0px);
+}
+
+.app-bar-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  width: 100%;
+  max-width: 1680px;
+  margin: 0 auto;
+  padding: 0 22px 0 42px;
+}
+
+.app-bar-title {
+  color: #f5f5f5;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.app-bar-actions {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 10px;
+}
+
+@media (max-width: 700px) {
+  .app-bar-inner {
+    padding: 0 14px 0 20px;
+  }
+
+  .app-bar-title {
+    font-size: 18px;
+  }
 }

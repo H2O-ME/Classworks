@@ -17,13 +17,6 @@
 </template>
 
 <script setup>
-import { onMounted } from "vue";
-
-onMounted(() => {
-  import("@/utils/fonts")
-    .then(({ initFont }) => initFont())
-    .catch((error) => console.warn("字体模块加载失败:", error));
-});
 </script>
 
 <style>
@@ -56,13 +49,14 @@ onMounted(() => {
   inset: 0;
   z-index: -1;
   pointer-events: none;
+  /* background 第一个图层在最上：网格线放渐变之前，否则被不透明渐变盖住永远不显示 */
   background:
-    linear-gradient(180deg, #161616 0%, #121212 42%, #101010 100%),
     linear-gradient(rgba(255, 255, 255, 0.022) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.018) 1px, transparent 1px);
+    linear-gradient(90deg, rgba(255, 255, 255, 0.018) 1px, transparent 1px),
+    linear-gradient(180deg, #161616 0%, #121212 42%, #101010 100%);
   background-size:
-    auto,
     100% 28px,
-    28px 100%;
+    28px 100%,
+    auto;
 }
 </style>

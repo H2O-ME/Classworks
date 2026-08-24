@@ -8,39 +8,17 @@ import { VitePWA } from "vite-plugin-pwa";
 import { defineConfig, loadEnv } from "vite";
 import { fileURLToPath, URL } from "node:url";
 import vueDevTools from "vite-plugin-vue-devtools";
+import { isPlainObject, normalizeCloudDoc } from "./src/utils/syncProtocol.js";
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
   const devSecret = env.SYNC_SECRET || "";
+  // 本地直连云端 KV：设置 DEV_KV_PROXY（如 https://classworks.tianhw.top）后，
+  // 本地 /kv/homework 请求转发到云端，开发即联调真实数据；未设置则用下方内存 mock 隔离。
+  const devKvProxy = env.DEV_KV_PROXY || "";
   // ponytail: 本地 dev mock 代替边缘函数，持久化仅内存（重启丢失），够校验和开发用
   let devCache = null;
 
-  function isPlainObject(value) {
-    return value !== null && typeof value === "object" && !Array.isArray(value) && (Object.getPrototypeOf(value) === Object.prototype || Object.getPrototypeOf(value) === null);
-  }
-  // 任意版本 KV 文档 → v3（脏集增量同步格式），与边缘函数 toV3 一致
-  function toV3(raw) {
-    const v3 = { v: 3, entries: {} };
-    if (!isPlainObject(raw)) return v3;
-    if (raw.v === 3 && isPlainObject(raw.entries)) return { v: 3, entries: raw.entries };
-    if (isPlainObject(raw.dates)) {
-      for (const [date, day] of Object.entries(raw.dates)) {
-        if (!isPlainObject(day)) continue;
-        for (const [kind, cells] of Object.entries(day)) {
-          if (!isPlainObject(cells)) continue;
-          for (const [subject, cell] of Object.entries(cells)) {
-            if (!isPlainObject(cell)) continue;
-            const del = kind === "subjects" && cell.del === true;
-            v3.entries[`${date}|${subject}`] = {
-              content: del ? "" : (cell.content || ""),
-              options: isPlainObject(cell.options) ? cell.options : {},
-            };
-          }
-        }
-      }
-    }
-    return v3;
-  }
   function isValidChanges(changes) {
     return isPlainObject(changes) && Object.entries(changes).every(([key, cell]) => (
       typeof key === "string" && key.includes("|")
@@ -48,16 +26,51 @@ export default defineConfig(({ mode }) => {
     ));
   }
 
+  // 读取请求体为 Buffer（转发云端时原样透传）
+  function readBody(req) {
+    return new Promise((resolve, reject) => {
+      const chunks = [];
+      req.on("data", (chunk) => chunks.push(chunk));
+      req.on("end", () => resolve(Buffer.concat(chunks)));
+      req.on("error", reject);
+    });
+  }
+
   return {
   base: "./",
   plugins: [
-    // 本地开发 mock KV 端点（生产环境由边缘函数提供，无需此插件）
-    devSecret ? {
+    // 本地开发 KV 端点：配了 DEV_KV_PROXY 则转发云端，否则走内存 mock（生产环境由边缘函数提供，无需此插件）
+    (devSecret || devKvProxy) ? {
       name: "kv-mock",
       configureServer(server) {
         server.middlewares.use((req, res, next) => {
           const cleanPath = new URL(req.url, "https://local").pathname;
           if (cleanPath !== "/kv/homework") return next();
+          // 直连模式：把请求整体转发到云端，浏览器同源访问、由 vite 服务端代理（无 CORS 问题）
+          if (devKvProxy) {
+            const targetUrl = new URL(req.url, devKvProxy.endsWith("/") ? devKvProxy : `${devKvProxy}/`);
+            const method = req.method;
+            const headers = Object.fromEntries(
+              Object.entries(req.headers).filter(([k]) => !["host", "connection", "content-length"].includes(k)),
+            );
+            return readBody(req).then((bodyBuf) => {
+              fetch(targetUrl.toString(), {
+                method,
+                headers,
+                body: method === "PUT" ? bodyBuf : undefined,
+              }).then((upRes) => upRes.arrayBuffer().then((buf) => {
+                res.statusCode = upRes.status;
+                for (const [k, v] of upRes.headers) {
+                  if (!["connection", "transfer-encoding"].includes(k.toLowerCase())) res.setHeader(k, v);
+                }
+                res.end(Buffer.from(buf));
+              })).catch((err) => {
+                res.statusCode = 502;
+                res.setHeader("Content-Type", "application/json; charset=UTF-8");
+                res.end(JSON.stringify({ error: `proxy failed: ${err.message}` }));
+              });
+            });
+          }
           if (req.method === "GET" || req.method === "PUT") {
             const secret = req.headers["x-sync-secret"];
             if (!secret || secret !== devSecret) {
@@ -68,7 +81,7 @@ export default defineConfig(({ mode }) => {
           }
           if (req.method === "GET") {
             res.setHeader("Content-Type", "application/json; charset=UTF-8");
-            return res.end(JSON.stringify(toV3(devCache)));
+            return res.end(JSON.stringify({ v: 3, entries: normalizeCloudDoc(devCache).entries }));
           }
           if (req.method === "PUT") {
             let body = "";
@@ -82,11 +95,11 @@ export default defineConfig(({ mode }) => {
                 return res.end(JSON.stringify({ error: "missing changes" }));
               }
               // 读当前（旧格式惰性转 v3）→ 逐条覆盖 → 写回 → 返回合并后完整文档
-              const v3 = toV3(devCache);
+              const merged = { ...normalizeCloudDoc(devCache).entries };
               for (const [key, cell] of Object.entries(payload.changes)) {
-                v3.entries[key] = { content: String(cell.content), options: isPlainObject(cell.options) ? cell.options : {} };
+                merged[key] = { content: String(cell.content), options: isPlainObject(cell.options) ? cell.options : {} };
               }
-              devCache = { v: 3, savedAt: new Date().toISOString(), entries: v3.entries };
+              devCache = { v: 3, savedAt: new Date().toISOString(), entries: merged };
               res.setHeader("Content-Type", "application/json; charset=UTF-8");
               return res.end(JSON.stringify(devCache));
             });
