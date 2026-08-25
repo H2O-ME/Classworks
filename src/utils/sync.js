@@ -20,6 +20,14 @@ export function getSyncSecret() {
   return localStorage.getItem(SYNC_SECRET_KEY) || "";
 }
 
+// 旧 WebView（手表内置浏览器等）没有 AbortSignal.timeout，手写等效超时
+function fetchWithTimeout(url, options = {}) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), SYNC_TIMEOUT_MS);
+  return fetch(url, { ...options, signal: controller.signal })
+    .finally(() => clearTimeout(timer));
+}
+
 export function setSyncSecret(secret) {
   const normalized = String(secret || "").trim();
   if (normalized) {
@@ -67,9 +75,8 @@ export async function validateSyncSecret(secret) {
   const normalized = String(secret || "").trim();
   if (!normalized) return { ok: false, reason: "empty" };
   try {
-    const response = await fetch(`${SYNC_ENDPOINT}?t=${Date.now()}`, {
+    const response = await fetchWithTimeout(`${SYNC_ENDPOINT}?t=${Date.now()}`, {
       headers: { "x-sync-secret": normalized },
-      signal: AbortSignal.timeout(SYNC_TIMEOUT_MS),
     });
     const reason = classifySyncResponse(response.status, response.headers.get("Content-Type") || "");
     return reason === "ok" ? { ok: true } : { ok: false, reason };
@@ -87,9 +94,8 @@ function authHeaders(secret) {
 }
 
 async function requestJson(url, options = {}) {
-  const response = await fetch(url, {
+  const response = await fetchWithTimeout(url, {
     ...options,
-    signal: AbortSignal.timeout(SYNC_TIMEOUT_MS),
   });
   if (!response.ok) throw new Error(`同步请求失败: ${response.status}`);
   // SPA fallback 返回 200 的 HTML，非 JSON 视作接口不存在
