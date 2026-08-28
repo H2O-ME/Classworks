@@ -225,7 +225,7 @@
 </template>
 
 <script>
-import { setSyncEnabled, setSyncSecret, validateSyncSecret, watchSyncState } from "@/utils/sync";
+import { setSyncEnabled, setSyncSecret, restoreSyncState, validateSyncSecret, watchSyncState } from "@/utils/sync";
 
 const FAIL_TEXT = { invalid: "密钥不正确", server: "云端服务异常", network: "无法连接云端" };
 
@@ -256,7 +256,9 @@ export default {
       if (!secret) this.secretValid = false;
     });
     // 已有已存密钥 → 自动校验，重开页面也能恢复"已连接"而不是停在"待校验"
-    this.$nextTick(() => {
+    // 先等 IndexedDB 回填完成：localStorage 被系统回收的场景下，否则回填晚于 nextTick 会跳过校验
+    this.$nextTick(async () => {
+      await restoreSyncState();
       if (this.hasSecret) this.validateSecret(this.secretInput);
     });
   },
