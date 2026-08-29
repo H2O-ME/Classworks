@@ -129,70 +129,13 @@ export default defineConfig(({ mode }) => {
       includeAssets: ["favicon.ico", "banner.png", "pwa/image/apple-touch-icon-180x180.png", "pwa/image/favicon.ico"],
       strategies: "generateSW",
       workbox: {
+        // 单一架构：全部构建产物进预缓存（带内容版本号），导航回退到预缓存的 index.html。
+        // 更新 = 新 sw.js 原子换入，cleanupOutdatedCaches 清掉旧版本预缓存。
+        // 不要加 runtimeCaching：哈希产物已在预缓存里，重复缓存只会制造旧 HTML/JS 残留。
         globPatterns: ["**/*.{js,css,html,ico,png,svg,webmanifest,woff,woff2,ttf}"],
         navigateFallback: "index.html",
-        runtimeCaching: [
-          {
-            urlPattern: ({ request, sameOrigin }) => sameOrigin && request.destination === "script",
-            handler: "StaleWhileRevalidate",
-            options: {
-              cacheName: "scripts-cache",
-              expiration: {
-                maxEntries: 80,
-                maxAgeSeconds: 60 * 60 * 24 * 7,
-              },
-              cacheableResponse: {
-                statuses: [0, 200],
-              },
-            },
-          },
-          {
-            urlPattern: ({ request, sameOrigin }) => sameOrigin && request.destination === "style",
-            handler: "StaleWhileRevalidate",
-            options: {
-              cacheName: "styles-cache",
-              expiration: {
-                maxEntries: 60,
-                maxAgeSeconds: 60 * 60 * 24 * 7,
-              },
-              cacheableResponse: {
-                statuses: [0, 200],
-              },
-            },
-          },
-          {
-            urlPattern: ({ request, sameOrigin }) => sameOrigin && request.destination === "image",
-            handler: "CacheFirst",
-            options: {
-              cacheName: "images-cache",
-              expiration: {
-                maxEntries: 120,
-                maxAgeSeconds: 60 * 60 * 24 * 30,
-              },
-              cacheableResponse: {
-                statuses: [0, 200],
-              },
-            },
-          },
-          {
-            urlPattern: ({ request, sameOrigin }) => sameOrigin && request.mode === "navigate",
-            handler: "NetworkFirst",
-            options: {
-              cacheName: "pages-cache",
-              networkTimeoutSeconds: 8,
-              expiration: {
-                maxEntries: 20,
-                maxAgeSeconds: 60 * 60 * 24,
-              },
-              cacheableResponse: {
-                statuses: [0, 200],
-              },
-            },
-          },
-        ],
         clientsClaim: true,
         skipWaiting: true,
-        importScripts: ["/sw-cache-manager.js"],
       },
       manifest: {
         id: "/",

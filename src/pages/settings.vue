@@ -374,6 +374,8 @@ export default {
 
 /* ── 滚动区：占满剩余视口，内部滚动，不出现右侧滚动条 ── */
 .settings-scroll {
+  /* 老 WebView（手表内置浏览器）不认 dvh，整条声明会失效导致高度塌陷，先给 vh 回退 */
+  height: calc(100vh - 64px - var(--sat, 0px));
   height: calc(100dvh - 64px - var(--sat, 0px));
   overflow-y: auto;
   overflow-x: clip;
@@ -728,21 +730,36 @@ export default {
 /* ── 手表/极窄：收紧间距，头部自然换行 ── */
 @media (max-width: 380px) {
   .settings-body {
-    gap: 12px;
-    padding: 16px 12px;
+    gap: 10px;
+    padding: 12px 10px;
   }
 
   .settings-grid {
-    gap: 12px;
+    gap: 10px;
   }
 
   .panel {
-    padding: 14px;
+    padding: 12px;
   }
 
+  .panel-head {
+    gap: 10px;
+  }
+
+  .panel-icon {
+    width: 34px;
+    height: 34px;
+  }
+
+  /* 320px 级屏幕上 min-width 会把图标/胶囊同行挤溢出，放开让文案自由换行 */
   .panel-copy {
-    min-width: 130px;
-    flex-basis: 160px;
+    min-width: 0;
+    flex-basis: 140px;
+  }
+
+  /* 胶囊换行后不再被 margin-left:auto 顶到右侧，靠左自然排列 */
+  .status-chip {
+    margin-left: 0;
   }
 
   .panel-title {
@@ -758,6 +775,11 @@ export default {
   .policy-list {
     margin-top: 12px;
     padding-top: 12px;
+  }
+
+  /* 窄屏长错误文案允许换行，不把卡片顶宽 */
+  .validation {
+    flex-wrap: wrap;
   }
 }
 

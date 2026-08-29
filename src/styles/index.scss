@@ -1,5 +1,13 @@
 html {
   scroll-behavior: smooth;
+  /* 隐藏文档级滚动条：看板是大屏展示型页面，滚动靠滚轮/触摸，滚动条只会破坏画面 */
+  scrollbar-width: none;
+}
+
+html::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
 }
 
 /* 覆盖 Vuetify reset 的 html{overflow-y:scroll}：:root 特异性更高可生效,
@@ -86,5 +94,17 @@ body {
 
   .app-bar-title {
     font-size: 18px;
+  }
+}
+
+/* 手表/极窄：顶栏再收一档，给标题与操作区让位 */
+@media (max-width: 380px) {
+  .app-bar-inner {
+    gap: 10px;
+    padding: 0 10px 0 14px;
+  }
+
+  .app-bar-title {
+    font-size: 17px;
   }
 }

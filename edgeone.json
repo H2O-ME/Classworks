@@ -25,6 +25,15 @@
       ]
     },
     {
+      "source": "/",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-cache"
+        }
+      ]
+    },
+    {
       "source": "/index.html",
       "headers": [
         {
@@ -38,7 +47,7 @@
       ]
     },
     {
-      "source": "/sw.js",
+      "source": "/manifest.webmanifest",
       "headers": [
         {
           "key": "Cache-Control",
@@ -47,7 +56,7 @@
       ]
     },
     {
-      "source": "/sw-cache-manager.js",
+      "source": "/sw.js",
       "headers": [
         {
           "key": "Cache-Control",

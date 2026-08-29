@@ -94,8 +94,45 @@
     @date-select="handleDateSelect"
     @prev-day="navigateDay(-1)"
     @next-day="navigateDay(1)"
-    @copy-to-today="copyHomeworkToToday"
+    @copy-to-today="copyConfirmVisible = true"
   />
+
+  <!-- 复制到今天二次确认：小屏/手表误触会直接覆盖今天的内容，全端确认一次 -->
+  <v-dialog
+    v-model="copyConfirmVisible"
+    max-width="420"
+    width="92%"
+    scrim="rgba(8, 8, 8, 0.66)"
+  >
+    <v-card
+      class="copy-confirm-card"
+      border
+      rounded="lg"
+    >
+      <div class="copy-confirm-title">
+        复制作业到今天？
+      </div>
+      <p class="copy-confirm-text">
+        将把 {{ dateLabel }} 的作业复制到今天，今天已有的内容会被覆盖。
+      </p>
+      <div class="copy-confirm-actions">
+        <v-btn
+          class="copy-confirm-cancel"
+          variant="text"
+          @click="copyConfirmVisible = false"
+        >
+          取消
+        </v-btn>
+        <v-btn
+          class="copy-confirm-solid"
+          variant="flat"
+          @click="confirmCopyToToday"
+        >
+          确认复制
+        </v-btn>
+      </div>
+    </v-card>
+  </v-dialog>
 
   <!-- 云端同步提示（持续显示，点击任意处或按钮后消失） -->
   <AppToast
@@ -156,6 +193,7 @@ export default {
       isToday: true,
       boardData: normalizeBoardData(),
       dialogVisible: false,
+      copyConfirmVisible: false,
       dialogTitle: "",
       textareaContent: "",
       currentEditSubject: "",
@@ -325,8 +363,11 @@ export default {
       currentDate.setDate(currentDate.getDate() + offset);
       this.handleDateSelect(currentDate);
     },
-    async copyHomeworkToToday() {
-      if (this.loading.copyToToday) return;
+    confirmCopyToToday() {
+      this.copyConfirmVisible = false;
+      this.copyHomeworkToToday();
+    },
+    async copyHomeworkToToday() {      if (this.loading.copyToToday) return;
       this.loading.copyToToday = true;
 
       try {
@@ -530,6 +571,58 @@ export default {
 
 .populated-board {
   animation: fade-up 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* ── 复制到今天确认对话框 ── */
+.copy-confirm-card {
+  padding: 20px;
+  background: #171717 !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+.copy-confirm-title {
+  color: #f1f1f1;
+  font-size: 17px;
+  font-weight: 800;
+}
+
+.copy-confirm-text {
+  margin: 10px 0 0;
+  color: rgba(255, 255, 255, 0.66);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.copy-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.copy-confirm-cancel {
+  min-height: 40px;
+  color: rgba(255, 255, 255, 0.72) !important;
+}
+
+.copy-confirm-solid {
+  min-height: 40px;
+  border-radius: 10px !important;
+  background: #f3f3f3 !important;
+  color: #121212 !important;
+  font-weight: 800;
+}
+
+@media (max-width: 380px) {
+  .copy-confirm-actions {
+    flex-direction: column;
+  }
+
+  .copy-confirm-cancel,
+  .copy-confirm-solid {
+    width: 100%;
+    min-height: 44px;
+  }
 }
 
 @keyframes shell-enter {

@@ -8,6 +8,11 @@ if (import.meta.env.PROD) {
   registerAppServiceWorker();
 }
 
+// 请求持久化存储，防浏览器在磁盘压力下清除 IndexedDB/localStorage（教室电脑常见）
+if (navigator.storage?.persist) {
+  navigator.storage.persist().catch(() => null);
+}
+
 const app = createApp(App);
 
 registerPlugins(app);
