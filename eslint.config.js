@@ -68,6 +68,10 @@ export default [
         TextEncoder: 'readonly',
         TextDecoder: 'readonly',
         globalThis: 'readonly',
+        // Animation / timing
+        requestAnimationFrame: 'readonly',
+        cancelAnimationFrame: 'readonly',
+        performance: 'readonly',
         // DOM
         location: 'readonly',
         // EdgeOne Pages Edge Function globals（edge-functions/ 目录，V8 运行时）

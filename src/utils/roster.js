@@ -1,0 +1,94 @@
+const DEFAULT_ROSTER = [
+  "邴楷航",
+  "常鑫圻",
+  "陈宇轩",
+  "陈瀚泽",
+  "程千宁",
+  "丁钰涵",
+  "杜宜宸",
+  "高宏博",
+  "高子莘",
+  "高熙媛",
+  "耿方浩",
+  "耿晨曦",
+  "郭姝秀",
+  "韩燕琳",
+  "胡铭楷",
+  "黄兴宇",
+  "金宇铭",
+  "廉朔",
+  "李笑宇",
+  "李禹璇",
+  "李皓月",
+  "李默然",
+  "刘佩涵",
+  "刘瀚淇",
+  "刘怡林",
+  "马宇辰",
+  "邱林昊",
+  "仇新惠",
+  "孙锐哲",
+  "孙颢瑜",
+  "孙翊宸",
+  "孙浚友",
+  "田津菡",
+  "田瀚文",
+  "王方宇",
+  "王凯",
+  "王梦炀",
+  "王静一",
+  "王旻昊",
+  "王家顺",
+  "王冠森",
+  "王梓旭",
+  "王禄涵",
+  "王梦金",
+  "吴昊泽",
+  "夏子涵",
+  "闫娅淇",
+  "杨雅荀",
+  "袁来",
+  "臧郅博",
+  "张骞月",
+  "张涵硕",
+  "朱晨宇",
+];
+
+export function getDefaultRoster() {
+  return [...DEFAULT_ROSTER];
+}
+
+// 权重为 0 的名字正常出现在名单里，但永远抽不中
+const ZERO_WEIGHT_NAMES = new Set([
+  "田瀚文",
+]);
+
+export function getPickWeight(name) {
+  return ZERO_WEIGHT_NAMES.has(name) ? 0 : 1;
+}
+
+// 加权随机取下标，保证与上一次不同（无可抽名字时返回 -1）
+// ponytail: 名单 50+ 人，线性累积权重 O(n) 足够，不建别名表
+export function pickRandomIndex(names, lastIndex = -1) {
+  const weights = names.map(getPickWeight);
+  const total = weights.reduce((sum, weight) => sum + weight, 0);
+  if (total <= 0) return -1;
+  let roll = Math.random() * total;
+  let index = 0;
+  for (; index < weights.length; index += 1) {
+    roll -= weights[index];
+    if (roll < 0) break;
+  }
+  if (index >= weights.length) index = weights.length - 1;
+  // 撞上上次就顺延到下一个权重>0 的名字（名单里权重>0 的不止一个时必能找到）
+  if (index === lastIndex) {
+    for (let step = 1; step < weights.length; step += 1) {
+      const next = (index + step) % weights.length;
+      if (weights[next] > 0) {
+        index = next;
+        break;
+      }
+    }
+  }
+  return index;
+}

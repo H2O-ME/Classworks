@@ -95,7 +95,84 @@
     @prev-day="navigateDay(-1)"
     @next-day="navigateDay(1)"
     @copy-to-today="copyConfirmVisible = true"
+    @pick-student="openPickStudent"
   />
+
+  <!-- 随机点名：先一级全班名单，再二级抽取滚动定格 -->
+  <v-dialog
+    v-model="pickVisible"
+    max-width="640"
+    width="92%"
+    scrim="rgba(8, 8, 8, 0.66)"
+  >
+    <v-card
+      class="pick-card"
+      border
+      rounded="xl"
+    >
+      <div class="pick-head">
+        <v-icon
+          icon="mdi-account-question-outline"
+          size="22"
+        />
+        <span>随机点名</span>
+      </div>
+      <div
+        v-if="pickStep === 'list'"
+        class="roster-grid"
+      >
+        <span
+          v-for="name in roster"
+          :key="name"
+          class="roster-chip"
+        >
+          {{ name }}
+        </span>
+      </div>
+      <template v-else>
+        <div
+          class="pick-stage"
+          :class="{ 'pick-landed': pickLanded }"
+        >
+          <div class="pick-name">
+            {{ pickName }}
+          </div>
+          <div class="pick-hint">
+            {{ pickRolling ? "正在抽取…" : "抽中" }}
+          </div>
+        </div>
+        <div class="pick-count">
+          共 {{ roster.length }} 人
+        </div>
+      </template>
+      <div class="pick-actions">
+        <v-btn
+          v-if="pickStep === 'pick'"
+          class="pick-ghost"
+          variant="text"
+          @click="pickStep = 'list'"
+        >
+          名单
+        </v-btn>
+        <v-btn
+          v-else
+          class="pick-ghost"
+          variant="text"
+          @click="pickVisible = false"
+        >
+          关闭
+        </v-btn>
+        <v-btn
+          class="pick-solid"
+          variant="flat"
+          :loading="pickRolling"
+          @click="pickStep === 'pick' ? shufflePick() : startPick()"
+        >
+          {{ pickStep === 'pick' ? '再抽一次' : '随机点名' }}
+        </v-btn>
+      </div>
+    </v-card>
+  </v-dialog>
 
   <!-- 复制到今天二次确认：小屏/手表误触会直接覆盖今天的内容，全端确认一次 -->
   <v-dialog
@@ -164,6 +241,7 @@ import {
   getUnusedSubjects,
   normalizeBoardData,
 } from "@/utils/board";
+import { getDefaultRoster, pickRandomIndex } from "@/utils/roster";
 import { getData, setData, addDirty, snapshotDate } from "@/utils/storage";
 import {
   rollbackToLatest,
@@ -206,6 +284,15 @@ export default {
       updatedCardKeys: [],
       previousTitle: null,
       unsubscribeSyncState: null,
+      roster: getDefaultRoster(),
+      pickVisible: false,
+      pickStep: "list",
+      pickName: "",
+      pickIndex: -1,
+      pickRolling: false,
+      pickLanded: false,
+      pickRaf: null,
+      pickTimer: null,
     };
   },
   computed: {
@@ -258,6 +345,7 @@ export default {
   beforeUnmount() {
     document.title = this.previousTitle;
     stopPeriodicSync();
+    this.stopPickTimers();
     this.unsubscribeSyncState?.();
   },
   methods: {
@@ -366,6 +454,48 @@ export default {
     confirmCopyToToday() {
       this.copyConfirmVisible = false;
       this.copyHomeworkToToday();
+    },
+    // 随机点名：开弹窗先展示一级全班名单，二级才滚动抽取
+    openPickStudent() {
+      this.stopPickTimers();
+      this.pickStep = "list";
+      this.pickVisible = true;
+    },
+    startPick() {
+      this.pickStep = "pick";
+      this.shufflePick();
+    },
+    stopPickTimers() {
+      cancelAnimationFrame(this.pickRaf);
+      clearTimeout(this.pickTimer);
+      this.pickRaf = null;
+      this.pickTimer = null;
+      this.pickRolling = false;
+    },
+    // 滚动阶段用 rAF 高频换名 + 指数减速，定格后补一个弹跳收尾
+    shufflePick() {
+      if (this.pickRolling) return;
+      this.stopPickTimers();
+      this.pickRolling = true;
+      this.pickLanded = false;
+      const start = performance.now();
+      const duration = 1100;
+      const frame = (now) => {
+        const elapsed = now - start;
+        this.pickIndex = pickRandomIndex(this.roster, this.pickIndex);
+        this.pickName = this.pickIndex >= 0 ? this.roster[this.pickIndex] : "";
+        if (elapsed < duration) {
+          this.pickRaf = requestAnimationFrame(frame);
+        } else {
+          this.pickRaf = null;
+          this.pickLanded = true;
+          this.pickTimer = setTimeout(() => {
+            this.pickTimer = null;
+            this.pickRolling = false;
+          }, 450);
+        }
+      };
+      this.pickRaf = requestAnimationFrame(frame);
     },
     async copyHomeworkToToday() {      if (this.loading.copyToToday) return;
       this.loading.copyToToday = true;
@@ -598,6 +728,135 @@ export default {
   justify-content: flex-end;
   gap: 10px;
   margin-top: 18px;
+}
+
+/* ── 随机点名 ── */
+.pick-card {
+  padding: 22px 22px 18px;
+  background: #171717 !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+  text-align: center;
+}
+
+.pick-head {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: #f1f1f1;
+  font-size: 17px;
+  font-weight: 800;
+}
+
+.roster-grid {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-content: flex-start;
+  gap: 10px;
+  max-height: 52dvh;
+  margin-top: 16px;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.roster-grid::-webkit-scrollbar {
+  display: none;
+}
+
+.roster-chip {
+  min-width: 76px;
+  padding: 9px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.pick-stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.pick-name {
+  min-height: 120px;
+  color: #f5f5f5;
+  font-size: clamp(56px, 14vw, 88px);
+  font-weight: 800;
+  line-height: 1.35;
+  letter-spacing: 0.06em;
+}
+
+/* 定格弹跳：滚动停下后收尾一次，滚动中不触发 */
+.pick-landed .pick-name {
+  animation: pick-land 0.45s cubic-bezier(0.22, 1.4, 0.36, 1);
+}
+
+.pick-hint {
+  min-height: 22px;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+}
+
+.pick-count {
+  margin-top: 4px;
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 13px;
+}
+
+.pick-actions {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.pick-ghost {
+  min-height: 44px;
+  padding-inline: 18px;
+  color: rgba(255, 255, 255, 0.72) !important;
+}
+
+.pick-solid {
+  min-height: 44px;
+  padding-inline: 26px;
+  border-radius: 12px !important;
+  background: #f3f3f3 !important;
+  color: #121212 !important;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+@keyframes pick-land {
+  0% { transform: scale(1.25); }
+  60% { transform: scale(0.96); }
+  100% { transform: scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pick-landed .pick-name {
+    animation: none;
+  }
+}
+
+@media (max-width: 380px) {
+  .pick-actions {
+    flex-direction: column;
+  }
+
+  .pick-ghost,
+  .pick-solid {
+    width: 100%;
+    min-height: 48px;
+  }
 }
 
 .copy-confirm-cancel {

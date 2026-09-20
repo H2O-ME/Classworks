@@ -58,6 +58,12 @@
           title="后一天"
           @click="$emit('next-day')"
         />
+        <v-btn
+          icon="mdi-account-question-outline"
+          variant="text"
+          title="随机点名"
+          @click="$emit('pick-student')"
+        />
       </div>
     </v-card>
 
@@ -86,7 +92,7 @@ export default {
     copyToTodayLoading: { type: Boolean, default: false },
     currentFontSize: { type: Number, default: 16 },
   },
-  emits: ["prev-day", "next-day", "zoom", "date-select", "copy-to-today"],
+  emits: ["prev-day", "next-day", "zoom", "date-select", "copy-to-today", "pick-student"],
 };
 </script>
 
