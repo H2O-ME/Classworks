@@ -21,7 +21,7 @@ pnpm build
 - 构建命令
 - 输出目录
 - 静态资源缓存头
-- `sw.js` 与 `sw-cache-manager.js` 的 `no-cache` 配置
+- `sw.js` 的 `no-cache` 配置（旧 SW 缓存不刷新是"看到旧资源"的首因）
 
 ## 路由回退
 

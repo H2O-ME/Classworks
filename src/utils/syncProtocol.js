@@ -53,12 +53,3 @@ export function normalizeCloudDoc(raw) {
   }
   return result;
 }
-
-// 密钥校验响应分类：状态码 + Content-Type → 判定结果。
-// 2xx + JSON = 正确；SPA fallback 返回的 200 HTML 不算正确（本地无后端时防误判）
-export function classifySyncResponse(status, contentType) {
-  if (status >= 200 && status < 300 && String(contentType).includes("json")) return "ok";
-  if (status === 401 || status === 403) return "invalid";
-  if (status >= 500) return "server";
-  return "unexpected";
-}

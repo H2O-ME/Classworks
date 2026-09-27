@@ -46,6 +46,7 @@ export default [
         // Vite globals
         import: 'readonly',
         process: 'readonly',
+        Buffer: 'readonly',
         // Service Worker globals
         self: 'readonly',
         caches: 'readonly',

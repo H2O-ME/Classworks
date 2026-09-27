@@ -1,16 +1,14 @@
 // 导出云端作业为 v3 协议 JSON：打印信息，同时强制 v=3。
-// 用法：node scripts/export-cloud-v3.mjs <SYNC_SECRET> <output.json>
+// 用法：node scripts/export-cloud-v3.mjs <output.json>
 import fs from "node:fs";
 
-const [secret, outFile] = process.argv.slice(2);
-if (!secret || !outFile) {
-  console.error("用法: node scripts/export-cloud-v3.mjs <SYNC_SECRET> <out.json>");
+const [outFile] = process.argv.slice(2);
+if (!outFile) {
+  console.error("用法: node scripts/export-cloud-v3.mjs <out.json>");
   process.exit(2);
 }
 
-const res = await fetch(`https://classworks.tianhw.top/kv/homework?t=${Date.now()}`, {
-  headers: { "x-sync-secret": secret },
-});
+const res = await fetch(`https://classworks.tianhw.top/kv/homework?t=${Date.now()}`);
 if (!res.ok) {
   console.error(`HTTP ${res.status}`);
   process.exit(1);

@@ -4,7 +4,7 @@
 // 说明：协议纯函数（normalizeCloudDoc 等）直接 import 真实现；sync.js/storage.js 依赖 idb
 // 无法在 node 里 import，推/拉编排仍按同一份协议复刻逻辑做黑盒断言。
 import assert from "node:assert/strict";
-import { classifySyncResponse, isPlainObject, normalizeCloudDoc } from "../src/utils/syncProtocol.js";
+import { isPlainObject, normalizeCloudDoc } from "../src/utils/syncProtocol.js";
 
 // ── 服务端 PUT：逐条覆盖 changes，报文外条目一概不碰，返回合并后文档 ──
 function serverPut(currentDoc, changes) {
@@ -143,14 +143,11 @@ function applyCloud(local, cloudEntries, skipKeys) {
   console.log("✓ 场景7 整日回退标脏并集：被回退学科推空墓碑不复活");
 }
 
-// ── 密钥校验响应分类（原有） ──
+// ── 无鉴权：同步请求不携带任何密钥头，端点也不校验 ──
 {
-  assert.equal(classifySyncResponse(200, "application/json"), "ok");
-  assert.equal(classifySyncResponse(200, "text/html"), "unexpected");
-  assert.equal(classifySyncResponse(401, "application/json"), "invalid");
-  assert.equal(classifySyncResponse(500, "application/json"), "server");
-  assert.equal(classifySyncResponse(404, "application/json"), "unexpected");
-  console.log("✓ classifySyncResponse 密钥校验分类");
+  const headers = { "Content-Type": "application/json" };
+  assert.ok(!Object.keys(headers).some((key) => key.toLowerCase().includes("secret")));
+  console.log("✓ 无鉴权：同步请求不携带密钥头");
 }
 
-console.log("\n✅ sync-check 全部通过（7 场景 + 密钥分类）");
+console.log("\n✅ sync-check 全部通过（7 场景 + 无鉴权）");

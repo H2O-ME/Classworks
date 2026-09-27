@@ -1,13 +1,12 @@
 import { addDirty, getDirty, setDirty, getKeysByPrefix, getData, setData, snapshotDate, listSnapshots, restoreSnapshot } from "./storage.js";
-import { classifySyncResponse, isPlainObject, normalizeCloudDoc, parseEntryKey } from "./syncProtocol.js";
+import { isPlainObject, normalizeCloudDoc, parseEntryKey } from "./syncProtocol.js";
 
 // 脏集增量同步协议 v3（纯函数在 syncProtocol.js，协议说明见该文件）：
+// 无鉴权设计：读写云端不校验任何密钥，开箱即用。
 const SYNC_INTERVAL_MS = 60 * 1000;
 const SYNC_ENDPOINT = "/kv/homework";
-const SYNC_SECRET_KEY = "classworks_sync_secret";
 const SYNC_ENABLED_KEY = "classworks_sync_enabled";
-const SYNC_STATE_IDB_KEY = "classworks-sync-state";
-const SYNC_SECRET_EVENT = "classworks-sync-changed";
+const SYNC_STATE_EVENT = "classworks-sync-changed";
 const SYNC_TIMEOUT_MS = 15000;
 const PUSH_RETRY_MAX = 2;
 const DIRTY_FLAG = "classworks-dirty";
@@ -17,10 +16,6 @@ let saveDebounceId = null;
 let syncChain = Promise.resolve();
 let unbindVisibility = null;
 
-export function getSyncSecret() {
-  return localStorage.getItem(SYNC_SECRET_KEY) || "";
-}
-
 // 旧 WebView（手表内置浏览器等）没有 AbortSignal.timeout，手写等效超时
 function fetchWithTimeout(url, options = {}) {
   const controller = new AbortController();
@@ -29,113 +24,43 @@ function fetchWithTimeout(url, options = {}) {
     .finally(() => clearTimeout(timer));
 }
 
-export function setSyncSecret(secret) {
-  const normalized = String(secret || "").trim();
-  if (normalized) {
-    localStorage.setItem(SYNC_SECRET_KEY, normalized);
-  } else {
-    localStorage.removeItem(SYNC_SECRET_KEY);
-    clearTimeout(saveDebounceId);
-    saveDebounceId = null;
-  }
-  mirrorSyncState();
-  window.dispatchEvent(new window.Event(SYNC_SECRET_EVENT));
-}
-
+// 默认开启；只有用户在设置里显式关掉才写 "0"
 export function getSyncEnabled() {
-  return localStorage.getItem(SYNC_ENABLED_KEY) === "1";
+  return localStorage.getItem(SYNC_ENABLED_KEY) !== "0";
 }
 
 export function setSyncEnabled(enabled) {
   if (enabled) {
     localStorage.setItem(SYNC_ENABLED_KEY, "1");
   } else {
-    localStorage.removeItem(SYNC_ENABLED_KEY);
+    localStorage.setItem(SYNC_ENABLED_KEY, "0");
     clearTimeout(saveDebounceId);
     saveDebounceId = null;
     stopPeriodicSync();
   }
-  mirrorSyncState();
-  window.dispatchEvent(new window.Event(SYNC_SECRET_EVENT));
-}
-
-// localStorage 在部分安装态 PWA / 旧 WebView 里会被系统整块回收，密钥随之丢失；
-// 每次写入同步镜像到 IndexedDB，启动时发现 localStorage 被清则回填（restoreSyncState）
-function mirrorSyncState() {
-  setData(SYNC_STATE_IDB_KEY, { secret: getSyncSecret(), enabled: getSyncEnabled() });
-}
-
-// 纯回填逻辑，供 scripts/sync-state-check.mjs 自检
-export function applyRestoredState(saved, storage) {
-  let changed = false;
-  if (saved?.secret && !storage.getItem(SYNC_SECRET_KEY)) {
-    storage.setItem(SYNC_SECRET_KEY, saved.secret);
-    changed = true;
-  }
-  if (saved?.enabled && !storage.getItem(SYNC_ENABLED_KEY)) {
-    storage.setItem(SYNC_ENABLED_KEY, "1");
-    changed = true;
-  }
-  return changed;
-}
-
-export async function restoreSyncState() {
-  try {
-    // 请求持久化存储：安装态 PWA 下 Chrome/Edge 会静默授予，降低 localStorage 被回收的概率
-    navigator.storage?.persist?.().catch(() => {});
-    if (!getSyncSecret() || !getSyncEnabled()) {
-      const saved = await getData(SYNC_STATE_IDB_KEY);
-      if (applyRestoredState(saved, localStorage)) {
-        window.dispatchEvent(new window.Event(SYNC_SECRET_EVENT));
-      }
-    }
-    // 收敛：镜像可能因上次异步写未完成而缺失/过期（含老版本升级后镜像为空），以 localStorage 为准重写
-    mirrorSyncState();
-  } catch {
-    // 极端 WebView 里 localStorage 访问会直接抛异常，启动路径不得炸
-  }
-}
-
-if (typeof window !== "undefined") {
-  restoreSyncState();
+  window.dispatchEvent(new window.Event(SYNC_STATE_EVENT));
 }
 
 export function watchSyncState(callback) {
-  const handleChange = () => callback({ enabled: getSyncEnabled(), secret: getSyncSecret() });
+  const handleChange = () => callback({ enabled: getSyncEnabled() });
   const handleStorageChange = (event) => {
-    if (event.key === SYNC_SECRET_KEY || event.key === SYNC_ENABLED_KEY) handleChange();
+    if (event.key === SYNC_ENABLED_KEY) handleChange();
   };
 
-  window.addEventListener(SYNC_SECRET_EVENT, handleChange);
+  window.addEventListener(SYNC_STATE_EVENT, handleChange);
   window.addEventListener("storage", handleStorageChange);
   handleChange();
   return () => {
-    window.removeEventListener(SYNC_SECRET_EVENT, handleChange);
+    window.removeEventListener(SYNC_STATE_EVENT, handleChange);
     window.removeEventListener("storage", handleStorageChange);
   };
 }
 
-export async function validateSyncSecret(secret) {
-  const normalized = String(secret || "").trim();
-  if (!normalized) return { ok: false, reason: "empty" };
-  try {
-    const response = await fetchWithTimeout(`${SYNC_ENDPOINT}?t=${Date.now()}`, {
-      headers: { "x-sync-secret": normalized },
-    });
-    const reason = classifySyncResponse(response.status, response.headers.get("Content-Type") || "");
-    return reason === "ok" ? { ok: true } : { ok: false, reason };
-  } catch {
-    return { ok: false, reason: "network" };
-  }
-}
-
 function isSyncActive() {
-  return getSyncEnabled() && !!getSyncSecret();
+  return getSyncEnabled();
 }
 
-function authHeaders(secret) {
-  return { "x-sync-secret": secret, "Content-Type": "application/json" };
-}
+const JSON_HEADERS = { "Content-Type": "application/json" };
 
 async function requestJson(url, options = {}) {
   const response = await fetchWithTimeout(url, {
@@ -238,7 +163,6 @@ export function syncNow(options = {}) {
 async function runSyncInternal(options) {
   const { onPulled, onPushed, onConflict } = options || {};
   if (!isSyncActive()) return { status: "disabled" };
-  const secret = getSyncSecret();
 
   // ── 1. 推（只推脏集） ──
   const dirty = await getDirty();
@@ -250,7 +174,7 @@ async function runSyncInternal(options) {
       try {
         const doc = await requestJson(SYNC_ENDPOINT, {
           method: "PUT",
-          headers: authHeaders(secret),
+          headers: JSON_HEADERS,
           body: JSON.stringify({ changes }),
         });
         const normalized = normalizeCloudDoc(doc);
@@ -278,7 +202,7 @@ async function runSyncInternal(options) {
   // ── 2. 拉全量 ──
   let cloud;
   try {
-    const doc = await requestJson(`${SYNC_ENDPOINT}?t=${Date.now()}`, { headers: authHeaders(secret) });
+    const doc = await requestJson(`${SYNC_ENDPOINT}?t=${Date.now()}`, { headers: JSON_HEADERS });
     cloud = normalizeCloudDoc(doc).entries;
   } catch (error) {
     console.warn("拉取失败:", error);
@@ -323,7 +247,7 @@ async function migrateFirstRun() {
 
   let cloud = {};
   try {
-    const doc = await requestJson(`${SYNC_ENDPOINT}?t=${Date.now()}`, { headers: authHeaders(getSyncSecret()) });
+    const doc = await requestJson(`${SYNC_ENDPOINT}?t=${Date.now()}`, { headers: JSON_HEADERS });
     cloud = normalizeCloudDoc(doc).entries;
   } catch (error) {
     console.warn("首启迁移拉取云端失败:", error);

@@ -2,7 +2,7 @@
 
 export const config = {
   matcher: [
-    "/((?!api|kv|src|node_modules|@vite|@fs|@id|assets|pwa|sw\\.js|favicon|.*\\.png|.*\\.jpg|.*\\.svg|.*\\.ico|.*\\.woff|.*\\.woff2|.*\\.ttf|.*\\.webmanifest|.*\\.js|.*\\.css|.*\\.sass|.*\\.scss).*)",
+    "/((?!api|kv|src|node_modules|@vite|@fs|@id|assets|pwa|sw\\.js|favicon|.*\\.png|.*\\.jpg|.*\\.svg|.*\\.ico|.*\\.woff|.*\\.woff2|.*\\.ttf|.*\\.txt|.*\\.webmanifest|.*\\.js|.*\\.css|.*\\.sass|.*\\.scss).*)",
   ],
 };
 

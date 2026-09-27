@@ -1,50 +1,53 @@
-// 自检：localStorage 被系统回收后，从 IndexedDB 镜像回填同步密钥的纯逻辑。
+// 自检：云端同步的"默认开启、仅显式关闭才关"语义。
 // 运行：node scripts/sync-state-check.mjs
 import assert from "node:assert";
-import { applyRestoredState, restoreSyncState } from "../src/utils/sync.js";
 
-const SECRET_KEY = "classworks_sync_secret";
+// sync.js 依赖 localStorage；node 里给一个最小替身（模块顶层不再有副作用）
+const map = new Map();
+globalThis.localStorage = {
+  getItem: (key) => (map.has(key) ? map.get(key) : null),
+  setItem: (key, value) => map.set(key, String(value)),
+  removeItem: (key) => map.delete(key),
+};
+// 用 Node 内置 EventTarget 当 window，真实走 addEventListener/dispatchEvent 路径
+const win = new globalThis.EventTarget();
+win.Event = globalThis.Event;
+globalThis.window = win;
+
+const { getSyncEnabled, setSyncEnabled, watchSyncState } = await import("../src/utils/sync.js");
+
 const ENABLED_KEY = "classworks_sync_enabled";
 
-const fakeStorage = (init = {}) => {
-  const map = { ...init };
-  return {
-    getItem: (key) => (key in map ? map[key] : null),
-    setItem: (key, value) => {
-      map[key] = String(value);
-    },
-    _map: map,
-  };
-};
+// 1. 全新设备（localStorage 里什么都没有）→ 默认开启
+map.clear();
+assert.strictEqual(getSyncEnabled(), true, "新设备应默认开启同步");
 
-// 1. localStorage 被清空（密钥 + 开关都丢）→ 全部回填
-const s1 = fakeStorage();
-assert.strictEqual(applyRestoredState({ secret: "abc123", enabled: true }, s1), true);
-assert.strictEqual(s1.getItem(SECRET_KEY), "abc123");
-assert.strictEqual(s1.getItem(ENABLED_KEY), "1");
+// 2. 显式关闭 → 关闭
+setSyncEnabled(false);
+assert.strictEqual(getSyncEnabled(), false, "关闭后应保持关闭");
+assert.strictEqual(map.get(ENABLED_KEY), "0");
 
-// 2. 只丢了开关 → 只回填开关，不覆盖现存的密钥
-const s2 = fakeStorage({ [SECRET_KEY]: "keep" });
-assert.strictEqual(applyRestoredState({ secret: "other", enabled: true }, s2), true);
-assert.strictEqual(s2.getItem(SECRET_KEY), "keep");
+// 3. 重新开启 → 开启
+setSyncEnabled(true);
+assert.strictEqual(getSyncEnabled(), true, "开启后应恢复同步");
 
-// 3. localStorage 完好 → 什么都不动
-const s3 = fakeStorage({ [SECRET_KEY]: "abc", [ENABLED_KEY]: "1" });
-assert.strictEqual(applyRestoredState({ secret: "abc", enabled: true }, s3), false);
+// 4. 旧版本残留的脏值不当作"关闭"
+map.set(ENABLED_KEY, "");
+assert.strictEqual(getSyncEnabled(), true, "空串应视为默认开启");
 
-// 4. 镜像本身为空（用户主动清除过）→ 不得复活密钥
-const s4 = fakeStorage();
-assert.strictEqual(applyRestoredState({ secret: "", enabled: false }, s4), false);
-assert.strictEqual(applyRestoredState(null, s4), false);
-assert.strictEqual(s4.getItem(SECRET_KEY), null);
+// 5. 开关变化通过事件广播给订阅方
+map.clear();
+const seen = [];
+const unsubscribe = watchSyncState(({ enabled }) => seen.push(enabled));
+setSyncEnabled(false);
+unsubscribe();
+setSyncEnabled(true);
+assert.deepStrictEqual(seen, [true, false], "订阅应收到初始值 + 一次关闭，取消订阅后不再收到");
 
-// 5. 开关关但密钥在镜像里 → 只回填密钥（同步仍保持关闭）
-const s5 = fakeStorage();
-assert.strictEqual(applyRestoredState({ secret: "abc", enabled: false }, s5), true);
-assert.strictEqual(s5.getItem(SECRET_KEY), "abc");
-assert.strictEqual(s5.getItem(ENABLED_KEY), null);
-
-// 6. 非浏览器环境（无 window/IDB，localStorage 可能直接抛异常）→ 静默返回，不得炸启动路径
-await restoreSyncState();
+// 6. 订阅回调不携带任何密钥字段（无鉴权设计）
+const keys = [];
+const unsub2 = watchSyncState((state) => keys.push(...Object.keys(state)));
+unsub2();
+assert.deepStrictEqual(keys, ["enabled"], "同步状态只暴露 enabled");
 
 console.log("sync-state-check: 全部通过");

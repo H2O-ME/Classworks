@@ -23,9 +23,14 @@ function registerAppServiceWorker() {
     immediate: true,
     onRegisteredSW(_, registration) {
       if (!registration) return;
-      setInterval(() => {
-        registration.update().catch(() => null);
-      }, 60 * 60 * 1000);
+      // 教室大屏常驻不关：只靠 1 小时轮询，发版后可能一小时才换上。
+      // 回到前台/重新获得焦点时补一次检查（离线时静默失败，不影响使用）。
+      const checkUpdate = () => registration.update().catch(() => null);
+      setInterval(checkUpdate, 60 * 60 * 1000);
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "visible") checkUpdate();
+      });
+      window.addEventListener("focus", checkUpdate);
     },
   });
 }

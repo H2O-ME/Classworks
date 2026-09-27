@@ -12,11 +12,10 @@ import { isPlainObject, normalizeCloudDoc } from "./src/utils/syncProtocol.js";
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
-  const devSecret = env.SYNC_SECRET || "";
   // 本地直连云端 KV：设置 DEV_KV_PROXY（如 https://classworks.tianhw.top）后，
   // 本地 /kv/homework 请求转发到云端，开发即联调真实数据；未设置则用下方内存 mock 隔离。
   const devKvProxy = env.DEV_KV_PROXY || "";
-  // ponytail: 本地 dev mock 代替边缘函数，持久化仅内存（重启丢失），够校验和开发用
+  // ponytail: 本地 dev mock 代替边缘函数，持久化仅内存（重启丢失），够开发用
   let devCache = null;
 
   function isValidChanges(changes) {
@@ -40,7 +39,7 @@ export default defineConfig(({ mode }) => {
   base: "./",
   plugins: [
     // 本地开发 KV 端点：配了 DEV_KV_PROXY 则转发云端，否则走内存 mock（生产环境由边缘函数提供，无需此插件）
-    (devSecret || devKvProxy) ? {
+    {
       name: "kv-mock",
       configureServer(server) {
         server.middlewares.use((req, res, next) => {
@@ -71,14 +70,7 @@ export default defineConfig(({ mode }) => {
               });
             });
           }
-          if (req.method === "GET" || req.method === "PUT") {
-            const secret = req.headers["x-sync-secret"];
-            if (!secret || secret !== devSecret) {
-              res.statusCode = 401;
-              res.setHeader("Content-Type", "application/json; charset=UTF-8");
-              return res.end(JSON.stringify({ error: "forbidden" }));
-            }
-          }
+          // 无鉴权：读写端点不做任何密钥校验
           if (req.method === "GET") {
             res.setHeader("Content-Type", "application/json; charset=UTF-8");
             return res.end(JSON.stringify({ v: 3, entries: normalizeCloudDoc(devCache).entries }));
@@ -110,7 +102,7 @@ export default defineConfig(({ mode }) => {
           return res.end(JSON.stringify({ error: "method not allowed" }));
         });
       },
-    } : null,
+    },
     VueRouter(),
     vueDevTools(),
     Layouts(),
@@ -126,13 +118,17 @@ export default defineConfig(({ mode }) => {
         enabled: false,
       },
       injectRegister: "auto",
-      includeAssets: ["favicon.ico", "banner.png", "pwa/image/apple-touch-icon-180x180.png", "pwa/image/favicon.ico"],
+      // globPatterns 已经把 dist 里所有 png/ico/svg/webmanifest 收进预缓存（public/ 会被原样拷进 dist），
+      // 再开 includeAssets / includeManifestIcons 只是把同一批文件重复登记一遍：55 条里有 10 条是重复 URL。
+      includeAssets: [],
+      includeManifestIcons: false,
       strategies: "generateSW",
       workbox: {
         // 单一架构：全部构建产物进预缓存（带内容版本号），导航回退到预缓存的 index.html。
         // 更新 = 新 sw.js 原子换入，cleanupOutdatedCaches 清掉旧版本预缓存。
         // 不要加 runtimeCaching：哈希产物已在预缓存里，重复缓存只会制造旧 HTML/JS 残留。
-        globPatterns: ["**/*.{js,css,html,ico,png,svg,webmanifest,woff,woff2,ttf}"],
+        // webmanifest 不在其中：插件已按内容哈希单独登记，重复登记会产生两条同 URL 条目。
+        globPatterns: ["**/*.{js,css,html,ico,png,svg,woff,woff2,ttf}"],
         navigateFallback: "index.html",
         clientsClaim: true,
         skipWaiting: true,

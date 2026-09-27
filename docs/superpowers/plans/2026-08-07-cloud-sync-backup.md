@@ -1,5 +1,9 @@
 # 云端备份与定时同步 Implementation Plan
 
+> ⚠️ 已过时（历史记录）：本计划描述的密钥鉴权方案**已被移除**。当前 `/kv/homework` 读写不校验任何密钥，
+> 同步默认开启（`localStorage['classworks_sync_enabled'] === "0"` 才是关闭）。文中所有
+> `SYNC_SECRET` / `x-sync-secret` / 401 步骤均已不适用，实施请以 `src/utils/sync.js`、`edge-functions/kv/homework.js` 为准。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 给 Classworks 作业看板加云端备份 + 定时同步：单 KV 键存全部作业，读写需 `x-sync-secret` 密钥，时间戳 last-write-wins，拉取前本地快照可回退。

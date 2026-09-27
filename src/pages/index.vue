@@ -328,8 +328,8 @@ export default {
     try {
       await this.initializeData();
       this.dataReady = true;
-      this.unsubscribeSyncState = watchSyncState(({ enabled, secret }) => {
-        if (enabled && secret) {
+      this.unsubscribeSyncState = watchSyncState(({ enabled }) => {
+        if (enabled) {
           startPeriodicSync({
             onPulled: (pulledDates) => this.handlePulledDates(pulledDates),
             onConflict: (conflictKeys) => this.handleConflicts(conflictKeys),

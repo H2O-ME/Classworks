@@ -16,7 +16,7 @@ assert.match(sw, /"index.html"/, "预缓存清单缺少 index.html");
 assert.match(sw, /manifest\.webmanifest/, "预缓存清单缺少 manifest.webmanifest");
 
 // 不得出现运行时缓存与外挂脚本（旧架构残留，会导致换新版本后仍看到老 UI）。
-// 注意：generateSW 自身会用 importScripts 加载 workbox 运行时 chunk，只禁外挂的 sw-cache-manager。
+// 注意：generateSW 用 define(["./workbox-xxx"]) 加载 workbox 运行时 chunk，属正常；只禁外挂缓存管理器。
 for (const banned of ["scripts-cache", "styles-cache", "images-cache", "pages-cache", "sw-cache-manager"]) {
   assert.ok(!sw.includes(banned), `sw.js 不应包含 ${banned}`);
 }
@@ -29,4 +29,24 @@ for (const url of entries) {
   assert.ok(existsSync(new URL(url, distRoot)), `预缓存文件缺失: ${url}`);
 }
 
-console.log(`pwa-check OK: ${entries.length} 个预缓存条目，架构为纯预缓存 + 导航回退`);
+// 预缓存不得有重复 URL：同 URL 两条 revision 会在更新时互相判定为"未变"，是发版后看到旧资源的另一种根因。
+// 曾经的成因：globPatterns 已含 png/ico/webmanifest，同时又开 includeAssets / includeManifestIcons。
+const duplicates = [...new Set(entries.filter((url, i) => entries.indexOf(url) !== i))];
+assert.deepEqual(duplicates, [], `预缓存清单存在重复 URL: ${duplicates.join(", ")}`);
+
+// 清单里的图标必须与 manifest 引用的图标一致：manifest 指向不存在的图标时，
+// PWA 安装/更新会拿不到图标（iOS/Chrome 表现为白色占位图）。
+const manifest = JSON.parse(readFileSync(new URL("../dist/manifest.webmanifest", import.meta.url), "utf8"));
+assert.ok(Array.isArray(manifest.icons) && manifest.icons.length > 0, "manifest 没有图标");
+for (const icon of manifest.icons) {
+  const iconPath = icon.src.replace(/^\//, "");
+  assert.ok(existsSync(new URL(iconPath, distRoot)), `manifest 图标不存在: ${icon.src}`);
+  assert.ok(entries.includes(iconPath), `manifest 图标不在预缓存清单里: ${icon.src}`);
+}
+
+// 已经没有任何东西引用的旧图标不应继续躺在产物里（曾出现 -v2 与无 -v2 两套同图重复，容易误改错文件）
+for (const stale of ["pwa/image/logo.svg", "pwa/image/favicon.ico"]) {
+  assert.ok(!existsSync(new URL(stale, distRoot)), `产物里残留已废弃资源: ${stale}`);
+}
+
+console.log(`pwa-check OK: ${entries.length} 个预缓存条目（无重复），架构为纯预缓存 + 导航回退`);

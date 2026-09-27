@@ -45,9 +45,9 @@
             </div>
             <span
               class="status-chip"
-              :class="syncEnabled ? (secretValid ? 'status-on' : 'status-wait') : 'status-off'"
+              :class="syncEnabled ? 'status-on' : 'status-off'"
             >
-              {{ syncEnabled ? (secretValid ? "已连接" : "待校验") : "已关闭" }}
+              {{ syncEnabled ? "已连接" : "已关闭" }}
             </span>
           </div>
 
@@ -63,92 +63,6 @@
               @click="toggleSync"
             >
               <span class="switch-knob" />
-            </button>
-          </div>
-        </section>
-
-        <!-- 连接密钥 -->
-        <section class="panel">
-          <div class="panel-head">
-            <div class="panel-icon">
-              <v-icon
-                icon="mdi-key-variant"
-                size="20"
-              />
-            </div>
-            <div class="panel-copy">
-              <h2 class="panel-title">
-                连接密钥
-              </h2>
-              <p class="panel-desc">
-                与部署端 SYNC_SECRET 一致，用于校验本设备的云端读写权限。
-              </p>
-            </div>
-          </div>
-
-          <div class="key-form">
-            <label
-              class="field-label"
-              for="sync-secret"
-            >云端连接校验密钥</label>
-            <div class="key-row">
-              <input
-                id="sync-secret"
-                ref="syncSecret"
-                v-model="secretInput"
-                class="key-input"
-                type="password"
-                placeholder="输入 SYNC_SECRET"
-                autocomplete="off"
-                spellcheck="false"
-                @input="handleSecretInput"
-              >
-              <button
-                class="validate-btn"
-                type="button"
-                :disabled="!secretInput.trim() || validationState === 'checking'"
-                @click="validateAndSave"
-              >
-                {{ validationState === "checking" ? "校验中" : "验证并保存" }}
-              </button>
-            </div>
-
-            <div
-              class="validation"
-              :class="`validation-${validationState}`"
-              role="status"
-              aria-live="polite"
-            >
-              <v-icon
-                v-if="validationState === 'checking'"
-                icon="mdi-loading"
-                size="15"
-              />
-              <v-icon
-                v-else-if="validationState === 'valid'"
-                icon="mdi-check-circle-outline"
-                size="15"
-              />
-              <v-icon
-                v-else-if="validationState === 'invalid'"
-                icon="mdi-alert-circle-outline"
-                size="15"
-              />
-              <v-icon
-                v-else-if="validationState === 'server' || validationState === 'network'"
-                icon="mdi-cloud-alert-outline"
-                size="15"
-              />
-              <span>{{ validationText }}</span>
-            </div>
-
-            <button
-              v-if="hasSecret"
-              class="clear-secret"
-              type="button"
-              @click="clearSecret"
-            >
-              清除密钥
             </button>
           </div>
         </section>
@@ -215,128 +129,46 @@
     </div>
   </div>
 
-  <!-- 密钥校验结果：一次性浮动提示，不占卡片布局 -->
+  <!-- 同步状态提示：一次性浮动提示，不占卡片布局 -->
   <AppToast
-    :show="secretToastVisible"
-    :message="secretToastText"
-    icon="mdi-check-circle-outline"
-    @dismiss="secretToastVisible = false"
+    :show="syncToastVisible"
+    :message="syncToastText"
+    icon="mdi-cloud-sync-outline"
+    @dismiss="syncToastVisible = false"
   />
 </template>
 
 <script>
-import { setSyncEnabled, setSyncSecret, restoreSyncState, validateSyncSecret, watchSyncState } from "@/utils/sync";
-
-const FAIL_TEXT = { invalid: "密钥不正确", server: "云端服务异常", network: "无法连接云端" };
+import { setSyncEnabled, watchSyncState } from "@/utils/sync";
 
 export default {
   name: "SettingsPage",
   data() {
     return {
       previousTitle: null,
-      syncEnabled: false,
-      secretInput: "",
-      hasSecret: false,
-      secretValid: false,
-      validationState: "idle",
-      validationText: "输入密钥后验证云端连接",
-      secretToastVisible: false,
-      secretToastText: "",
+      syncEnabled: true,
+      syncToastVisible: false,
+      syncToastText: "",
       unsubscribeSyncState: null,
-      validationTimer: null,
     };
   },
   mounted() {
     this.previousTitle = document.title;
     document.title = "设置";
-    this.unsubscribeSyncState = watchSyncState(({ enabled, secret }) => {
+    this.unsubscribeSyncState = watchSyncState(({ enabled }) => {
       this.syncEnabled = enabled;
-      this.secretInput = secret;
-      this.hasSecret = !!secret;
-      if (!secret) this.secretValid = false;
-    });
-    // 已有已存密钥 → 自动校验，重开页面也能恢复"已连接"而不是停在"待校验"
-    // 先等 IndexedDB 回填完成：localStorage 被系统回收的场景下，否则回填晚于 nextTick 会跳过校验
-    this.$nextTick(async () => {
-      await restoreSyncState();
-      if (this.hasSecret) this.validateSecret(this.secretInput);
     });
   },
   beforeUnmount() {
     document.title = this.previousTitle;
-    if (this.validationTimer) clearTimeout(this.validationTimer);
     this.unsubscribeSyncState?.();
   },
   methods: {
-    // 成功反馈走公共 AppToast：常驻长文案会把连接密钥卡片撑高，双栏 grid 拉伸导致布局跳动
-    showSecretToast(text) {
-      this.secretToastText = text;
-      this.secretToastVisible = true;
-    },
     toggleSync() {
       const next = !this.syncEnabled;
       setSyncEnabled(next);
-      if (next && !this.secretInput.trim()) this.$nextTick(() => this.$refs.syncSecret?.focus());
-    },
-    handleSecretInput() {
-      this.secretValid = false;
-      if (this.validationTimer) clearTimeout(this.validationTimer);
-      if (!this.secretInput.trim()) {
-        this.validationState = "idle";
-        this.validationText = "输入密钥后验证云端连接";
-        return;
-      }
-      this.validationState = "checking";
-      this.validationText = "正在校验密钥…";
-      this.validationTimer = setTimeout(() => this.validateSecret(this.secretInput), 600);
-    },
-    async validateSecret(secret) {
-      const result = await validateSyncSecret(secret);
-      // 自动校验通过即持久化（输入即保存），否则关闭重开密钥不保留
-      if (result.ok) this.confirmSaved(secret);
-      this.applyValidationResult(result, "密钥正确，云端连接可用");
-    },
-    applyValidationResult(result, okText = "密钥正确，云端连接可用") {
-      this.secretValid = result.ok;
-      // 成功：toast 显示完整结果，内联只留短文案，避免长文案撑高卡片
-      // 失败：内联保留具体原因（密钥/服务/网络），就地可见
-      if (result.ok) {
-        this.validationState = "valid";
-        this.validationText = result.okText || "密钥有效";
-        this.showSecretToast(okText);
-      } else {
-        this.validationState = result.reason;
-        this.validationText = FAIL_TEXT[result.reason] || "云端接口返回异常";
-      }
-    },
-    // 校验通过后落盘：写密钥、标记已存；同步开关状态由开关/按钮独立控制
-    confirmSaved(secret) {
-      setSyncSecret(secret);
-      this.secretInput = secret;
-      this.hasSecret = true;
-      this.secretValid = true;
-    },
-    async validateAndSave() {
-      const secret = this.secretInput.trim();
-      if (!secret) return;
-      if (this.validationTimer) clearTimeout(this.validationTimer);
-      this.validationState = "checking";
-      this.validationText = "正在校验密钥…";
-      const result = await validateSyncSecret(secret);
-      if (!result.ok) { this.applyValidationResult(result); return; }
-      this.confirmSaved(secret);
-      setSyncEnabled(true);
-      this.applyValidationResult({ ok: true, okText: "已保存" }, "密钥正确，云端连接已启用");
-    },
-    clearSecret() {
-      setSyncEnabled(false);
-      setSyncSecret("");
-      this.syncEnabled = false;
-      this.secretInput = "";
-      this.hasSecret = false;
-      this.secretValid = false;
-      this.validationState = "idle";
-      this.validationText = "输入密钥后验证云端连接";
+      this.syncToastText = next ? "云端同步已开启" : "云端同步已关闭";
+      this.syncToastVisible = true;
     },
   },
 };
@@ -494,10 +326,9 @@ export default {
   background: rgba(48, 209, 88, 0.1);
   color: #30d158;
 }
-.status-wait {
-  border-color: rgba(255, 159, 10, 0.35);
-  background: rgba(255, 159, 10, 0.1);
-  color: #ff9f0a;
+.status-off {
+  border-color: rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.5);
 }
 
 /* ── 开关行 ── */
@@ -553,98 +384,6 @@ export default {
 }
 .switch-on::before { background: #34c759; }
 .switch-on .switch-knob { transform: translateX(20px); }
-
-/* ── 密钥表单 ── */
-.key-form {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  margin-top: 18px;
-  padding-top: 16px;
-  border-top: 1px solid rgba(255, 255, 255, 0.07);
-}
-
-.field-label {
-  color: rgba(255, 255, 255, 0.82);
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.key-row {
-  display: flex;
-  gap: 8px;
-  align-items: stretch;
-}
-
-.key-input {
-  flex: 1 1 auto;
-  min-width: 0;
-  height: 44px;
-  padding: 0 14px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 8px;
-  background: #1d1d1d;
-  color: #f2f2f2;
-  font: inherit;
-  font-size: 16px;
-  outline: none;
-  transition: border-color 0.18s ease, box-shadow 0.18s ease;
-}
-.key-input:focus {
-  border-color: rgba(196, 211, 238, 0.28);
-  box-shadow: 0 0 0 1px rgba(196, 211, 238, 0.14);
-}
-.key-input::placeholder { color: rgba(255, 255, 255, 0.42); }
-
-.validate-btn {
-  flex: 0 0 auto;
-  min-height: 44px;
-  padding: 0 18px;
-  border: 0;
-  border-radius: 8px;
-  background: #f3f3f3;
-  color: #121212;
-  font: inherit;
-  font-size: 14px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: opacity 0.18s ease;
-}
-.validate-btn:hover:not(:disabled) { opacity: 0.88; }
-.validate-btn:disabled { cursor: not-allowed; opacity: 0.4; }
-
-.validation {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 20px;
-  font-size: 13px;
-  color: rgba(255, 255, 255, 0.46);
-}
-.validation-valid { color: #30d158; }
-.validation-invalid { color: #ff453a; }
-.validation-server, .validation-network, .validation-unexpected { color: #ff9f0a; }
-.validation-checking .mdi-loading { animation: spin 0.9s linear infinite; }
-@keyframes spin { to { transform: rotate(360deg); } }
-
-.clear-secret {
-  align-self: flex-start;
-  min-height: 44px;
-  padding: 0 16px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 8px;
-  background: #202020;
-  color: #ffb7b7;
-  font: inherit;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background-color 0.18s ease, border-color 0.18s ease;
-}
-.clear-secret:hover {
-  background: #262626;
-  border-color: rgba(255, 255, 255, 0.14);
-}
 
 /* ── 数据策略 ── */
 .policy-list {
@@ -716,17 +455,6 @@ export default {
   }
 }
 
-/* ── 手机：密钥行纵向堆叠 ── */
-@media (max-width: 700px) {
-  .key-row {
-    flex-direction: column;
-  }
-
-  .validate-btn {
-    width: 100%;
-  }
-}
-
 /* ── 手表/极窄：收紧间距，头部自然换行 ── */
 @media (max-width: 380px) {
   .settings-body {
@@ -771,20 +499,14 @@ export default {
   }
 
   .toggle-row,
-  .key-form,
   .policy-list {
     margin-top: 12px;
     padding-top: 12px;
   }
-
-  /* 窄屏长错误文案允许换行，不把卡片顶宽 */
-  .validation {
-    flex-wrap: wrap;
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .switch-knob, .switch::before, .validation-checking .mdi-loading {
+  .switch-knob, .switch::before {
     transition: none;
     animation: none;
   }

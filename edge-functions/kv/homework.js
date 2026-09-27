@@ -48,11 +48,6 @@ function json(data, status = 200) {
   });
 }
 
-function isAuthorized(context) {
-  const secret = context.request.headers.get("x-sync-secret");
-  return !!secret && secret === context.env.SYNC_SECRET;
-}
-
 function isValidChanges(changes) {
   if (!isPlainObject(changes)) return false;
   return Object.entries(changes).every(([key, cell]) => (
@@ -64,20 +59,12 @@ function isValidChanges(changes) {
   ));
 }
 
-export async function onRequestGet(context) {
-  if (!isAuthorized(context)) {
-    return json({ error: "forbidden" }, 401);
-  }
-
+export async function onRequestGet() {
   const doc = await homework_kv.get(KV_KEY, "json");
   return json(toV3(doc));
 }
 
 export async function onRequestPut(context) {
-  if (!isAuthorized(context)) {
-    return json({ error: "forbidden" }, 401);
-  }
-
   let body;
   try {
     body = await context.request.json();
