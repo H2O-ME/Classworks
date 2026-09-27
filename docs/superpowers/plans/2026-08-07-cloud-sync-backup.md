@@ -931,7 +931,7 @@ pnpm build
 
 | 步骤 | 预期 |
 |---|---|
-| `curl -s -o /dev/null -w "%{http_code}" <URL>/kv/homework`（无密钥） | 401 |
+| `curl -s -o /dev/null -w "%{http_code}" <URL>/kv/homework`（无密钥） | 401 ← ⚠️ 已过时：现在无鉴权，应返回 **200** |
 | `curl -s -H "x-sync-secret: <SYNC_SECRET>" <URL>/kv/homework` | `{"empty":true}` |
 | 设备 A（设密钥）改作业保存 → `curl -H "x-sync-secret: ..." <URL>/kv/homework` | 返回含该日期的整包 |
 | 设备 B（设密钥）打开 → 等待 ≤5 分钟 | 自动拉到新数据，弹「检测到云端更新」提示框 |

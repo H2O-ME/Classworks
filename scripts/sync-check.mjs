@@ -4,7 +4,14 @@
 // 说明：协议纯函数（normalizeCloudDoc 等）直接 import 真实现；sync.js/storage.js 依赖 idb
 // 无法在 node 里 import，推/拉编排仍按同一份协议复刻逻辑做黑盒断言。
 import assert from "node:assert/strict";
-import { isPlainObject, normalizeCloudDoc } from "../src/utils/syncProtocol.js";
+import {
+  isPlainObject,
+  isValidChanges,
+  normalizeCloudDoc,
+  MAX_CHANGES_ENTRIES,
+  MAX_CONTENT_LENGTH,
+  MAX_ENTRY_KEY_LENGTH,
+} from "../src/utils/syncProtocol.js";
 
 // ── 服务端 PUT：逐条覆盖 changes，报文外条目一概不碰，返回合并后文档 ──
 function serverPut(currentDoc, changes) {
@@ -150,4 +157,39 @@ function applyCloud(local, cloudEntries, skipKeys) {
   console.log("✓ 无鉴权：同步请求不携带密钥头");
 }
 
-console.log("\n✅ sync-check 全部通过（7 场景 + 无鉴权）");
+// ── 信任边界：无鉴权端点必须挡住异常报文（正常使用碰不到上界，故只需断言边界两侧） ──
+{
+  // 正常报文必须通过
+  assert.equal(isValidChanges({ "20260821|数学": { content: "P29", options: {} } }), true);
+  assert.equal(isValidChanges({ "20260821|数学": { content: "", options: {} } }), true); // 墓碑
+
+  // 类型非法仍然拒绝（原有行为不可回退）
+  assert.equal(isValidChanges(null), false);
+  assert.equal(isValidChanges({ bad: { content: "x", options: {} } }), false); // 键无 "|"
+  assert.equal(isValidChanges({ "20260821|数学": "不是对象" }), false);
+  assert.equal(isValidChanges({ "20260821|数学": { content: 123, options: {} } }), false);
+
+  // 同类非法键不得被超长键绕过（"|" 在末尾 → subject 为空，仍应拒绝）
+  assert.equal(isValidChanges({ "20260821|": { content: "x", options: {} } }), false);
+
+  // 上界：恰好等于上限通过，超一个即拒绝
+  assert.equal(MAX_CHANGES_ENTRIES, 5000);
+  const maxKeys = Array.from({ length: MAX_CHANGES_ENTRIES }, (_, i) => `20260821|科${i}`);
+  const atLimit = Object.fromEntries(maxKeys.map((k) => [k, { content: "x", options: {} }]));
+  assert.equal(isValidChanges(atLimit), true);
+  const overLimit = { ...atLimit, "20260821|溢出": { content: "x", options: {} } };
+  assert.equal(isValidChanges(overLimit), false, "条目数超上限必须拒绝");
+
+  // 超长内容拒绝
+  const longContent = "字".repeat(MAX_CONTENT_LENGTH);
+  assert.equal(isValidChanges({ "20260821|数学": { content: longContent, options: {} } }), true);
+  assert.equal(isValidChanges({ "20260821|数学": { content: `${longContent}字`, options: {} } }), false, "内容超上限必须拒绝");
+
+  // 超长键拒绝
+  const longKey = `20260821|${"科".repeat(MAX_ENTRY_KEY_LENGTH)}`;
+  assert.ok(longKey.length > MAX_ENTRY_KEY_LENGTH);
+  assert.equal(isValidChanges({ [longKey]: { content: "x", options: {} } }), false, "键超上限必须拒绝");
+  console.log("✓ 信任边界：条目数/键长/内容长的上界两侧均正确");
+}
+
+console.log("\n✅ sync-check 全部通过（7 场景 + 无鉴权 + 报文上界）");

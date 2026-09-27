@@ -139,14 +139,14 @@
 </template>
 
 <script>
-import { setSyncEnabled, watchSyncState } from "@/utils/sync";
+import { getSyncEnabled, setSyncEnabled, watchSyncState } from "@/utils/sync";
 
 export default {
   name: "SettingsPage",
   data() {
     return {
       previousTitle: null,
-      syncEnabled: true,
+      syncEnabled: getSyncEnabled(),
       syncToastVisible: false,
       syncToastText: "",
       unsubscribeSyncState: null,

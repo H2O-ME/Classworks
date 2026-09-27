@@ -8,7 +8,7 @@ import { VitePWA } from "vite-plugin-pwa";
 import { defineConfig, loadEnv } from "vite";
 import { fileURLToPath, URL } from "node:url";
 import vueDevTools from "vite-plugin-vue-devtools";
-import { isPlainObject, normalizeCloudDoc } from "./src/utils/syncProtocol.js";
+import { isPlainObject, isValidChanges, MAX_DOC_CHARS, normalizeCloudDoc } from "./src/utils/syncProtocol.js";
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
@@ -17,13 +17,6 @@ export default defineConfig(({ mode }) => {
   const devKvProxy = env.DEV_KV_PROXY || "";
   // ponytail: 本地 dev mock 代替边缘函数，持久化仅内存（重启丢失），够开发用
   let devCache = null;
-
-  function isValidChanges(changes) {
-    return isPlainObject(changes) && Object.entries(changes).every(([key, cell]) => (
-      typeof key === "string" && key.includes("|")
-      && isPlainObject(cell) && typeof cell.content === "string" && isPlainObject(cell.options)
-    ));
-  }
 
   // 读取请求体为 Buffer（转发云端时原样透传）
   function readBody(req) {
@@ -91,7 +84,17 @@ export default defineConfig(({ mode }) => {
               for (const [key, cell] of Object.entries(payload.changes)) {
                 merged[key] = { content: String(cell.content), options: isPlainObject(cell.options) ? cell.options : {} };
               }
-              devCache = { v: 3, savedAt: new Date().toISOString(), entries: merged };
+              const next = { v: 3, savedAt: new Date().toISOString(), entries: merged };
+              const serialized = JSON.stringify(next);
+              // 与边缘函数同规则：整包超限拒绝，但只拦"继续变大"，历史超限数据仍可被改小/清空
+              // ponytail: dev 下超 ~3MB 的请求体会被 vite 的连接层截断，表现为 400 而非 413；
+              // 生产由边缘函数处理，无此限制，本地验证大报文请直接调 edge 函数。
+              if (serialized.length > MAX_DOC_CHARS && serialized.length > JSON.stringify(normalizeCloudDoc(devCache)).length) {
+                res.statusCode = 413;
+                res.setHeader("Content-Type", "application/json; charset=UTF-8");
+                return res.end(JSON.stringify({ error: "document too large" }));
+              }
+              devCache = next;
               res.setHeader("Content-Type", "application/json; charset=UTF-8");
               return res.end(JSON.stringify(devCache));
             });

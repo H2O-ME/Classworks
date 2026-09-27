@@ -43,10 +43,10 @@ Classworks 作业看板当前为**纯本地**应用：作业按天存于浏览�
 │  settings.vue ← 新增：同步密钥输入（无密钥=纯本地）│
 │  index.vue   ← 新增：同步提示框 + 回退入口     │
 └──────────────┬────────────────────────────┘
-               │ HTTP (同域 /kv/homework) + 头 x-sync-secret
+               │ HTTP (同域 /kv/homework) ← 已过时：原为 + 头 x-sync-secret，现无鉴权
 ┌──────────────▼────────────────────────────┐
 │  edge-functions/kv/homework.js (新增)       │
-│  GET/PUT 均校验 x-sync-secret              │
+│  GET/PUT ← 已过时：原为「均校验 x-sync-secret」│
 │  → homework_kv.get / homework_kv.put        │
 └──────────────┬────────────────────────────┘
                │
