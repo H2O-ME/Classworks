@@ -75,3 +75,19 @@ export function formatDateLabel(dateKey) {
   const date = parseDateArg(dateKey);
   return `${date.getMonth() + 1} 月 ${date.getDate()} 日`;
 }
+
+// ── 权限判定：纯函数，selfcheck 直接断言 ──
+// 白板免密全科可写；未登录只读；管理员全科；课代表仅绑定科目
+export function resolveEditPermission({ isBoard, user }, subject) {
+  if (isBoard) return true;
+  if (!user) return false;
+  if (user.role === "admin") return true;
+  return user.role === "rep" && user.subject === subject;
+}
+
+export function roleLabel(user) {
+  if (!user) return "未登录";
+  if (user.role === "admin") return "管理员";
+  if (user.role === "rep") return `课代表 · ${user.subject || "未绑定"}`;
+  return "同学";
+}

@@ -6,9 +6,11 @@
 
 ```bash
 cd server
-cp .env.example .env      # 填 WRITE_KEY / CORS_ORIGINS
+cp .env.example .env      # 填 BOARD_TOKEN / JWT_SECRET / CORS_ORIGINS
 docker compose up -d --build
 docker compose logs -f    # 看启动与健康检查
+# 建第一个管理员（之后用同一个命令分配课代表与同学）
+docker compose exec api node dist/users.js add <拼音> <姓名> admin
 ```
 
 - 容器只绑定 `127.0.0.1:3100`，不直接暴露公网
@@ -48,9 +50,11 @@ VITE_API_BASE=https://api.example.com pnpm build
 
 ## 三、首次上线后
 
-- 访问 `https://<站点>/?room=default&key=<写入密钥>` 验证可写
-- 访问 `https://<站点>/`（不带 key）验证只读
-- 希沃白板把带 key 的地址存成桌面快捷方式，开机即可用
+- 访问 `https://<站点>/?board_token=<白板令牌>` 验证白板全科可写
+- 访问 `https://<站点>/`（不带令牌、未登录）验证只读
+- 访问 `https://<站点>/login` 用管理员账号登录，验证全科都能改
+- 用一个课代表账号登录，验证只有它绑定那一科出现铅笔
+- 希沃白板把带 `board_token` 的地址存成桌面快捷方式，开机即可用（令牌读出后自动从地址栏抹除）
 
 ## 注意
 

@@ -1,15 +1,17 @@
 // 数据层自检：`node src/utils/selfcheck.mjs`（无需测试框架，断言失败即退出码 1）
-import { readConflictBody, formatTime, normalizeHistory, retryDelay } from "../api/board.js";
+import { formatTime, retryDelay } from "../api/board.js";
 import {
+  SUBJECTS,
   boardFromApi,
   formatDateKey,
   getFontSize,
+  resolveEditPermission,
+  roleLabel,
   shiftDate,
   toGridItems,
   unusedSubjects,
 } from "./board.js";
 import { getDefaultRoster, getPickWeight, pickRandomIndex } from "./roster.js";
-import { parseAuth } from "../composables/useAuth.js";
 
 let failed = 0;
 function check(name, condition) {
@@ -46,6 +48,26 @@ check("字号下限", getFontSize(-99) === 12);
 check("字号上限", getFontSize(99) === 40);
 check("字号基准", getFontSize(0) === 16);
 
+// ── 权限矩阵：4 种身份 × 6 科的写入判定 ──
+{
+  const board = { isBoard: true, user: null };
+  const admin = { isBoard: false, user: { role: "admin", subject: null } };
+  const repMath = { isBoard: false, user: { role: "rep", subject: "数学" } };
+  const student = { isBoard: false, user: { role: "student", subject: null } };
+  const anon = { isBoard: false, user: null };
+
+  check("白板：全科可写", SUBJECTS.every((subject) => resolveEditPermission(board, subject)));
+  check("管理员：全科可写", SUBJECTS.every((subject) => resolveEditPermission(admin, subject)));
+  check("课代表：仅绑定科目可写", resolveEditPermission(repMath, "数学") && !resolveEditPermission(repMath, "语文"));
+  check("普通同学：全科只读", SUBJECTS.every((subject) => !resolveEditPermission(student, subject)));
+  check("未登录：全科只读", SUBJECTS.every((subject) => !resolveEditPermission(anon, subject)));
+  // 白板令牌存在时即使带着学生身份也必须全放：讲台电脑不该被登录态锁住
+  check("白板优先于登录身份", resolveEditPermission({ isBoard: true, user: student.user }, "地理"));
+
+  check("身份文案：课代表带科目", roleLabel({ role: "rep", subject: "物理" }) === "课代表 · 物理");
+  check("身份文案：未登录", roleLabel(null) === "未登录");
+}
+
 // ── 加权抽签：weight=0 的名字永远抽不中，且不连续重复 ──
 const roster = getDefaultRoster();
 const zeroNames = roster.filter((name) => getPickWeight(name) === 0);
@@ -68,36 +90,10 @@ check("首次重试 3s", retryDelay(0) === 3000 && retryDelay(1) === 3000);
 check("第二次 6s", retryDelay(2) === 6000);
 check("封顶 60s", retryDelay(20) === 60000);
 
-// ── 409 响应体两种包装都能读到云端内容 ──
-check(
-  "409 扁平包装",
-  readConflictBody({ content: "云端", updatedAt: 42 }).content === "云端",
-);
-const wrapped = readConflictBody({ current: { content: "云端2", updatedAt: 43 } });
-check("409 current 包装", wrapped.content === "云端2" && wrapped.updatedAt === 43);
-check("409 空体不炸", readConflictBody(null).content === "");
-
-// ── 历史流水：字段归一化 + 最多 20 条 ──
-const rawHistory = Array.from({ length: 30 }, (_, index) => ({
-  subject: "语文",
-  content: `第 ${index} 版`,
-  createdAt: 1_700_000_000_000 + index,
-}));
-const normalized = normalizeHistory({ items: rawHistory });
-check("历史最多 20 条", normalized.length === 20);
-check("历史字段归一化", normalized[0].subject === "语文" && normalized[0].createdAt > 0);
-check("历史缺字段不炸", normalizeHistory({}).length === 0 && normalizeHistory(null).length === 0);
-
 // ── 时间显示：毫秒与秒级时间戳都能格式化 ──
 check("毫秒时间戳", /^\d{2}-\d{2} \d{2}:\d{2}$/.test(formatTime(1_700_000_000_000)));
 check("秒级时间戳", /^\d{2}-\d{2} \d{2}:\d{2}$/.test(formatTime(1_700_000_000)));
 check("空时间戳返回空串", formatTime(0) === "");
-
-// ── 写权限解析：URL 带 key 才可写，room 缺省交给上层兜底 ──
-check("解析 room + key", JSON.stringify(parseAuth("?room=%E4%B8%80%E7%8F%AD&key=abc")) === '{"room":"一班","key":"abc"}');
-check("无参数时都为 null", parseAuth("").room === null && parseAuth("").key === null);
-check("空 key 当没提供", parseAuth("?key=").key === null);
-check("只带 room 是只读", parseAuth("?room=x").key === null);
 
 // ── 字号档位：旧格式 { display: { fontSizeLevel } } 必须能读回来 ──
 // 换架构后把键拍平成 fontLevel，若不兼容旧格式，老师原来调好的字号会被重置成 16px。

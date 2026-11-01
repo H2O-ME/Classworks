@@ -1,4 +1,4 @@
-// 后端 API 封装：统一处理 401（写权限）/409（并发冲突）/网络错误，页面只关心业务结果
+// 后端 API 封装：统一处理 401/403/429/网络错误，页面只关心业务结果
 const env = import.meta.env || {};
 
 // 基址：本地开发直连 Node 后端；线上同源反代时留空走相对路径
@@ -23,10 +23,12 @@ export class BoardApiError extends Error {
   }
 }
 
-async function request(path, { method = "GET", body, writeKey } = {}) {
+// credentials: 白板走 X-Board-Token，登录用户走 Authorization，两者互斥
+async function request(path, { method = "GET", body, token, boardToken } = {}) {
   const headers = { Accept: "application/json" };
   if (body !== undefined) headers["Content-Type"] = "application/json";
-  if (writeKey) headers["X-Write-Key"] = writeKey;
+  if (boardToken) headers["X-Board-Token"] = boardToken;
+  else if (token) headers.Authorization = `Bearer ${token}`;
 
   let response;
   try {
@@ -43,49 +45,34 @@ async function request(path, { method = "GET", body, writeKey } = {}) {
   const payload = await response.json().catch(() => null);
   if (response.ok) return payload;
 
-  if (response.status === 401) throw new BoardApiError("写权限无效", 401, payload);
-  if (response.status === 409) throw new BoardApiError("云端已有更新的内容", 409, payload);
+  if (response.status === 401) throw new BoardApiError(payload?.error || "登录已过期", 401, payload);
+  if (response.status === 403) throw new BoardApiError(payload?.error || "没有该科目的写入权限", 403, payload);
+  if (response.status === 429) throw new BoardApiError(payload?.error || "提交过于频繁", 429, payload);
   throw new BoardApiError(payload?.error || `请求失败（${response.status}）`, response.status, payload);
 }
 
-export function getBoard(room, date) {
-  return request(`/api/board?room=${encodeURIComponent(room)}&date=${encodeURIComponent(date)}`);
+export function getBoard(date) {
+  return request(`/api/board?date=${encodeURIComponent(date)}`);
 }
 
-export function saveSubject({ room, date, subject, content, baseUpdatedAt, writeKey }) {
-  return request("/api/board/save", {
-    method: "POST",
-    writeKey,
-    body: { room, date, subject, content, baseUpdatedAt },
-  });
+export function saveSubject({ date, subject, content, token, boardToken }) {
+  return request("/api/board/save", { method: "POST", token, boardToken, body: { date, subject, content } });
 }
 
-export function getHistory(room, date) {
-  return request(`/api/board/history?room=${encodeURIComponent(room)}&date=${encodeURIComponent(date)}`);
+export function login(username, password) {
+  return request("/api/auth/login", { method: "POST", body: { username, password } });
+}
+
+export function activate(tempToken, newPassword) {
+  return request("/api/auth/activate", { method: "POST", token: tempToken, body: { newPassword } });
+}
+
+export function getMe(token) {
+  return request("/api/auth/me", { token });
 }
 
 export function getHealth() {
   return request("/api/health");
-}
-
-// 409 响应体里的云端最新内容：兼容 { content, updatedAt } 与 { current: {...} } 两种包装
-export function readConflictBody(body) {
-  const cell = body && typeof body === "object" && "content" in body ? body : body?.current;
-  return {
-    content: typeof cell?.content === "string" ? cell.content : "",
-    updatedAt: Number(cell?.updatedAt) || 0,
-  };
-}
-
-// 历史流水归一化：容忍字段名差异（items/records/list）
-export function normalizeHistory(payload) {
-  const list = payload?.items || payload?.records || payload?.list;
-  return (Array.isArray(list) ? list : []).slice(0, 20).map((item) => ({
-    id: item?.id ?? `${item?.subject}-${item?.createdAt ?? item?.updatedAt}`,
-    subject: String(item?.subject || ""),
-    content: String(item?.content || ""),
-    createdAt: Number(item?.createdAt ?? item?.updatedAt) || 0,
-  }));
 }
 
 export function formatTime(timestamp) {

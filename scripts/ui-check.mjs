@@ -43,6 +43,12 @@ assert.deepEqual(distribute([], 3, () => 1).map((column) => column.length), [0, 
   }
   // 封顶 3 列：CSS 里不该再有 columns-4 的网格定义，免得误以为大屏会排 4 列
   assert.ok(!grid.includes("columns-4"), "HomeworkGrid 里不该再有 columns-4（列数已封顶 3）");
+
+  // 回归守卫：编辑权必须按学科逐卡判定，不能退回「整页只读」的单一开关。
+  // 踩过的坑：早期只有 readonly 布尔，课代表登录后整页都被锁死。
+  assert.ok(!/readonly:\s*\{\s*type:\s*Boolean/.test(grid), "HomeworkGrid 不该再有全局 readonly prop");
+  const page = readFileSync(new URL("../src/pages/index.vue", import.meta.url), "utf8");
+  assert.match(page, /:editable-subjects="/, "index.vue 必须把可写科目传给 HomeworkGrid");
 }
 
 // 回归守卫：全站尺寸基准必须留在 125%。
@@ -65,6 +71,7 @@ assert.deepEqual(distribute([], 3, () => 1).map((column) => column.length), [0, 
     "src/components/HomeworkEditDialog.vue",
     "src/components/AppToast.vue",
     "src/pages/index.vue",
+    "src/pages/login.vue",
   ];
   for (const relative of styled) {
     const source = readFileSync(new URL(`../${relative}`, import.meta.url), "utf8");

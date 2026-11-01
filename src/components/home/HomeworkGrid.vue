@@ -15,10 +15,10 @@
               v-for="(item, itemIndex) in column"
               :key="item.key"
               class="homework-card"
-              :class="{ 'homework-card-readonly': readonly }"
-              :role="readonly ? undefined : 'button'"
-              :tabindex="readonly ? undefined : 0"
-              :aria-label="readonly ? undefined : `编辑${item.name}作业`"
+              :class="{ 'homework-card-readonly': !isEditable(item.key) }"
+              :role="isEditable(item.key) ? 'button' : undefined"
+              :tabindex="isEditable(item.key) ? 0 : undefined"
+              :aria-label="isEditable(item.key) ? `编辑${item.name}作业` : undefined"
               :style="{ '--card-delay': `${columnIndex * 56 + itemIndex * 42}ms` }"
               @click="handleCardClick(item.key)"
               @keydown.enter="handleCardClick(item.key)"
@@ -29,7 +29,7 @@
                   {{ item.name }}
                 </div>
                 <i-mdi-pencil-outline
-                  v-if="!readonly"
+                  v-if="isEditable(item.key)"
                   class="homework-card-pencil"
                 />
               </header>
@@ -53,18 +53,18 @@
       </div>
     </div>
 
-    <!-- 独立添加入口：单行幽灵胶囊，不进作业卡网格，明显更小更弱；只读态不显示 -->
+    <!-- 独立添加入口：单行幽灵胶囊，不进作业卡网格；只列当前身份能写的科目 -->
     <section
-      v-if="!readonly && unusedSubjects.length"
+      v-if="editableAdditions.length"
       class="subject-add-tiles"
       aria-label="添加学科作业"
     >
       <SubjectAddCard
-        v-for="(subject, index) in unusedSubjects"
+        v-for="(subject, index) in editableAdditions"
         :key="subject.name"
         :subject="subject"
         :style="{ '--tile-delay': `${index * 40}ms` }"
-        @add="handleCardClick(subject.name)"
+        @add="emit('open-dialog', subject.name)"
       />
     </section>
   </div>
@@ -80,8 +80,8 @@ const props = defineProps({
   unusedSubjects: { type: Array, required: true },
   contentStyle: { type: Object, default: () => ({}) },
   updatedKeys: { type: Array, default: () => [] },
-  // 只读（学生扫码，无写密钥）：不绑点击、不显示铅笔、文字可选中复制
-  readonly: { type: Boolean, default: false },
+  // 当前身份可写的科目；空数组=只读（学生看到的就是这个）
+  editableSubjects: { type: Array, default: () => [] },
 });
 const emit = defineEmits(["open-dialog"]);
 
@@ -91,6 +91,13 @@ const columnCountValue = computed(() => columnCount(viewportWidth.value));
 const columns = computed(() =>
   distribute(props.sortedItems, columnCountValue.value, estimateCardHeight),
 );
+const editableAdditions = computed(() =>
+  props.unusedSubjects.filter((subject) => props.editableSubjects.includes(subject.name)),
+);
+
+function isEditable(subject) {
+  return props.editableSubjects.includes(subject);
+}
 
 function handleResize() {
   viewportWidth.value = window.innerWidth;
@@ -100,7 +107,7 @@ onMounted(() => window.addEventListener("resize", handleResize));
 onBeforeUnmount(() => window.removeEventListener("resize", handleResize));
 
 function handleCardClick(key) {
-  if (props.readonly) return;
+  if (!isEditable(key)) return;
   emit("open-dialog", key);
 }
 

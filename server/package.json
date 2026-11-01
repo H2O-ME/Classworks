@@ -9,6 +9,7 @@
     "dev": "node --watch src/index.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
+    "users": "node dist/users.js",
     "selftest": "tsc -p tsconfig.json && node selftest.mjs"
   },
   "dependencies": {

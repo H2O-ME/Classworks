@@ -6,15 +6,26 @@
           {{ titleText }}
         </div>
         <div class="app-bar-actions">
+          <div class="identity-pill">
+            <i-mdi-account-circle-outline class="identity-icon" />
+            {{ userLabel }}
+          </div>
           <div class="date-pill">
             {{ dateLabel }}
           </div>
           <router-link
             class="settings-button"
-            to="/settings"
-            aria-label="打开设置"
+            :to="signedIn ? '/settings' : '/login'"
+            :aria-label="signedIn ? '打开设置' : '登录'"
           >
-            <i-mdi-cog-outline class="settings-icon" />
+            <i-mdi-cog-outline
+              v-if="signedIn"
+              class="settings-icon"
+            />
+            <i-mdi-login-variant
+              v-else
+              class="settings-icon"
+            />
           </router-link>
         </div>
       </div>
@@ -28,7 +39,7 @@
     >
       <div
         class="main-window board-container"
-        :class="{ 'no-select': isWritable }"
+        :class="{ 'no-select': editableSubjects.length > 0 }"
       >
         <section
           v-if="gridItems.length === 0"
@@ -43,14 +54,14 @@
             </h1>
           </div>
 
-          <template v-if="isWritable">
+          <template v-if="editableSubjects.length">
             <div class="empty-divider">
               <span>选择学科开始录入</span>
             </div>
 
             <div class="empty-quick-grid">
               <SubjectAddCard
-                v-for="(subject, index) in defaultSubjects"
+                v-for="(subject, index) in editableSubjects"
                 :key="subject.name"
                 :subject="subject"
                 :style="{ '--tile-delay': `${index * 40}ms` }"
@@ -69,7 +80,7 @@
             :unused-subjects="unusedList"
             :content-style="contentStyle"
             :updated-keys="flashKeys"
-            :readonly="!isWritable"
+            :editable-subjects="editableSubjectNames"
             @open-dialog="openDialog"
           />
         </section>
@@ -77,7 +88,7 @@
     </div>
 
     <HomeworkEditDialog
-      v-if="isWritable"
+      v-if="editableSubjects.length"
       v-model="dialogVisible"
       :title="dialogTitle"
       :initial-content="dialogContent"
@@ -87,7 +98,7 @@
     <FloatingToolbar
       :selected-date="selectedDate"
       :is-today="isToday"
-      :writable="isWritable"
+      :writable="canEditAll"
       :copy-to-today-loading="copying"
       :current-font-size="renderedFontSize"
       @prev-day="goToDate(shiftDate(currentDate, -1))"
@@ -124,56 +135,6 @@
               @click="confirmCopyToToday"
             >
               确认复制
-            </Button>
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
-
-    <!-- 409 并发冲突：让用户选云端还是本地，不静默覆盖 -->
-    <Dialog
-      :open="!!conflict"
-      @update:open="!$event && closeConflict()"
-    >
-      <DialogContent>
-        <div class="copy-confirm-card copy-confirm-card-wide">
-          <DialogTitle class="copy-confirm-title">
-            「{{ conflict?.subject }}」在别处被改过
-          </DialogTitle>
-          <p class="copy-confirm-text">
-            云端版本比你编辑时更新，请选择保留哪一版。
-          </p>
-          <div class="conflict-grid">
-            <div class="conflict-box">
-              <div class="conflict-label">
-                云端版本
-              </div>
-              <p class="conflict-content">
-                {{ conflict?.cloudContent || "（空）" }}
-              </p>
-            </div>
-            <div class="conflict-box">
-              <div class="conflict-label">
-                我的版本
-              </div>
-              <p class="conflict-content">
-                {{ conflict?.localContent || "（空）" }}
-              </p>
-            </div>
-          </div>
-          <div class="copy-confirm-actions">
-            <Button
-              variant="ghost"
-              class="copy-confirm-cancel"
-              @click="takeCloud"
-            >
-              用云端版本
-            </Button>
-            <Button
-              class="copy-confirm-solid"
-              @click="keepLocal"
-            >
-              用我的版本覆盖
             </Button>
           </div>
         </div>
@@ -265,6 +226,7 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import HomeSkeleton from "@/components/common/HomeSkeleton.vue";
 import HomeworkGrid from "@/components/home/HomeworkGrid.vue";
 import SubjectAddCard from "@/components/home/SubjectAddCard.vue";
+import { useAuth } from "@/composables/useAuth";
 import { useBoard } from "@/composables/useBoard";
 import { useRollCall } from "@/composables/useRollCall";
 import {
@@ -280,20 +242,9 @@ import {
 } from "@/utils/board";
 import { getFontLevel, setFontLevel } from "@/utils/settings";
 
-const {
-  isWritable,
-  currentDate,
-  boardData,
-  syncState,
-  hasPending,
-  conflict,
-  load,
-  saveSubject,
-  resolveConflictKeepLocal,
-  resolveConflictTakeCloud,
-  retryNow,
-  dispose,
-} = useBoard();
+const { isBoard, user, userLabel, canEdit, refreshIdentity } = useAuth();
+const { currentDate, boardData, syncState, hasPending, forbidden, load, saveSubject, retryNow, dispose } =
+  useBoard();
 
 const {
   visible: rollVisible,
@@ -310,10 +261,15 @@ const {
 const saveTimer = ref(null);
 const todayKey = formatDateKey(new Date());
 const ready = ref(false);
-const defaultSubjects = getDefaultSubjects();
 
 const gridItems = computed(() => toGridItems(boardData.value));
 const unusedList = computed(() => unusedSubjects(gridItems.value));
+// 当前身份可写的科目：白板/管理员=6 科，课代表=1 科，同学=0 科
+const editableSubjectNames = computed(() => SUBJECTS.filter((name) => canEdit(name)));
+const editableSubjects = computed(() => getDefaultSubjects().filter((subject) => canEdit(subject.name)));
+// 「复制到今天」会重写全部 6 科，只有白板和管理员能做
+const canEditAll = computed(() => isBoard.value || user.value?.role === "admin");
+const signedIn = computed(() => isBoard.value || Boolean(user.value));
 const isToday = computed(() => currentDate.value === todayKey);
 const dateLabel = computed(() => formatDateLabel(currentDate.value));
 const weekdayLabel = computed(() => ["日", "一", "二", "三", "四", "五", "六"][parseDateArg(currentDate.value).getDay()]);
@@ -372,6 +328,11 @@ watch(syncState, (state) => {
   }
 });
 
+// 403：服务端拒绝写某科（权限被改过/令牌失效），重试没用，直接告知
+watch(forbidden, (message) => {
+  if (message) flash(message);
+});
+
 async function goToDate(value) {
   const date = formatDateKey(parseDateArg(value));
   if (date === currentDate.value) return;
@@ -379,8 +340,8 @@ async function goToDate(value) {
 }
 
 function openDialog(subject) {
-  // 只读模式不绑编辑：入口本身不渲染，这里再兜一层
-  if (!isWritable.value) return;
+  // 无该科权限不绑编辑：入口本身不渲染，这里再兜一层
+  if (!canEdit(subject)) return;
   dialogTitle.value = subject;
   dialogContent.value = boardData.value[subject] || "";
   dialogVisible.value = true;
@@ -388,7 +349,7 @@ function openDialog(subject) {
 
 async function handleSave(payload) {
   const subject = dialogTitle.value;
-  if (!subject || !isWritable.value) return;
+  if (!subject || !canEdit(subject)) return;
   const result = await saveSubject(subject, payload?.content ?? "");
   if (result.ok) {
     flashKeys.value = [subject];
@@ -396,28 +357,14 @@ async function handleSave(payload) {
     saveTimer.value = setTimeout(() => (flashKeys.value = []), 1000);
     flash("已保存");
   } else if (result.unauthorized) {
-    flash("写权限无效，改动只留在本机", { persistent: true });
+    flash("登录已过期，改动只留在本机，请重新登录", { persistent: true });
   }
-}
-
-function closeConflict() {
-  conflict.value = null;
-}
-
-async function keepLocal() {
-  const result = await resolveConflictKeepLocal();
-  flash(result.ok ? "已用本机版本覆盖" : "覆盖失败，请稍后重试");
-}
-
-function takeCloud() {
-  resolveConflictTakeCloud();
-  flash("已同步为云端版本");
 }
 
 // 复制到今天：按学科逐一提交，源里没有的学科清空，避免留下隔夜的旧作业
 async function confirmCopyToToday() {
   copyConfirmVisible.value = false;
-  if (!isWritable.value || isToday.value) return;
+  if (!canEditAll.value || isToday.value) return;
   copying.value = true;
   const source = { ...boardData.value };
   try {
@@ -426,8 +373,8 @@ async function confirmCopyToToday() {
       const target = source[subject] || "";
       if ((boardData.value[subject] || "") === target) continue;
       const result = await saveSubject(subject, target);
-      if (result.unauthorized) {
-        flash("写权限无效，未能复制", { persistent: true });
+      if (!result.ok) {
+        flash(result.message || "复制失败，请稍后重试");
         return;
       }
     }
@@ -448,6 +395,8 @@ let previousTitle = null;
 onMounted(async () => {
   previousTitle = document.title;
   document.title = "作业看板";
+  // 身份校正与拉数据并行：不阻塞首屏，角色改过时 canEdit 会自己跟着变
+  refreshIdentity();
   const requested = formatDateKey(parseDateArg(new URLSearchParams(window.location.search).get("date") || todayKey));
   // load 的同步前缀先把本地缓存填进 boardData：命中缓存就立刻出内容，没有才等第一次 GET
   const pending = load(requested);
@@ -474,6 +423,26 @@ onBeforeUnmount(() => {
   color: rgba(255, 255, 255, 0.88);
   font-size: 0.8125rem;
   font-weight: 600;
+}
+
+/* 当前身份：白板/管理员/课代表/同学，一眼看出这台机器现在能改什么 */
+.identity-pill {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.3125rem;
+  padding: 0.4375rem 0.75rem;
+  border: 1px solid rgba(174, 191, 221, 0.22);
+  border-radius: 0.5rem;
+  background: rgba(174, 191, 221, 0.08);
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.identity-icon {
+  width: 0.9375rem;
+  height: 0.9375rem;
 }
 
 .settings-button {
@@ -607,10 +576,6 @@ onBeforeUnmount(() => {
   box-shadow: 0 1.5rem 3.5rem rgba(0, 0, 0, 0.32);
 }
 
-.copy-confirm-card-wide {
-  max-width: 40rem;
-}
-
 .copy-confirm-title {
   color: #f1f1f1;
   font-size: 1.0625rem;
@@ -668,39 +633,6 @@ onBeforeUnmount(() => {
 .copy-confirm-card .copy-confirm-solid:hover {
   background: #ffffff;
   color: #121212;
-}
-
-.conflict-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.625rem;
-  margin-top: 0.875rem;
-}
-
-.conflict-box {
-  min-width: 0;
-  padding: 0.625rem;
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  border-radius: 0.5rem;
-  background: #1a1a1a;
-}
-
-.conflict-label {
-  color: rgba(255, 255, 255, 0.45);
-  font-size: 0.75rem;
-  font-weight: 600;
-}
-
-.conflict-content {
-  max-height: 38vh;
-  margin: 0.375rem 0 0;
-  overflow-y: auto;
-  color: rgba(255, 255, 255, 0.72);
-  font-size: 0.8125rem;
-  line-height: 1.6;
-  white-space: pre-wrap;
-  word-break: break-word;
-  user-select: text;
 }
 
 /* ── 随机点名 ── */
@@ -881,7 +813,8 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 700px) {
-  .date-pill {
+  .date-pill,
+  .identity-pill {
     display: none;
   }
 
@@ -910,12 +843,6 @@ onBeforeUnmount(() => {
 
   .empty-quick-grid {
     gap: 0.75rem;
-  }
-}
-
-@media (max-width: 600px) {
-  .conflict-grid {
-    grid-template-columns: 1fr;
   }
 }
 
