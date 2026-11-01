@@ -3,11 +3,14 @@
 //
 //   list                                  列出全部账号
 //   add <账号> <姓名> <角色> [科目] [初始密码]
+//   seed <roster.json>                    按名单幂等同步账号与角色（新建补密码，已有只改姓名/角色）
+//   role <账号> <角色> [科目]              改单个账号的角色（含提为课代表/管理员）
 //   passwd <账号> [新初始密码]             重置为「首次登录需改密」状态（默认初始密码=账号）
 //   del <账号>
 //
 // 角色：student | rep | admin。rep 必须给科目（语文/数学/英语/物理/化学/地理）。
 // 不给初始密码时用账号本身当初始密码，首次登录会强制改密。
+import { readFileSync } from 'node:fs'
 import { openDb, hashPassword, ROLES, SUBJECTS, type Role, type UserRow } from './core.js'
 
 const db = openDb()
@@ -17,6 +20,9 @@ const qInsert = db.prepare(
   'INSERT INTO users (username, real_name, password_hash, role, subject, is_activated) VALUES (?, ?, ?, ?, ?, 0)',
 )
 const qReset = db.prepare('UPDATE users SET password_hash = ?, is_activated = 0 WHERE username = ?')
+const qSetRole = db.prepare('UPDATE users SET role = ?, subject = ? WHERE username = ?')
+// seed 用：只同步姓名与角色，不碰 password_hash / is_activated
+const qSync = db.prepare('UPDATE users SET real_name = ?, role = ?, subject = ? WHERE username = ?')
 const qDelete = db.prepare('DELETE FROM users WHERE username = ?')
 
 function die(message: string): never {
@@ -65,6 +71,54 @@ switch (command) {
     if (qFind.get(username)) die(`账号 ${username} 已存在`)
     qInsert.run(username, realName, hashPassword(password), role, subject || null)
     console.log(`✓ 已创建 ${describe(qFind.get(username) as UserRow)}`)
+    break
+  }
+
+  case 'seed': {
+    const file = String(args[0] ?? '').trim()
+    if (!file) die('缺少名单 JSON 路径')
+
+    let roster: { name?: string; pinyin?: string; role?: string; subject?: string }[]
+    try {
+      roster = JSON.parse(readFileSync(file, 'utf8'))
+    } catch (error) {
+      die(`读不了名单 ${file}：${(error as Error).message}`)
+    }
+    if (!Array.isArray(roster) || !roster.length) die('名单必须是 [{ name, pinyin, role?, subject? }] 非空数组')
+
+    // 幂等 upsert：新建补密码，已存在只同步姓名与角色（绝不动密码，重跑不会把大家踢下线）
+    let created = 0
+    let updated = 0
+    for (const entry of roster) {
+      const username = normalizeUsername(entry?.pinyin)
+      const realName = String(entry?.name ?? '').trim()
+      if (!realName) die(`${username} 缺姓名`)
+      const role = (String(entry?.role ?? 'student').trim() || 'student') as Role
+      if (!ROLES.includes(role)) die(`${username} 的角色 ${role} 非法`)
+      const subject = role === 'rep' ? String(entry?.subject ?? '').trim() : ''
+      if (role === 'rep' && !SUBJECTS.includes(subject)) die(`${username} 是课代表，科目必须是 ${SUBJECTS.join('/')}`)
+
+      if (qFind.get(username)) {
+        qSync.run(realName, role, subject || null, username)
+        updated += 1
+      } else {
+        qInsert.run(username, realName, hashPassword(username), role, subject || null)
+        created += 1
+      }
+    }
+    console.log(`✓ 新建 ${created} 个账号，同步 ${updated} 个（初始密码=账号拼音，首登须改密）`)
+    break
+  }
+
+  case 'role': {
+    const username = normalizeUsername(args[0])
+    if (!qFind.get(username)) die(`账号 ${username} 不存在`)
+    const role = String(args[1] ?? '').trim() as Role
+    if (!ROLES.includes(role)) die(`角色只能是 ${ROLES.join(' / ')}`)
+    const subject = role === 'rep' ? String(args[2] ?? '').trim() : ''
+    if (role === 'rep' && !SUBJECTS.includes(subject)) die(`课代表必须绑定科目：${SUBJECTS.join('/')}`)
+    qSetRole.run(role, subject || null, username)
+    console.log(`✓ ${describe(qFind.get(username) as UserRow)}`)
     break
   }
 

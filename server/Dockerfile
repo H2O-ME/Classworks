@@ -6,6 +6,8 @@ COPY package.json ./
 RUN npm install --no-audit --no-fund
 COPY tsconfig.json ./
 COPY src ./src
+# 名单进镜像：容器里 `node dist/users.js seed roster.json student` 就能批量建号，不用再传文件
+COPY roster.json ./
 RUN npm run build && npm prune --omit=dev
 
 FROM node:22-bookworm-slim AS runtime
@@ -14,6 +16,7 @@ WORKDIR /app
 COPY --from=build /app/package.json ./
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
+COPY --from=build /app/roster.json ./roster.json
 # data 目录在镜像里先建好并归属 node，命名 volume 首次创建时会继承这个属主。
 RUN mkdir -p /app/data && chown -R node:node /app
 USER node

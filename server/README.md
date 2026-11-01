@@ -7,7 +7,7 @@ server/
   src/core.ts         建表/迁移、scrypt 密码哈希、HS256 JWT、学科与角色常量
   src/index.ts        路由 + 鉴权链 + 限流 + SQL
   src/users.ts        账号管理 CLI（list / add / passwd / del）
-  selftest.mjs        可运行自检（真起服务打 fetch，41 项断言）
+  selftest.mjs        可运行自检（真起服务打 fetch，44 项断言）
   Dockerfile          node:22-bookworm-slim 多阶段，非 root 运行
   docker-compose.yml  127.0.0.1:3100 + 命名 volume
   .env.example        环境变量模板
@@ -37,21 +37,31 @@ pnpm --dir server dev        # node --watch src/index.ts，端口 3100（Node �
 
 ## 账号管理
 
-账号只能由管理员在服务器上分配，没有注册接口。首次登录强制改密（`is_activated = 0`），初始密码默认等于账号拼音。
+账号只能由管理员在服务器上分配，没有注册接口。首次登录强制改密（`is_activated = 0`），初始密码等于账号拼音。
+
+**`roster.json` 是唯一权威来源**：谁存在、谁是课代表、绑定哪一科，全在里面。灾难恢复只需容器与 `roster.json`，跑一次 `seed` 即可，不用记任何命令序列。
 
 ```bash
 # 容器里（docker compose exec api node dist/users.js ...）
-node dist/users.js list
-node dist/users.js add wangjiashun 王家顺 admin
-node dist/users.js add lisi 李四 rep 数学
-node dist/users.js add zhangsan 张三 student
-node dist/users.js passwd lisi            # 重置为「首登须改密」，初始密码回到 lisi
-node dist/users.js del zhangsan
+node dist/users.js seed roster.json       # 按名单幂等同步（新建补密码，已有只改姓名/角色，绝不动密码）
+node dist/users.js list                   # 核对
+node dist/users.js role <账号> admin      # 临时改单个账号角色
+node dist/users.js role <账号> rep 数学   # 提为某科课代表
+node dist/users.js passwd <账号>          # 重置为「首登须改密」，初始密码回到账号拼音
+node dist/users.js del <账号>
+```
+
+名单条目：
+
+```json
+{ "studentId": "240834", "name": "田瀚文", "pinyin": "tianhanwen", "role": "admin" }
+{ "studentId": "240825", "name": "刘佩涵", "pinyin": "liupeihan", "role": "rep", "subject": "化学" }
 ```
 
 - 账号必须是 3–32 位小写字母开头的拼音全拼（可含数字/下划线）
-- `rep` 必须给科目，且必须是六科之一
-- 第 5 个参数可给自定义初始密码（`add lisi 李四 rep 数学 MyPass123`）
+- `role` 省略即 `student`；`rep` 必须带 `subject`，且必须是六科之一
+- **同一科可以有多名课代表**（几个人的 `subject` 都写 `化学` 即可）：权限按人判定，`subject` 上没有唯一约束
+- 管理员兼任某科课代表时写 `admin` 就够：管理员本来就全科可写
 
 ## 自检
 
@@ -59,7 +69,7 @@ node dist/users.js del zhangsan
 pnpm --dir server selftest   # = tsc 编译 + node selftest.mjs
 ```
 
-用临时数据库跑 `users.js` 建号，再起真实服务断言 41 项：健康检查与 CORS 预检放行 `X-Board-Token`/`Authorization`、账号不存在与密码错误同为 401、未激活返回 `REQUIRE_NEW_PASSWORD` 且只给临时凭证、临时凭证缺失/密码过短被拒、激活后旧密码失效、`/api/auth/me` 校正身份、四层写入鉴权（无凭证 401 / 错白板令牌 401 / 同学 403 / 课代表越科 403 / 管理员与白板全科可写）、字段校验 400、写入-读取往返、同内容重复保存幂等、历史接口已下线 404、写接口与登录接口各自限流 429 + `Retry-After`。
+用临时数据库跑 `users.js` 建号，再起真实服务断言 44 项：健康检查与 CORS 预检放行 `X-Board-Token`/`Authorization`、旧库迁移（room 维度折叠 + history_logs 删除 + 幂等）、`seed` 幂等（重跑不重复建号、不动已改过的密码）、账号不存在与密码错误同为 401、未激活返回 `REQUIRE_NEW_PASSWORD` 且只给临时凭证、临时凭证缺失/密码过短被拒、激活后旧密码失效、`/api/auth/me` 校正身份、四层写入鉴权（无凭证 401 / 错白板令牌 401 / 同学 403 / 课代表越科 403 / 管理员与白板全科可写）、字段校验 400、写入-读取往返、同内容重复保存幂等、历史接口已下线 404、写接口与登录接口各自限流 429 + `Retry-After`。
 
 ## 接口
 

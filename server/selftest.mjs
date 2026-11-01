@@ -148,6 +148,22 @@ try {
   ok((await (await fetch(`${base}/auth/me`, { headers: auth(adminToken) })).json()).user.realName === '王老师', '带 token 取回姓名')
   ok((await fetch(`${base}/auth/me`)).status === 401, '无 token → 401')
 
+  step('账号 seed 幂等（名单是唯一权威来源）')
+  // seed 是灾难恢复的唯一入口：重跑必须不重复建号，且不能把已改过的密码重置回去
+  {
+    const seedWith = (args) =>
+      execFileSync(process.execPath, ['dist/users.js', 'seed', ...args], {
+        env: { ...process.env, DB_PATH },
+        stdio: 'pipe',
+      }).toString()
+    const first = seedWith([ 'roster.json' ])
+    const second = seedWith([ 'roster.json' ])
+    ok(/新建 51 个/.test(first), `首次 seed 按名单建满 51 人（${first.trim()}）`)
+    ok(/新建 0 个/.test(second) && /同步 51 个/.test(second), '重跑 seed 不重复建号，只同步姓名/角色')
+    // admin 不在名单里，密码不该被动过
+    ok((await post('/auth/login', { username: 'admin', password: 'new-admin-pw' })).status === 200, '重跑 seed 后原密码仍可登录')
+  }
+
   const repToken = (await activate('shuxue', 'init-rep', 'new-rep-pw')).token
   const stuToken = (await activate('xuesheng', 'init-stu', 'new-stu-pw')).token
 

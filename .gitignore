@@ -196,3 +196,6 @@ server/*.sqlite-journal
 server/*.sqlite-wal
 server/*.sqlite-shm
 server/.env
+
+dist.tar.gz
+
