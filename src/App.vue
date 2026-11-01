@@ -54,8 +54,8 @@
     linear-gradient(90deg, rgba(255, 255, 255, 0.018) 1px, transparent 1px),
     linear-gradient(180deg, #161616 0%, #121212 42%, #101010 100%);
   background-size:
-    100% 28px,
-    28px 100%,
+    100% 1.75rem,
+    1.75rem 100%,
     auto;
 }
 

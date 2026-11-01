@@ -89,7 +89,7 @@
       :is-today="isToday"
       :writable="isWritable"
       :copy-to-today-loading="copying"
-      :current-font-size="fontSize"
+      :current-font-size="renderedFontSize"
       @prev-day="goToDate(shiftDate(currentDate, -1))"
       @next-day="goToDate(shiftDate(currentDate, 1))"
       @zoom="zoom"
@@ -323,7 +323,11 @@ const selectedDate = computed(() => parseDateArg(currentDate.value));
 
 const fontLevel = ref(getFontLevel());
 const fontSize = computed(() => getFontSize(fontLevel.value));
-const contentStyle = computed(() => ({ fontSize: `${fontSize.value}px` }));
+// 字号档位以 16px 为基准，渲染时换成 rem 才能跟全站 125% 基准一起放大
+// （直接写 px 的话正文会比周围小一圈）。工具栏显示换算后的实际像素。
+const fontScale = 1.25;
+const renderedFontSize = computed(() => Math.round(fontSize.value * fontScale));
+const contentStyle = computed(() => ({ fontSize: `${(fontSize.value / 16).toFixed(4)}rem` }));
 
 const flashKeys = ref([]);
 const dialogVisible = ref(false);
@@ -463,23 +467,23 @@ onBeforeUnmount(() => {
 <style scoped>
 .date-pill {
   flex: 0 0 auto;
-  padding: 7px 13px;
+  padding: 0.4375rem 0.8125rem;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 8px;
+  border-radius: 0.5rem;
   background: rgba(255, 255, 255, 0.03);
   color: rgba(255, 255, 255, 0.88);
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 600;
 }
 
 .settings-button {
   display: inline-flex;
-  width: 36px;
-  height: 36px;
+  width: 2.25rem;
+  height: 2.25rem;
   align-items: center;
   justify-content: center;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 8px;
+  border-radius: 0.5rem;
   background: rgba(255, 255, 255, 0.035);
   color: rgba(255, 255, 255, 0.78);
   text-decoration: none;
@@ -498,12 +502,12 @@ onBeforeUnmount(() => {
 }
 
 .settings-icon {
-  width: 19px;
-  height: 19px;
+  width: 1.1875rem;
+  height: 1.1875rem;
 }
 
 .board-shell {
-  min-height: calc(100dvh - 64px - var(--sat, 0px));
+  min-height: calc(100dvh - 4rem - var(--sat, 0px));
 }
 
 .board-shell-ready {
@@ -511,10 +515,10 @@ onBeforeUnmount(() => {
 }
 
 .board-container {
-  max-width: 1720px;
-  min-height: calc(100dvh - 64px - var(--sat, 0px));
+  max-width: 107.5rem;
+  min-height: calc(100dvh - 4rem - var(--sat, 0px));
   margin: 0 auto;
-  padding: 20px 32px calc(76px + var(--sab, 0px));
+  padding: 1.25rem 2rem calc(4.75rem + var(--sab, 0px));
   /* ponytail: 仅裁横向；纵向 content 自然撑高 body，否则移动端内容超出会被 clip 截断且无法滚动 */
   overflow-x: clip;
 }
@@ -525,8 +529,8 @@ onBeforeUnmount(() => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 30px;
-  min-height: min(600px, calc(100dvh - 220px));
+  gap: 1.875rem;
+  min-height: min(37.5rem, calc(100dvh - 13.75rem));
   animation: fade-up 0.34s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
@@ -539,20 +543,20 @@ onBeforeUnmount(() => {
 }
 
 .empty-hero-date {
-  padding: 7px 16px;
+  padding: 0.4375rem 1rem;
   border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 999px;
+  border-radius: 62.4375rem;
   background: rgba(255, 255, 255, 0.03);
   color: rgba(255, 255, 255, 0.55);
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 600;
   letter-spacing: 0.08em;
 }
 
 .empty-hero-title {
-  margin: 20px 0 0;
+  margin: 1.25rem 0 0;
   color: #f5f5f5;
-  font-size: clamp(32px, 3.4vw, 46px);
+  font-size: clamp(2rem, 3.4vw, 2.875rem);
   font-weight: 800;
   line-height: 1.15;
 }
@@ -561,11 +565,11 @@ onBeforeUnmount(() => {
 .empty-divider {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 1rem;
   width: 100%;
-  max-width: 760px;
+  max-width: 47.5rem;
   color: rgba(255, 255, 255, 0.34);
-  font-size: 12.5px;
+  font-size: 0.7813rem;
   font-weight: 600;
   letter-spacing: 0.12em;
   white-space: nowrap;
@@ -583,9 +587,9 @@ onBeforeUnmount(() => {
 .empty-quick-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 16px;
+  gap: 1rem;
   width: 100%;
-  max-width: 760px;
+  max-width: 47.5rem;
 }
 
 .populated-board {
@@ -595,49 +599,49 @@ onBeforeUnmount(() => {
 /* ── 复制到今天确认 / 409 冲突裁决对话框 ── */
 .copy-confirm-card {
   width: 100%;
-  max-width: 420px;
-  padding: 20px;
+  max-width: 26.25rem;
+  padding: 1.25rem;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 12px;
+  border-radius: 0.75rem;
   background: #171717;
-  box-shadow: 0 24px 56px rgba(0, 0, 0, 0.32);
+  box-shadow: 0 1.5rem 3.5rem rgba(0, 0, 0, 0.32);
 }
 
 .copy-confirm-card-wide {
-  max-width: 640px;
+  max-width: 40rem;
 }
 
 .copy-confirm-title {
   color: #f1f1f1;
-  font-size: 17px;
+  font-size: 1.0625rem;
   font-weight: 800;
 }
 
 .copy-confirm-text {
-  margin: 10px 0 0;
+  margin: 0.625rem 0 0;
   color: rgba(255, 255, 255, 0.66);
-  font-size: 14px;
+  font-size: 0.875rem;
   line-height: 1.6;
 }
 
 .copy-confirm-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 10px;
-  margin-top: 18px;
+  gap: 0.625rem;
+  margin-top: 1.125rem;
 }
 
 /* 覆盖 shadcn Button 默认盒模型：选择器前缀让特异性高于 Tailwind 单类工具类 */
 .copy-confirm-card .copy-confirm-cancel {
   height: auto;
-  min-height: 40px;
-  padding: 0 16px;
+  min-height: 2.5rem;
+  padding: 0 1rem;
   border: 0;
-  border-radius: 8px;
+  border-radius: 0.5rem;
   background: transparent;
   color: rgba(255, 255, 255, 0.72);
   font-family: inherit;
-  font-size: 14px;
+  font-size: 0.875rem;
   font-weight: 600;
   box-shadow: none;
 }
@@ -649,14 +653,14 @@ onBeforeUnmount(() => {
 
 .copy-confirm-card .copy-confirm-solid {
   height: auto;
-  min-height: 40px;
-  padding: 0 20px;
+  min-height: 2.5rem;
+  padding: 0 1.25rem;
   border: 0;
-  border-radius: 10px;
+  border-radius: 0.625rem;
   background: #f3f3f3;
   color: #121212;
   font-family: inherit;
-  font-size: 14px;
+  font-size: 0.875rem;
   font-weight: 800;
   box-shadow: none;
 }
@@ -669,30 +673,30 @@ onBeforeUnmount(() => {
 .conflict-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-  margin-top: 14px;
+  gap: 0.625rem;
+  margin-top: 0.875rem;
 }
 
 .conflict-box {
   min-width: 0;
-  padding: 10px;
+  padding: 0.625rem;
   border: 1px solid rgba(255, 255, 255, 0.07);
-  border-radius: 8px;
+  border-radius: 0.5rem;
   background: #1a1a1a;
 }
 
 .conflict-label {
   color: rgba(255, 255, 255, 0.45);
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 600;
 }
 
 .conflict-content {
   max-height: 38vh;
-  margin: 6px 0 0;
+  margin: 0.375rem 0 0;
   overflow-y: auto;
   color: rgba(255, 255, 255, 0.72);
-  font-size: 13px;
+  font-size: 0.8125rem;
   line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-word;
@@ -702,12 +706,12 @@ onBeforeUnmount(() => {
 /* ── 随机点名 ── */
 .pick-card {
   width: 92%;
-  max-width: 640px;
-  padding: 22px 22px 18px;
+  max-width: 40rem;
+  padding: 1.375rem 1.375rem 1.125rem;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 12px;
+  border-radius: 0.75rem;
   background: #171717;
-  box-shadow: 0 24px 56px rgba(0, 0, 0, 0.32);
+  box-shadow: 0 1.5rem 3.5rem rgba(0, 0, 0, 0.32);
   text-align: center;
 }
 
@@ -715,15 +719,15 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 0.5rem;
   color: #f1f1f1;
-  font-size: 17px;
+  font-size: 1.0625rem;
   font-weight: 800;
 }
 
 .pick-head-icon {
-  width: 22px;
-  height: 22px;
+  width: 1.375rem;
+  height: 1.375rem;
 }
 
 .roster-grid {
@@ -731,9 +735,9 @@ onBeforeUnmount(() => {
   flex-wrap: wrap;
   justify-content: center;
   align-content: flex-start;
-  gap: 10px;
+  gap: 0.625rem;
   max-height: 52vh;
-  margin-top: 16px;
+  margin-top: 1rem;
   overflow-y: auto;
   scrollbar-width: none;
 }
@@ -743,13 +747,13 @@ onBeforeUnmount(() => {
 }
 
 .roster-chip {
-  min-width: 76px;
-  padding: 9px 14px;
+  min-width: 4.75rem;
+  padding: 0.5625rem 0.875rem;
   border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 10px;
+  border-radius: 0.625rem;
   background: rgba(255, 255, 255, 0.04);
   color: rgba(255, 255, 255, 0.85);
-  font-size: 16px;
+  font-size: 1rem;
   font-weight: 700;
   line-height: 1.4;
 }
@@ -758,14 +762,14 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
-  margin-top: 10px;
+  gap: 0.375rem;
+  margin-top: 0.625rem;
 }
 
 .pick-name {
-  min-height: 120px;
+  min-height: 7.5rem;
   color: #f5f5f5;
-  font-size: clamp(56px, 14vw, 88px);
+  font-size: clamp(3.5rem, 14vw, 5.5rem);
   font-weight: 800;
   line-height: 1.35;
   letter-spacing: 0.06em;
@@ -777,36 +781,36 @@ onBeforeUnmount(() => {
 }
 
 .pick-hint {
-  min-height: 22px;
+  min-height: 1.375rem;
   color: rgba(255, 255, 255, 0.5);
-  font-size: 14px;
+  font-size: 0.875rem;
   font-weight: 600;
   letter-spacing: 0.14em;
 }
 
 .pick-count {
-  margin-top: 4px;
+  margin-top: 0.25rem;
   color: rgba(255, 255, 255, 0.45);
-  font-size: 13px;
+  font-size: 0.8125rem;
 }
 
 .pick-actions {
   display: flex;
   justify-content: center;
-  gap: 10px;
-  margin-top: 18px;
+  gap: 0.625rem;
+  margin-top: 1.125rem;
 }
 
 .pick-card .pick-ghost {
   height: auto;
-  min-height: 44px;
-  padding: 0 18px;
+  min-height: 2.75rem;
+  padding: 0 1.125rem;
   border: 0;
-  border-radius: 8px;
+  border-radius: 0.5rem;
   background: transparent;
   color: rgba(255, 255, 255, 0.72);
   font-family: inherit;
-  font-size: 14px;
+  font-size: 0.875rem;
   font-weight: 600;
   box-shadow: none;
 }
@@ -818,14 +822,14 @@ onBeforeUnmount(() => {
 
 .pick-card .pick-solid {
   height: auto;
-  min-height: 44px;
-  padding: 0 26px;
+  min-height: 2.75rem;
+  padding: 0 1.625rem;
   border: 0;
-  border-radius: 12px;
+  border-radius: 0.75rem;
   background: #f3f3f3;
   color: #121212;
   font-family: inherit;
-  font-size: 15px;
+  font-size: 0.9375rem;
   font-weight: 800;
   box-shadow: none;
 }
@@ -858,7 +862,7 @@ onBeforeUnmount(() => {
 }
 
 @keyframes fade-up {
-  from { opacity: 0; transform: translateY(12px); }
+  from { opacity: 0; transform: translateY(0.75rem); }
   to { opacity: 1; transform: translateY(0); }
 }
 
@@ -872,7 +876,7 @@ onBeforeUnmount(() => {
 
 @media (max-width: 1500px) {
   .board-container {
-    padding-inline: 24px;
+    padding-inline: 1.5rem;
   }
 }
 
@@ -886,26 +890,26 @@ onBeforeUnmount(() => {
   }
 
   .board-container {
-    padding: 16px 14px calc(106px + var(--sab, 0px));
+    padding: 1rem 0.875rem calc(6.625rem + var(--sab, 0px));
   }
 
   /* 移动端空态：标题与卡片阵列收拢，避免首屏滚动 */
   .empty-state {
-    gap: 22px;
-    min-height: min(520px, calc(100dvh - 200px));
+    gap: 1.375rem;
+    min-height: min(32.5rem, calc(100dvh - 12.5rem));
   }
 
   .empty-hero-title {
-    margin-top: 14px;
-    font-size: clamp(26px, 7vw, 34px);
+    margin-top: 0.875rem;
+    font-size: clamp(1.625rem, 7vw, 2.125rem);
   }
 
   .empty-divider {
-    font-size: 11.5px;
+    font-size: 0.7188rem;
   }
 
   .empty-quick-grid {
-    gap: 12px;
+    gap: 0.75rem;
   }
 }
 
@@ -923,7 +927,7 @@ onBeforeUnmount(() => {
   .copy-confirm-card .copy-confirm-cancel,
   .copy-confirm-card .copy-confirm-solid {
     width: 100%;
-    min-height: 44px;
+    min-height: 2.75rem;
   }
 
   .pick-actions {
@@ -933,7 +937,7 @@ onBeforeUnmount(() => {
   .pick-card .pick-ghost,
   .pick-card .pick-solid {
     width: 100%;
-    min-height: 48px;
+    min-height: 3rem;
   }
 }
 </style>

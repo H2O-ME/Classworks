@@ -21,17 +21,17 @@ defineEmits(["add"]);
 .add-tile {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  height: 44px;
-  padding: 0 18px;
+  gap: 0.4375rem;
+  height: 2.75rem;
+  padding: 0 1.125rem;
   border: 1px solid rgba(174, 191, 221, 0.28);
-  border-radius: 14px;
+  border-radius: 0.875rem;
   background: rgba(174, 191, 221, 0.06);
   color: rgba(255, 255, 255, 0.82);
-  font: 600 15px/1 system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+  font: 600 0.9375rem/1 system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
   cursor: pointer;
   opacity: 0;
-  transform: translateY(8px);
+  transform: translateY(0.5rem);
   animation: tile-enter 0.34s cubic-bezier(0.22, 1, 0.36, 1) forwards;
   animation-delay: var(--tile-delay, 0ms);
   transition: border-color 0.2s ease, background-color 0.2s ease, color 0.2s ease, transform 0.15s ease;
@@ -49,8 +49,8 @@ defineEmits(["add"]);
 }
 
 .add-tile-icon {
-  width: 16px;
-  height: 16px;
+  width: 1rem;
+  height: 1rem;
   flex: 0 0 auto;
 }
 
@@ -59,7 +59,7 @@ defineEmits(["add"]);
 }
 
 @keyframes tile-enter {
-  from { opacity: 0; transform: translateY(8px); }
+  from { opacity: 0; transform: translateY(0.5rem); }
   to { opacity: 1; transform: translateY(0); }
 }
 
@@ -73,9 +73,9 @@ defineEmits(["add"]);
 
 @media (max-width: 760px) {
   .add-tile {
-    height: 42px;
-    padding: 0 16px;
-    font-size: 14.5px;
+    height: 2.625rem;
+    padding: 0 1rem;
+    font-size: 0.9063rem;
   }
 }
 </style>

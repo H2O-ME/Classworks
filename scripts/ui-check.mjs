@@ -45,4 +45,43 @@ assert.deepEqual(distribute([], 3, () => 1).map((column) => column.length), [0, 
   assert.ok(!grid.includes("columns-4"), "HomeworkGrid 里不该再有 columns-4（列数已封顶 3）");
 }
 
+// 回归守卫：全站尺寸基准必须留在 125%。
+// 踩过的坑：样式里写死 px 的字号/尺寸不会跟 rem 基准放大，正文会比周围小一圈。
+// 所以 <style> 块里除 1px 描边外都不该出现 px；断点（@media）必须留 px，
+// 因为它描述视口宽度，跟着缩放会让列数在错误的宽度切换。
+{
+  const css = readFileSync(new URL("../src/styles/index.css", import.meta.url), "utf8");
+  assert.match(
+    css,
+    /html\s*\{[^}]*font-size:\s*125%/,
+    "index.css 的 html 必须声明 font-size:125%（全站尺寸基准）",
+  );
+
+  const styled = [
+    "src/components/home/HomeworkGrid.vue",
+    "src/components/home/SubjectAddCard.vue",
+    "src/components/common/HomeSkeleton.vue",
+    "src/components/FloatingToolbar.vue",
+    "src/components/HomeworkEditDialog.vue",
+    "src/components/AppToast.vue",
+    "src/pages/index.vue",
+  ];
+  for (const relative of styled) {
+    const source = readFileSync(new URL(`../${relative}`, import.meta.url), "utf8");
+    const styles = [...source.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/g)]
+      .map((match) => match[1])
+      .join("\n")
+      // 断点描述视口宽度，不动
+      .replace(/@media[^{]*/g, "");
+    const offenders = [...styles.matchAll(/(?<![\w.-])(\d*\.?\d+)px/g)]
+      .map((match) => match[1])
+      .filter((num) => num !== "0" && num !== "1");
+    assert.deepEqual(
+      offenders,
+      [],
+      `${relative} 的样式里还有 px 尺寸（${offenders.join(", ")}）：应该用 rem，否则不跟 125% 基准放大`,
+    );
+  }
+}
+
 console.log("ui-check ok");

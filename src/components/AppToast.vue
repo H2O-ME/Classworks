@@ -36,7 +36,8 @@ import { reactive } from "vue";
 // computed stackedOffset 对同一数组做 indexOf，任意 show 翻转都会自动重排所有 toast 的纵向位置。
 const toastRegistry = reactive([]);
 // 单条堆叠步长：覆盖桌面(约 44px 高)与移动端通栏(约 50px 高)两种尺寸，含间距
-const TOAST_STACK_STEP = 64;
+// 尺寸都是 rem 基准（1rem=20px）下的实际像素：64 × 1.25 = 80
+const TOAST_STACK_STEP = 80;
 
 // 全局浮动通知：瞬时提示默认自动消失，常驻通知（persistent）靠点击或动作按钮关闭。
 // 通知类一律使用本组件，见 AGENTS.md「UI 规范」。样式纯局部，不占文档流（position: fixed）。
@@ -111,43 +112,43 @@ export default {
 <style scoped>
 .app-toast {
   position: fixed;
-  right: 18px;
-  top: calc(72px + var(--sat, 0px));
+  right: 1.125rem;
+  top: calc(4.5rem + var(--sat, 0px));
   z-index: 120;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  max-width: min(420px, calc(100vw - 36px));
-  padding: 11px 14px;
-  border-radius: 9px;
+  gap: 0.5rem;
+  max-width: min(26.25rem, calc(100vw - 2.25rem));
+  padding: 0.6875rem 0.875rem;
+  border-radius: 0.5625rem;
   background: #1e3a5f;
   color: #dce8f5;
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.22);
+  box-shadow: 0 0.75rem 1.75rem rgba(0, 0, 0, 0.22);
   cursor: pointer;
 }
 
 .app-toast-icon {
-  width: 18px;
-  height: 18px;
+  width: 1.125rem;
+  height: 1.125rem;
   flex: 0 0 auto;
 }
 
 .app-toast-text {
   color: #f2f7fb;
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 700;
 }
 
 .app-toast-action {
   flex: 0 0 auto;
-  min-height: 28px;
-  padding: 0 9px;
+  min-height: 1.75rem;
+  padding: 0 0.5625rem;
   border: 1px solid rgba(255, 255, 255, 0.22);
-  border-radius: 6px;
+  border-radius: 0.375rem;
   background: rgba(255, 255, 255, 0.12);
   color: #fff;
   font-family: inherit;
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 700;
   cursor: pointer;
   white-space: nowrap;
@@ -165,14 +166,14 @@ export default {
 .app-toast-enter-from,
 .app-toast-leave-to {
   opacity: 0;
-  transform: translateY(6px);
+  transform: translateY(0.375rem);
 }
 
 @media (max-width: 700px) {
   .app-toast {
-    top: calc(64px + var(--sat, 0px) + 10px);
-    left: 14px;
-    right: 14px;
+    top: calc(4rem + var(--sat, 0px) + 0.625rem);
+    left: 0.875rem;
+    right: 0.875rem;
     max-width: none;
   }
   .app-toast-text {

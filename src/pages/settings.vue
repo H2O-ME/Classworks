@@ -2,7 +2,7 @@
   <div class="page flex min-h-[100dvh] flex-col bg-background">
     <!-- 顶栏 -->
     <header class="sticky top-0 z-20 border-b border-border bg-background pt-[var(--sat,0px)]">
-      <div class="mx-auto flex h-16 w-full max-w-[1400px] items-center justify-between gap-4 px-4 sm:px-6">
+      <div class="mx-auto flex h-16 w-full max-w-[87.5rem] items-center justify-between gap-4 px-4 sm:px-6">
         <div class="flex min-w-0 items-center gap-3">
           <Button
             as-child
@@ -45,7 +45,7 @@
     </header>
 
     <!-- 主体：左侧状态、右侧历史 -->
-    <main class="mx-auto w-full max-w-[1400px] flex-1 px-4 py-5 sm:px-6">
+    <main class="mx-auto w-full max-w-[87.5rem] flex-1 px-4 py-5 sm:px-6">
       <div class="grid gap-4 lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
         <!-- 左列：权限 + 连接 -->
         <div class="flex flex-col gap-4">
@@ -155,7 +155,7 @@
         </div>
 
         <!-- 右列：变更历史内联，不再开弹窗 -->
-        <Card class="flex min-h-[420px] flex-col border-border bg-card">
+        <Card class="flex min-h-[26.25rem] flex-col border-border bg-card">
           <CardHeader class="gap-1.5 p-5 pb-3">
             <div class="flex items-start justify-between gap-3">
               <div class="flex items-center gap-2.5">
@@ -206,7 +206,7 @@
 
             <ScrollArea
               v-else
-              class="max-h-[min(52vh,480px)] flex-1 pr-3"
+              class="max-h-[min(52vh,30rem)] flex-1 pr-3"
             >
               <ul class="flex flex-col gap-2">
                 <li
@@ -218,7 +218,7 @@
                     <div class="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
                       <Badge
                         variant="outline"
-                        class="shrink-0 px-1.5 py-0 text-[11px] font-medium"
+                        class="shrink-0 px-1.5 py-0 text-[0.6875rem] font-medium"
                       >
                         {{ item.subject }}
                       </Badge>

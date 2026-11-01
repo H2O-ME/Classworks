@@ -21,16 +21,16 @@
 
 <style scoped>
 .skeleton-container {
-  max-width: 1720px;
+  max-width: 107.5rem;
   margin: 0 auto;
-  padding: 20px 32px 76px;
+  padding: 1.25rem 2rem 4.75rem;
 }
 
 /* 列数与真实看板 HomeworkGrid.columnCount 断点逐一对应，避免加载后列数变化导致布局跳动 */
 .skeleton-grid {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 18px;
+  gap: 1.125rem;
 }
 
 @media (min-width: 760px) {
@@ -47,26 +47,26 @@
 
 /* 与 .homework-card 同形态：同底色/描边/圆角，挂载后无缝衔接 */
 .skeleton-card {
-  min-height: 148px;
-  padding: 18px;
+  min-height: 9.25rem;
+  padding: 1.125rem;
   border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 9px;
+  border-radius: 0.5625rem;
   background: #191919;
 }
 
 .skeleton-heading {
   width: 42%;
-  height: 16px;
-  margin-bottom: 14px;
-  border-radius: 4px;
+  height: 1rem;
+  margin-bottom: 0.875rem;
+  border-radius: 0.25rem;
   background: rgba(255, 255, 255, 0.09);
 }
 
 .skeleton-line {
   width: 100%;
-  height: 12px;
-  margin-bottom: 9px;
-  border-radius: 4px;
+  height: 0.75rem;
+  margin-bottom: 0.5625rem;
+  border-radius: 0.25rem;
   background: rgba(255, 255, 255, 0.07);
 }
 
@@ -99,7 +99,7 @@
 
 @media (max-width: 700px) {
   .skeleton-container {
-    padding: 20px 14px 106px;
+    padding: 1.25rem 0.875rem 6.625rem;
   }
 }
 </style>

@@ -221,14 +221,14 @@ onBeforeUnmount(() => {
 .editor-card {
   display: flex;
   width: 92%;
-  max-width: 720px;
+  max-width: 45rem;
   max-height: 92vh;
   flex-direction: column;
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 16px;
+  border-radius: 1rem;
   background: #171717;
-  box-shadow: 0 24px 56px rgba(0, 0, 0, 0.32);
+  box-shadow: 0 1.5rem 3.5rem rgba(0, 0, 0, 0.32);
   animation: dialog-card-in 0.28s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
@@ -237,8 +237,8 @@ onBeforeUnmount(() => {
   flex: 0 0 auto;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 12px 12px 8px 20px;
+  gap: 0.75rem;
+  padding: 0.75rem 0.75rem 0.5rem 1.25rem;
   cursor: grab;
   user-select: none;
 }
@@ -249,9 +249,9 @@ onBeforeUnmount(() => {
 .dialog-header .dialog-title {
   position: relative;
   min-width: 0;
-  padding-left: 12px;
+  padding-left: 0.75rem;
   color: #f1f1f1;
-  font-size: 17px;
+  font-size: 1.0625rem;
   font-weight: 800;
   line-height: 1.2;
   letter-spacing: normal;
@@ -262,21 +262,21 @@ onBeforeUnmount(() => {
   position: absolute;
   left: 0;
   top: 50%;
-  width: 4px;
-  height: 16px;
-  border-radius: 3px;
+  width: 0.25rem;
+  height: 1rem;
+  border-radius: 0.1875rem;
   background: #aebfdd;
   transform: translateY(-50%);
 }
 
 .dialog-header .dialog-close {
-  width: 32px;
-  height: 32px;
-  min-width: 32px;
+  width: 2rem;
+  height: 2rem;
+  min-width: 2rem;
   flex: 0 0 auto;
   padding: 0;
   border: 0;
-  border-radius: 8px;
+  border-radius: 0.5rem;
   background: transparent;
   color: rgba(255, 255, 255, 0.6);
   box-shadow: none;
@@ -288,23 +288,23 @@ onBeforeUnmount(() => {
 }
 
 .dialog-close-icon {
-  width: 20px;
-  height: 20px;
+  width: 1.25rem;
+  height: 1.25rem;
 }
 
 .dialog-body {
   flex: 1 1 auto;
   min-height: 0;
-  padding: 0 16px;
+  padding: 0 1rem;
 }
 
 /* 编辑井：一整块浅凹面承载输入，粘贴浮在右下角 */
 .editor-well {
   position: relative;
-  height: clamp(220px, 36vh, 380px);
-  padding: 4px;
+  height: clamp(13.75rem, 36vh, 23.75rem);
+  padding: 0.25rem;
   border: 1px solid rgba(255, 255, 255, 0.05);
-  border-radius: 12px;
+  border-radius: 0.75rem;
   background: #1a1a1a;
   transition: border-color 0.2s ease;
 }
@@ -319,14 +319,14 @@ onBeforeUnmount(() => {
   height: 100%;
   min-height: 0;
   /* 底部留出浮层粘贴键的高度，末行不被遮 */
-  padding: 16px 18px 56px;
+  padding: 1rem 1.125rem 3.5rem;
   border: 0;
   border-radius: 0;
   background: transparent;
   color: #f2f2f2;
   font: inherit;
   /* 固定字号：编辑在近处进行，小于看板展示字号，不跟随缩放设置 */
-  font-size: 15px;
+  font-size: 0.9375rem;
   line-height: 1.8;
   caret-color: #aebfdd;
   outline: none;
@@ -347,21 +347,21 @@ onBeforeUnmount(() => {
 /* 粘贴：编辑井右下角浮层，不占底部操作区。原版用 blur 毛玻璃，改纯色 */
 .editor-well .tool-chip {
   position: absolute;
-  right: 12px;
-  bottom: 12px;
+  right: 0.75rem;
+  bottom: 0.75rem;
   z-index: 1;
   display: inline-flex;
   height: auto;
   align-items: center;
-  gap: 6px;
-  min-height: 32px;
-  padding: 0 12px;
+  gap: 0.375rem;
+  min-height: 2rem;
+  padding: 0 0.75rem;
   border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 8px;
+  border-radius: 0.5rem;
   background: rgba(23, 23, 23, 0.96);
   color: rgba(255, 255, 255, 0.82);
   font-family: inherit;
-  font-size: 12.5px;
+  font-size: 0.7813rem;
   font-weight: 700;
   box-shadow: none;
   transition: background-color 0.18s ease, border-color 0.18s ease;
@@ -374,17 +374,17 @@ onBeforeUnmount(() => {
 }
 
 .tool-chip-icon {
-  width: 16px;
-  height: 16px;
+  width: 1rem;
+  height: 1rem;
 }
 
 .editor-footer {
   display: flex;
   flex: 0 0 auto;
   flex-direction: column;
-  gap: 10px;
-  margin-top: 12px;
-  padding: 10px 16px 16px;
+  gap: 0.625rem;
+  margin-top: 0.75rem;
+  padding: 0.625rem 1rem 1rem;
   border-top: 1px solid rgba(255, 255, 255, 0.06);
 }
 
@@ -392,14 +392,14 @@ onBeforeUnmount(() => {
 .editor-footer .dialog-btn-solid {
   width: 100%;
   height: auto;
-  min-height: 44px;
+  min-height: 2.75rem;
   padding: 0;
   border: 0;
-  border-radius: 10px;
+  border-radius: 0.625rem;
   background: #f3f3f3;
   color: #121212;
   font-family: inherit;
-  font-size: 15px;
+  font-size: 0.9375rem;
   font-weight: 800;
   letter-spacing: 0.02em;
   box-shadow: none;
@@ -426,13 +426,13 @@ onBeforeUnmount(() => {
 .editor-card-mobile .editor-well {
   flex: 1 1 auto;
   height: auto;
-  min-height: 220px;
+  min-height: 13.75rem;
 }
 
 @keyframes dialog-card-in {
   from {
     opacity: 0;
-    transform: translateY(16px) scale(0.985);
+    transform: translateY(1rem) scale(0.985);
   }
   to {
     opacity: 1;

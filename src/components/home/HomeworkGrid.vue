@@ -125,8 +125,8 @@ function estimateCardHeight(item) {
 .board-section {
   display: flex;
   flex-direction: column;
-  gap: 20px;
-  padding-bottom: 112px;
+  gap: 1.25rem;
+  padding-bottom: 7rem;
 }
 
 .board-main-pane {
@@ -136,7 +136,7 @@ function estimateCardHeight(item) {
 
 .masonry-board {
   display: grid;
-  gap: 18px;
+  gap: 1.125rem;
   align-items: start;
 }
 
@@ -148,20 +148,20 @@ function estimateCardHeight(item) {
 .masonry-column-inner {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 1.125rem;
 }
 
 .homework-card {
   position: relative;
   overflow: hidden;
-  padding: 18px 18px 16px;
+  padding: 1.125rem 1.125rem 1rem;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 9px;
+  border-radius: 0.5625rem;
   background: #191919;
-  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 0.625rem 1.375rem rgba(0, 0, 0, 0.1);
   cursor: pointer;
   opacity: 0;
-  transform: translateY(12px);
+  transform: translateY(0.75rem);
   animation: card-enter 0.42s cubic-bezier(0.22, 1, 0.36, 1) forwards;
   animation-delay: var(--card-delay, 0ms);
   transition:
@@ -175,12 +175,12 @@ function estimateCardHeight(item) {
   transform: translateY(-1px);
   border-color: rgba(255, 255, 255, 0.12);
   background: #1f1f1f;
-  box-shadow: 0 14px 26px rgba(0, 0, 0, 0.14);
+  box-shadow: 0 0.875rem 1.625rem rgba(0, 0, 0, 0.14);
 }
 
 /* 键盘聚焦可见反馈：沿用蓝灰主色，不破坏卡片形态 */
 .homework-card:focus-visible {
-  outline: 2px solid rgba(174, 191, 221, 0.6);
+  outline: 0.125rem solid rgba(174, 191, 221, 0.6);
   outline-offset: 1px;
 }
 
@@ -193,7 +193,7 @@ function estimateCardHeight(item) {
   transform: none;
   border-color: rgba(255, 255, 255, 0.08);
   background: #191919;
-  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 0.625rem 1.375rem rgba(0, 0, 0, 0.1);
 }
 
 .homework-card-readonly .homework-card-content {
@@ -208,8 +208,8 @@ function estimateCardHeight(item) {
 @keyframes content-line-update {
   0% {
     background-color: rgba(168, 191, 220, 0.16);
-    border-radius: 3px;
-    transform: translateY(2px);
+    border-radius: 0.1875rem;
+    transform: translateY(0.125rem);
   }
   100% {
     background-color: transparent;
@@ -221,21 +221,21 @@ function estimateCardHeight(item) {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 12px;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
 }
 
 .homework-card-subject {
   min-width: 0;
   color: #f3f3f3;
-  font-size: 16px;
+  font-size: 1rem;
   font-weight: 700;
   line-height: 1.25;
 }
 
 .homework-card-pencil {
-  width: 15px;
-  height: 15px;
+  width: 0.9375rem;
+  height: 0.9375rem;
   flex: 0 0 auto;
   color: rgba(255, 255, 255, 0.55);
 }
@@ -244,7 +244,7 @@ function estimateCardHeight(item) {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: 10px;
+  gap: 0.625rem;
   line-height: 1.7;
 }
 
@@ -258,11 +258,11 @@ function estimateCardHeight(item) {
 .subject-add-tiles {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 0.5rem;
 }
 
 @keyframes card-enter {
-  from { opacity: 0; transform: translateY(12px); }
+  from { opacity: 0; transform: translateY(0.75rem); }
   to { opacity: 1; transform: translateY(0); }
 }
 
@@ -277,7 +277,7 @@ function estimateCardHeight(item) {
 
 @media (max-width: 760px) {
   .board-section {
-    padding-bottom: calc(104px + var(--sab, 0px));
+    padding-bottom: calc(6.5rem + var(--sab, 0px));
   }
 
   .masonry-board.columns-2,
@@ -286,24 +286,24 @@ function estimateCardHeight(item) {
   }
 
   .masonry-board {
-    gap: 12px;
+    gap: 0.75rem;
   }
 
   .homework-card {
-    padding: 14px 14px 12px;
+    padding: 0.875rem 0.875rem 0.75rem;
   }
 
   .homework-card-subject {
-    font-size: 14.5px;
+    font-size: 0.9063rem;
   }
 
   .homework-card-content {
-    gap: 8px;
+    gap: 0.5rem;
     line-height: 1.65;
   }
 
   .subject-add-tiles {
-    gap: 6px;
+    gap: 0.375rem;
   }
 }
 </style>
