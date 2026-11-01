@@ -192,6 +192,21 @@ try {
   const repToken = (await activate(ACCOUNTS.rep.username, ACCOUNTS.rep.initial, ACCOUNTS.rep.next)).token
   const stuToken = (await activate(ACCOUNTS.student.username, ACCOUNTS.student.initial, ACCOUNTS.student.next)).token
 
+  step('白板口令必须后端确认（不能只凭 URL 有 key 就解锁）')
+  // 前端进页面先问 /api/auth/board；只要口令不对就必须 401，
+  // 否则 ?key=see 这种手误会把全科编辑放出来，写又写不进，用户以为存上了。
+  {
+    const check = (token) =>
+      fetch(`${base}/auth/board`, { headers: token === undefined ? {} : { 'X-Board-Token': token } })
+    ok((await check(BOARD_TOKEN)).status === 200, '正确口令 → 200')
+    // 注意不测「 seewo」「seewo 」：HTTP 头首尾空白由客户端/框架按规范剥掉，
+    // 那是协议行为不是漏洞。真正要守的是不做前缀、大小写、子串容忍。
+    for (const bad of ['see', 'seew', 'seewoo', 'SEE', 'wrong', 'seewo1', '1seewo']) {
+      ok((await check(bad)).status === 401, `口令「${bad}」→ 401（不做前缀/大小写/子串容忍）`)
+    }
+    ok((await check(undefined)).status === 401, '不带口令 → 401')
+  }
+
   step('公开读（学生扫码即可看）')
   const board = await fetch(`${base}/board?date=${DATE}`)
   ok(board.status === 200 && /no-store/.test(board.headers.get('cache-control') ?? ''), `GET /api/board 200 且 Cache-Control: ${board.headers.get('cache-control')}`)

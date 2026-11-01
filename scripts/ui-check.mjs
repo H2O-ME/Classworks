@@ -2,7 +2,7 @@
 // 跑法：node scripts/ui-check.mjs
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { columnCount, distribute } from "../src/components/home/masonry.js";
+import { COLUMN_GAP_PX, columnCount, distribute } from "../src/components/home/masonry.js";
 
 // 断点：<760 1 列，<1240 2 列，其余 3 列（封顶 3：大屏 4 列会压窄卡片，正文难读）
 assert.equal(columnCount(320), 1);
@@ -14,18 +14,66 @@ assert.equal(columnCount(1680), 3);
 assert.equal(columnCount(1868), 3);
 assert.equal(columnCount(2560), 3);
 
-// 列分配：每张卡进当前最矮的列
-const items = [
-  { id: "a", height: 100 },
-  { id: "b", height: 20 },
-  { id: "c", height: 10 },
-];
-const columns = distribute(items, 2, (item) => item.height);
-assert.deepEqual(
-  columns.map((column) => column.map((item) => item.id)),
-  [["a"], ["b", "c"]],
-);
-assert.deepEqual(distribute([], 3, () => 1).map((column) => column.length), [0, 0, 0]);
+// 列分配：保留学科顺序，切点做 DP，最小化「最高列」。
+// 踩过的坑：贪心（每张卡进当前最矮列）会把两张最高的卡叠在同一列。
+// 线上实况：英语 955px + 地理，最高列 955px 直接超出 1080p 屏，另两列留白 300px。
+{
+  // 两个极端卡：贪心会把 a 单独一列、b 单独一列，最高列取决于最坏那张
+  const items = [
+    { id: "a", height: 100 },
+    { id: "b", height: 20 },
+    { id: "c", height: 10 },
+  ];
+  const columns = distribute(items, 2, (item) => item.height, 0);
+  // 顺序必须保留（不能让卡片按高度乱跳，老师找科目的顺序会变）
+  assert.deepEqual(
+    columns.flatMap((column) => column.map((item) => item.id)),
+    ["a", "b", "c"],
+  );
+  // 最优切法是 [a] / [b,c]：最高列 100；另一种切法 [a,b]/[c] 最高列 120
+  const heights = columns.map((column) =>
+    column.reduce((sum, item, index) => sum + item.height + (index ? 0 : 0), 0),
+  );
+  assert.equal(Math.max(...heights), 100, "两列时应取「最高列最矮」的切法");
+
+  assert.deepEqual(distribute([], 3, () => 1).map((column) => column.length), [0, 0, 0]);
+
+  // 真实场景回归：就是线上那 6 张卡的高度（含 22.5px 间距）
+  const real = [
+    { id: "语文", h: 172 },
+    { id: "数学", h: 172 },
+    { id: "物理", h: 241 },
+    { id: "化学", h: 241 },
+    { id: "英语", h: 855 },
+    { id: "地理", h: 550 },
+  ];
+  const laid = distribute(real, 3, (item) => item.h);
+  const colH = laid.map((column) =>
+    column.reduce((sum, item, i) => sum + item.h + (i ? COLUMN_GAP_PX : 0), 0),
+  );
+  // 顺序切片只有这几种，最优就是最高列 ≈1306（双语那列），比贪心的 1405 好
+  assert.ok(
+    Math.max(...colH) < Math.max(...real.map((item) => item.h)) * 2.5,
+    `最高列不该失控（实测 ${Math.round(Math.max(...colH))}px）`,
+  );
+  // 6 张卡摊到 3 列，每列都该有卡（不能空一列留白）
+  assert.ok(
+    laid.every((column) => column.length >= 1),
+    "3 列 6 卡时不该有空列",
+  );
+}
+
+// 回归守卫：卡高必须实测，不能退回按字数估算。
+// 踩过的坑：估算式（字数/14*20）在字号调大、英文长句时全错，
+// 实测最高列偏差 300px，导致卡片被顶出屏幕。
+{
+  const grid = readFileSync(new URL("../src/components/home/HomeworkGrid.vue", import.meta.url), "utf8");
+  assert.match(grid, /offsetHeight/, "HomeworkGrid 必须实测卡片高度（measureCards）");
+  assert.ok(
+    !/estimateCardHeight/.test(grid),
+    "不该再有按字数估算卡高的 estimateCardHeight（实测才准）",
+  );
+}
 
 // 回归守卫：网格的列类名必须绑定到声明过的 ref。
 // 踩过的坑：模板写成 `columns-${columnCount}` 时绑定的是 import 进来的纯函数，
@@ -90,6 +138,32 @@ assert.deepEqual(distribute([], 3, () => 1).map((column) => column.length), [0, 
       }
     }
   }
+}
+
+// 回归守卫：白板身份必须经后端验证，不能「URL 里有个 key 就解锁全科编辑」。
+// 踩过的坑：isBoard 只判断 boardToken 非空，访问 ?key=see（把 seewo 打漏一个字母）
+// 也能看到全部铅笔，写接口其实一直 401，用户以为存上了。
+{
+  const auth = readFileSync(new URL("../src/composables/useAuth.js", import.meta.url), "utf8");
+  assert.match(
+    auth,
+    /const isBoard = computed\(\(\) => Boolean\(state\.boardToken\) && state\.boardVerified\)/,
+    "useAuth 的 isBoard 必须同时要求 boardToken 与 boardVerified（只凭有 key 就解锁是安全漏洞）",
+  );
+  assert.match(auth, /export async function verifyBoardToken/, "useAuth 必须导出 verifyBoardToken");
+  assert.match(auth, /checkBoardToken/, "verifyBoardToken 必须真的问后端，不能本地瞎猜");
+
+  const page = readFileSync(new URL("../src/pages/index.vue", import.meta.url), "utf8");
+  assert.match(page, /verifyBoardToken\(\)/, "index.vue 进页面必须校验白板口令");
+
+  const board = readFileSync(new URL("../src/composables/useBoard.js", import.meta.url), "utf8");
+  assert.match(board, /revokeBoardToken\(\)/, "写接口 401 时必须撤销白板身份（降级只读）");
+  // 保存失败要回退画面：否则用户看到字变了，以为存上了
+  assert.match(
+    board,
+    /if \(!result\.ok\) \{[\s\S]*?boardData\.value = \{ \.\.\.boardData\.value, \[subject\]: before \}/,
+    "saveSubject 在权限被拒时必须把卡片内容退回原值",
+  );
 }
 
 // 回归守卫：全站尺寸基准必须留在 125%。

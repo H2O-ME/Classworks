@@ -71,6 +71,11 @@ export function getMe(token) {
   return request("/api/auth/me", { token });
 }
 
+// 白板口令必须由后端确认，前端不能只凭「URL 里有个 key」就解锁
+export function checkBoardToken(boardToken) {
+  return request("/api/auth/board", { boardToken });
+}
+
 export function getHealth() {
   return request("/api/health");
 }

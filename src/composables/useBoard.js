@@ -25,7 +25,7 @@ function writeCache(date, state) {
 }
 
 export function useBoard() {
-  const { token, boardToken } = useAuth();
+  const { token, boardToken, revokeBoardToken } = useAuth();
 
   const currentDate = ref(formatDateKey(new Date()));
   const boardData = shallowRef({});
@@ -109,6 +109,8 @@ export function useBoard() {
       }
       if (error.status === 401) {
         syncState.value = "error";
+        // 白板口令被服务端否掉：立刻降级只读，别让 UI 继续假装能改
+        revokeBoardToken();
         return { ok: false, unauthorized: true, message: error.message };
       }
       // 网络错误/5xx/429：留在队列里退避重试，内容不丢
@@ -153,13 +155,22 @@ export function useBoard() {
   async function saveSubject(subject, content) {
     const text = String(content ?? "");
     const entry = { date: currentDate.value, subject, content: text };
+    const before = boardData.value[subject] ?? "";
 
     // 乐观更新：先改本地立即上屏，再谈同步
     boardData.value = { ...boardData.value, [subject]: text };
     persistCache();
 
     const result = await submit(entry);
-    if (result.retry) enqueue(entry);
+    if (result.retry) {
+      enqueue(entry);
+      return result;
+    }
+    // 权限被拒：画面必须退回原内容。否则用户看到字变了，以为存上了，其实一个字都没落库。
+    if (!result.ok) {
+      boardData.value = { ...boardData.value, [subject]: before };
+      persistCache();
+    }
     return result;
   }
 

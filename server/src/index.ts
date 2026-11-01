@@ -202,6 +202,18 @@ app.get('/api/auth/me', (c) => {
   return c.json({ user: publicUser(user) })
 })
 
+// 白板口令校验：前端绝不能凭「URL 里有个 key」就解锁全科编辑。
+// 地址栏截断/手误（?key=see）会让 UI 假可写 —— 写接口本来就拒，但画面已经乐观改过了，
+// 用户会以为存上了。所以进页面必须先问后端这个口令到底对不对。
+app.get('/api/auth/board', (c) => {
+  const provided = c.req.header('X-Board-Token')
+  if (!BOARD_TOKEN || !provided || !safeEqual(provided, BOARD_TOKEN)) {
+    return c.json({ error: '白板口令无效' }, 401)
+  }
+  c.header('Cache-Control', 'no-store, no-cache')
+  return c.json({ ok: true })
+})
+
 // ── 读：公开，学生扫码即可看 ──
 app.get('/api/board', (c) => {
   const parsed = parse({ date: c.req.query('date') })

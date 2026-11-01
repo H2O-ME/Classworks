@@ -14,6 +14,7 @@
             <article
               v-for="(item, itemIndex) in column"
               :key="item.key"
+              :data-key="item.key"
               class="homework-card"
               :class="{ 'homework-card-readonly': !isEditable(item.key) }"
               :role="isEditable(item.key) ? 'button' : undefined"
@@ -71,7 +72,7 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, onUpdated, ref, watch } from "vue";
 import SubjectAddCard from "./SubjectAddCard.vue";
 import { columnCount, distribute } from "./masonry.js";
 
@@ -88,9 +89,33 @@ const emit = defineEmits(["open-dialog"]);
 const viewportWidth = ref(typeof window === "undefined" ? 1200 : window.innerWidth);
 
 const columnCountValue = computed(() => columnCount(viewportWidth.value));
+
+// 真实卡高：估算法（按字数）在字号调大、英文长句、自动换行时全错，
+// 实测最高列能差出 300px。改成渲染后量一次 offsetHeight 再重排列。
+const measured = ref({});
+
+function measureCards() {
+  if (typeof document === "undefined") return;
+  const next = {};
+  for (const node of document.querySelectorAll(".homework-card[data-key]")) {
+    next[node.dataset.key] = node.offsetHeight;
+  }
+  // 高度没变就别写 ref，避免测量 → 重排 → 再测量的死循环
+  const keys = Object.keys(next);
+  const same =
+    keys.length === Object.keys(measured.value).length &&
+    keys.every((key) => measured.value[key] === next[key]);
+  if (!same) measured.value = next;
+}
+
 const columns = computed(() =>
-  distribute(props.sortedItems, columnCountValue.value, estimateCardHeight),
+  distribute(props.sortedItems, columnCountValue.value, cardHeight),
 );
+
+// 没量到之前用一个保守估计，量到之后一律用实测值
+function cardHeight(item) {
+  return measured.value[item.key] || 96 + 220;
+}
 const editableAdditions = computed(() =>
   props.unusedSubjects.filter((subject) => props.editableSubjects.includes(subject.name)),
 );
@@ -101,9 +126,18 @@ function isEditable(subject) {
 
 function handleResize() {
   viewportWidth.value = window.innerWidth;
+  measureCards();
 }
 
-onMounted(() => window.addEventListener("resize", handleResize));
+onMounted(() => {
+  window.addEventListener("resize", handleResize);
+  measureCards();
+});
+
+// 内容/字号/视口一变，卡高就变了：量一次再重排列（测量值不变时不会触发更新，不死循环）
+onUpdated(measureCards);
+watch(() => props.contentStyle, measureCards, { deep: true });
+
 onBeforeUnmount(() => window.removeEventListener("resize", handleResize));
 
 function handleCardClick(key) {
@@ -116,15 +150,6 @@ function formatContent(content) {
     .split("\n")
     .map((line) => line.trim())
     .filter(Boolean);
-}
-
-// 估算影响列分配，不追求像素级准确：只比较卡片之间的相对高度
-function estimateCardHeight(item) {
-  const textUnits = formatContent(item.content).reduce(
-    (total, line) => total + Math.max(1, Math.ceil(line.length / 14)),
-    0,
-  );
-  return 96 + textUnits * 20;
 }
 </script>
 

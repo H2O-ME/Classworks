@@ -6,26 +6,30 @@
           {{ titleText }}
         </div>
         <div class="app-bar-actions">
-          <div class="identity-pill">
-            <i-mdi-account-circle-outline class="identity-icon" />
-            {{ userLabel }}
-          </div>
           <div class="date-pill">
             {{ dateLabel }}
           </div>
+          <!-- 身份是标签、入口是按钮：只读时给一个带字的「登录」，不要让用户猜图标 -->
+          <template v-if="signedIn">
+            <div class="identity-pill">
+              <i-mdi-account-circle-outline class="identity-icon" />
+              {{ userLabel }}
+            </div>
+            <router-link
+              class="settings-button"
+              to="/settings"
+              aria-label="打开设置"
+            >
+              <i-mdi-cog-outline class="settings-icon" />
+            </router-link>
+          </template>
           <router-link
-            class="settings-button"
-            :to="signedIn ? '/settings' : '/login'"
-            :aria-label="signedIn ? '打开设置' : '登录'"
+            v-else
+            class="login-button"
+            to="/login"
           >
-            <i-mdi-cog-outline
-              v-if="signedIn"
-              class="settings-icon"
-            />
-            <i-mdi-login-variant
-              v-else
-              class="settings-icon"
-            />
+            <i-mdi-account-arrow-right-outline class="login-icon" />
+            <span>登录</span>
           </router-link>
         </div>
       </div>
@@ -242,7 +246,7 @@ import {
 } from "@/utils/board";
 import { getFontLevel, setFontLevel } from "@/utils/settings";
 
-const { isBoard, user, userLabel, canEdit, refreshIdentity } = useAuth();
+const { isBoard, user, userLabel, canEdit, refreshIdentity, verifyBoardToken } = useAuth();
 const { currentDate, boardData, syncState, hasPending, forbidden, load, saveSubject, retryNow, dispose } =
   useBoard();
 
@@ -397,6 +401,11 @@ onMounted(async () => {
   document.title = "作业看板";
   // 身份校正与拉数据并行：不阻塞首屏，角色改过时 canEdit 会自己跟着变
   refreshIdentity();
+  // 白板口令必须后端确认后才解锁编辑（?key=see 这类手误不能假可写）
+  verifyBoardToken().then((status) => {
+    // 口令被拒要明说：否则讲台看到全灰只会以为板子坏了，以为是网络问题
+    if (status === "invalid") flash("白板口令不对，当前是只读模式。请检查快捷方式里的 ?key= 参数", { persistent: true });
+  });
   const requested = formatDateKey(parseDateArg(new URLSearchParams(window.location.search).get("date") || todayKey));
   // load 的同步前缀先把本地缓存填进 boardData：命中缓存就立刻出内容，没有才等第一次 GET
   const pending = load(requested);
@@ -443,6 +452,39 @@ onBeforeUnmount(() => {
 .identity-icon {
   width: 0.9375rem;
   height: 0.9375rem;
+}
+
+/* 未登录时的入口：带文字的实心按钮，比一个箭头图标直观得多 */
+.login-button {
+  display: inline-flex;
+  min-height: 2.25rem;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0 0.875rem;
+  border: 1px solid rgba(174, 191, 221, 0.32);
+  border-radius: 0.5rem;
+  background: rgba(174, 191, 221, 0.14);
+  color: #eaf0f8;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  text-decoration: none;
+  transition:
+    transform 180ms ease,
+    border-color 180ms ease,
+    background-color 180ms ease;
+}
+
+.login-button:hover {
+  transform: translateY(-1px);
+  border-color: rgba(174, 191, 221, 0.55);
+  background: rgba(174, 191, 221, 0.22);
+  color: #ffffff;
+}
+
+.login-icon {
+  width: 1.0625rem;
+  height: 1.0625rem;
 }
 
 .settings-button {

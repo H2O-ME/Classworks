@@ -7,7 +7,7 @@ server/
   src/core.ts         建表/迁移、scrypt 密码哈希、HS256 JWT、学科与角色常量
   src/index.ts        路由 + 鉴权链 + 限流 + SQL
   src/users.ts        账号管理 CLI（list / add / passwd / del）
-  selftest.mjs        可运行自检（真起服务打 fetch，51 项断言）
+  selftest.mjs        可运行自检（真起服务打 fetch，60 项断言）
   Dockerfile          node:22-bookworm-slim 多阶段，非 root 运行
   docker-compose.yml  127.0.0.1:3100 + 命名 volume
   .env.example        环境变量模板
