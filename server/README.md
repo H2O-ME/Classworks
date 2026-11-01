@@ -7,7 +7,7 @@ server/
   src/core.ts         建表/迁移、scrypt 密码哈希、HS256 JWT、学科与角色常量
   src/index.ts        路由 + 鉴权链 + 限流 + SQL
   src/users.ts        账号管理 CLI（list / add / passwd / del）
-  selftest.mjs        可运行自检（真起服务打 fetch，44 项断言）
+  selftest.mjs        可运行自检（真起服务打 fetch，51 项断言）
   Dockerfile          node:22-bookworm-slim 多阶段，非 root 运行
   docker-compose.yml  127.0.0.1:3100 + 命名 volume
   .env.example        环境变量模板
@@ -17,7 +17,7 @@ server/
 
 | 身份 | 登录方式 | 可写范围 |
 | --- | --- | --- |
-| 希沃白板 | URL 带 `board_token` → 前端换 `X-Board-Token` | 全 6 科 |
+| 希沃白板 | URL 带 `key` → 前端换 `X-Board-Token` | 全 6 科 |
 | `admin` | 拼音全拼 + 密码 | 全 6 科 |
 | `rep` | 拼音全拼 + 密码 | 仅 `subject` 绑定的那一科 |
 | `student` | 拼音全拼 + 密码 | 只读（写接口 403） |
@@ -33,11 +33,11 @@ pnpm --dir server dev        # node --watch src/index.ts，端口 3100（Node �
 # 或生产式：pnpm --dir server build && pnpm --dir server start
 ```
 
-没有 `data/` 会自动建。本地也可以直接 `BOARD_TOKEN=k pnpm --dir server dev`（Windows 用 `$env:BOARD_TOKEN='k'`）。
+没有 `data/` 会自动建。本地也可以直接 `BOARD_TOKEN=seewo pnpm --dir server dev`（Windows 用 `$env:BOARD_TOKEN='seewo'`）。
 
 ## 账号管理
 
-账号只能由管理员在服务器上分配，没有注册接口。首次登录强制改密（`is_activated = 0`），初始密码等于账号拼音。
+账号只能由管理员在服务器上分配，没有注册接口。首次登录强制改密（`is_activated = 0`），初始密码等于学号。
 
 **`roster.json` 是唯一权威来源**：谁存在、谁是课代表、绑定哪一科，全在里面。灾难恢复只需容器与 `roster.json`，跑一次 `seed` 即可，不用记任何命令序列。
 
@@ -47,7 +47,7 @@ node dist/users.js seed roster.json       # 按名单幂等同步（新建补密
 node dist/users.js list                   # 核对
 node dist/users.js role <账号> admin      # 临时改单个账号角色
 node dist/users.js role <账号> rep 数学   # 提为某科课代表
-node dist/users.js passwd <账号>          # 重置为「首登须改密」，初始密码回到账号拼音
+node dist/users.js passwd <账号>          # 重置为「首登须改密」，初始密码回到学号
 node dist/users.js del <账号>
 ```
 
@@ -69,7 +69,7 @@ node dist/users.js del <账号>
 pnpm --dir server selftest   # = tsc 编译 + node selftest.mjs
 ```
 
-用临时数据库跑 `users.js` 建号，再起真实服务断言 44 项：健康检查与 CORS 预检放行 `X-Board-Token`/`Authorization`、旧库迁移（room 维度折叠 + history_logs 删除 + 幂等）、`seed` 幂等（重跑不重复建号、不动已改过的密码）、账号不存在与密码错误同为 401、未激活返回 `REQUIRE_NEW_PASSWORD` 且只给临时凭证、临时凭证缺失/密码过短被拒、激活后旧密码失效、`/api/auth/me` 校正身份、四层写入鉴权（无凭证 401 / 错白板令牌 401 / 同学 403 / 课代表越科 403 / 管理员与白板全科可写）、字段校验 400、写入-读取往返、同内容重复保存幂等、历史接口已下线 404、写接口与登录接口各自限流 429 + `Retry-After`。
+用临时数据库跑 `users.js` 建号，再起真实服务断言 51 项：健康检查与 CORS 预检放行 `X-Board-Token`/`Authorization`、旧库迁移（room 维度折叠 + history_logs 删除 + 幂等）、`seed` 幂等（重跑不重复建号、不动已改过的密码）、账号不存在与密码错误同为 401、未激活返回 `REQUIRE_NEW_PASSWORD` 且只给临时凭证、临时凭证缺失/密码过短被拒、激活后旧密码失效、`/api/auth/me` 校正身份、四层写入鉴权（无凭证 401 / 错白板令牌 401 / 同学 403 / 课代表越科 403 / 管理员与白板全科可写）、字段校验 400、写入-读取往返、同内容重复保存幂等、历史接口已下线 404、写接口与登录接口各自限流 429 + `Retry-After`。
 
 ## 接口
 
@@ -93,7 +93,7 @@ pnpm --dir server selftest   # = tsc 编译 + node selftest.mjs
 
 | 变量 | 默认 | 说明 |
 | --- | --- | --- |
-| `BOARD_TOKEN` | 空 | 希沃白板免密令牌，必填否则白板写不进来；生成 `openssl rand -hex 24` |
+| `BOARD_TOKEN` | 空 | 希沃白板免密令牌，必填否则白板写不进来；固定口令即可（如 `seewo`），要更强就用 `openssl rand -hex 24` 生成随机串 |
 | `JWT_SECRET` | 空 | JWT 签名密钥，必填；缺失时随启动随机生成，重启后所有人要重新登录；生成 `openssl rand -hex 32` |
 | `CORS_ORIGINS` | `*` | 逗号分隔的允许源，`*` 表示任意 |
 | `PORT` | `3100` | 监听端口 |

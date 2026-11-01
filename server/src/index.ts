@@ -65,7 +65,11 @@ function safeEqual(provided: string, expected: string) {
 // 限流：令牌一旦泄露，没有它就能被脚本无限刷。单进程内存即可 —— ponytail: 多实例部署会各算一份，
 // 那台机器只跑一个容器，够用；真要扩多实例就换成 Redis 计数。
 const WINDOW_MS = 60_000
-const LIMITS = { save: 30, login: 10 }
+const SAVE_LIMIT = 30
+// 全班都在学校 NAT 后面，出门 IP 是同一个：按 IP 卡登录次数会把整个班一起锁死。
+// 所以登录的正确维度是「账号」—— 每个账号每分钟最多错 5 次；IP 只留一个很松的兜底防乱刷。
+const LOGIN_FAIL_LIMIT = 5
+const LOGIN_IP_LIMIT = 120
 const hits = new Map<string, { count: number; resetAt: number }>()
 
 // nginx 反代后 socket 地址恒为 127.0.0.1，必须取 X-Real-IP；直连兜底用 socket
@@ -73,16 +77,25 @@ function clientIp(c: Context) {
   return c.req.header('X-Real-IP') || c.req.header('X-Forwarded-For')?.split(',')[0].trim() || 'unknown'
 }
 
-function overLimit(bucket: keyof typeof LIMITS, ip: string) {
-  const key = `${bucket}|${ip}`
+function bucket(key: string) {
   const now = Date.now()
   const hit = hits.get(key)
-  if (!hit || now >= hit.resetAt) {
-    hits.set(key, { count: 1, resetAt: now + WINDOW_MS })
-    return false
-  }
+  if (hit && now < hit.resetAt) return hit
+  const fresh = { count: 0, resetAt: now + WINDOW_MS }
+  hits.set(key, fresh)
+  return fresh
+}
+
+// 记一次并检查是否超限
+function overLimit(key: string, limit: number) {
+  const hit = bucket(key)
   hit.count += 1
-  return hit.count > LIMITS[bucket]
+  return hit.count > limit
+}
+
+// 只看不记：已经错够次数就直接挡，不必再验一次密码
+function alreadyOver(key: string, limit: number) {
+  return bucket(key).count >= limit
 }
 
 // 内存计数不该无限增长：顺手清掉过期窗口。每 1000 次调用扫一遍，成本可忽略。
@@ -133,7 +146,8 @@ app.get('/api/health', (c) => c.json({ ok: true }))
 // ── 登录 ──
 app.post('/api/auth/login', async (c) => {
   sweepHits()
-  if (overLimit('login', clientIp(c))) {
+  // IP 兜底很松（全班共用出口 IP），真正的防撞库按账号算
+  if (overLimit(`login-ip|${clientIp(c)}`, LOGIN_IP_LIMIT)) {
     c.header('Retry-After', String(WINDOW_MS / 1000))
     return c.json({ error: '尝试过于频繁，请稍后再试' }, 429)
   }
@@ -145,9 +159,18 @@ app.post('/api/auth/login', async (c) => {
   if (!username || !password) return c.json({ error: '请输入账号和密码' }, 400)
   if (username.length > MAX.username || password.length > MAX.password) return c.json({ error: '账号或密码过长' }, 400)
 
+  const failKey = `login-fail|${username}`
+  if (alreadyOver(failKey, LOGIN_FAIL_LIMIT)) {
+    c.header('Retry-After', String(WINDOW_MS / 1000))
+    return c.json({ error: '密码错误次数过多，请等一分钟再试' }, 429)
+  }
+
   const user = qUserByName.get(username) as UserRow | undefined
   // 账号不存在与密码错误给同一个 401：不让人枚举出班里谁注册了
-  if (!user || !verifyPassword(password, user.password_hash)) return c.json({ error: '账号或密码不对' }, 401)
+  if (!user || !verifyPassword(password, user.password_hash)) {
+    overLimit(failKey, LOGIN_FAIL_LIMIT)
+    return c.json({ error: '账号或密码不对' }, 401)
+  }
 
   if (!user.is_activated) {
     return c.json({ status: 'REQUIRE_NEW_PASSWORD', tempToken: signToken(user.id, TEMP_TTL), realName: user.real_name })
@@ -203,7 +226,7 @@ app.post('/api/board/save', async (c) => {
   if (!verdict.ok) return c.json({ error: verdict.error }, verdict.status)
 
   sweepHits()
-  if (overLimit('save', clientIp(c))) {
+  if (overLimit(`save|${clientIp(c)}`, SAVE_LIMIT)) {
     c.header('Retry-After', String(WINDOW_MS / 1000))
     return c.json({ error: '提交过于频繁，请稍后再试' }, 429)
   }

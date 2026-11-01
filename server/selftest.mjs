@@ -7,7 +7,7 @@ import { join } from 'node:path'
 import Database from 'better-sqlite3'
 
 const PORT = 3199
-const BOARD_TOKEN = 'selftest-board-token'
+const BOARD_TOKEN = 'seewo'
 const JWT_SECRET = 'selftest-jwt-secret'
 const DATE = '20261101'
 const base = `http://127.0.0.1:${PORT}/api`
@@ -21,9 +21,15 @@ const seed = (...args) =>
     stdio: ['ignore', 'pipe', 'inherit'],
   })
 
-seed('add', 'admin', '王老师', 'admin', 'init-admin')
-seed('add', 'shuxue', '李四', 'rep', '数学', 'init-rep')
-seed('add', 'xuesheng', '张三', 'student', 'init-stu')
+// 全部账号来自 roster.json：初始密码 = 学号（不是账号拼音）
+seed('seed', 'roster.json')
+// 名单外的账号，用来验证 seed 不会动名单外的人、也不会重置已改的密码
+seed('add', 'outsider', '编外', 'student', 'keep-me-please')
+const ACCOUNTS = {
+  admin: { username: 'tianhanwen', initial: '240834', next: 'new-admin-pw' }, // 管理员
+  rep: { username: 'liupeihan', initial: '240825', next: 'new-rep-pw' }, // 课代表 · 化学
+  student: { username: 'bingkaihang', initial: '240801', next: 'new-stu-pw' }, // 同学
+}
 
 const child = spawn(process.execPath, ['dist/index.js'], {
   env: { ...process.env, PORT: String(PORT), BOARD_TOKEN, JWT_SECRET, DB_PATH, CORS_ORIGINS: '*' },
@@ -126,46 +132,65 @@ try {
 
   step('登录：信任边界')
   ok((await post('/auth/login', { username: 'nobody', password: 'x' })).status === 401, '账号不存在 → 401')
-  ok((await post('/auth/login', { username: 'admin', password: 'wrong' })).status === 401, '密码错误 → 401')
+  ok((await post('/auth/login', { username: ACCOUNTS.admin.username, password: 'wrong' })).status === 401, '密码错误 → 401')
   ok((await post('/auth/login', { username: '', password: '' })).status === 400, '空账号密码 → 400')
+  // 初始密码是学号：用账号拼音当密码必须失败，否则等于告诉全班怎么撞别人的号
+  ok(
+    (await post('/auth/login', { username: ACCOUNTS.admin.username, password: ACCOUNTS.admin.username })).status === 401,
+    '账号拼音不能当初始密码（初始密码=学号）',
+  )
 
   step('首登改密')
-  const firstLogin = await post('/auth/login', { username: 'admin', password: 'init-admin' })
+  const firstLogin = await post('/auth/login', { username: ACCOUNTS.admin.username, password: ACCOUNTS.admin.initial })
   const firstBody = await firstLogin.json()
-  ok(firstBody.status === 'REQUIRE_NEW_PASSWORD' && firstBody.realName === '王老师', '未激活账号返回 REQUIRE_NEW_PASSWORD + 姓名')
+  ok(firstBody.status === 'REQUIRE_NEW_PASSWORD' && firstBody.realName === '田瀚文', '学号登录：未激活账号返回 REQUIRE_NEW_PASSWORD + 姓名')
   ok(!firstBody.token && typeof firstBody.tempToken === 'string', '不下发正式 token，只给临时凭证')
   ok((await post('/auth/activate', { newPassword: 'new-admin-pw' })).status === 401, '无临时凭证改密 → 401')
   ok((await post('/auth/activate', { newPassword: '12345' }, auth(firstBody.tempToken))).status === 400, '新密码过短 → 400')
-  const activated = await (await post('/auth/activate', { newPassword: 'new-admin-pw' }, auth(firstBody.tempToken))).json()
+  const activated = await (await post('/auth/activate', { newPassword: ACCOUNTS.admin.next }, auth(firstBody.tempToken))).json()
   ok(activated.status === 'SUCCESS' && activated.user.role === 'admin', '改密成功并直接下发正式 token')
   const adminToken = activated.token
 
-  const relogin = await (await post('/auth/login', { username: 'admin', password: 'new-admin-pw' })).json()
+  const relogin = await (await post('/auth/login', { username: ACCOUNTS.admin.username, password: ACCOUNTS.admin.next })).json()
   ok(relogin.status === 'SUCCESS' && relogin.token, '新密码可正常登录')
-  ok((await post('/auth/login', { username: 'admin', password: 'init-admin' })).status === 401, '初始密码已失效')
+  ok(
+    (await post('/auth/login', { username: ACCOUNTS.admin.username, password: ACCOUNTS.admin.initial })).status === 401,
+    '学号初始密码已失效',
+  )
 
   step('/api/auth/me 校正身份')
-  ok((await (await fetch(`${base}/auth/me`, { headers: auth(adminToken) })).json()).user.realName === '王老师', '带 token 取回姓名')
+  ok((await (await fetch(`${base}/auth/me`, { headers: auth(adminToken) })).json()).user.realName === '田瀚文', '带 token 取回姓名')
   ok((await fetch(`${base}/auth/me`)).status === 401, '无 token → 401')
 
   step('账号 seed 幂等（名单是唯一权威来源）')
   // seed 是灾难恢复的唯一入口：重跑必须不重复建号，且不能把已改过的密码重置回去
   {
-    const seedWith = (args) =>
-      execFileSync(process.execPath, ['dist/users.js', 'seed', ...args], {
+    const run = (...args) =>
+      execFileSync(process.execPath, ['dist/users.js', ...args], {
         env: { ...process.env, DB_PATH },
         stdio: 'pipe',
       }).toString()
-    const first = seedWith([ 'roster.json' ])
-    const second = seedWith([ 'roster.json' ])
-    ok(/新建 51 个/.test(first), `首次 seed 按名单建满 51 人（${first.trim()}）`)
-    ok(/新建 0 个/.test(second) && /同步 51 个/.test(second), '重跑 seed 不重复建号，只同步姓名/角色')
-    // admin 不在名单里，密码不该被动过
-    ok((await post('/auth/login', { username: 'admin', password: 'new-admin-pw' })).status === 200, '重跑 seed 后原密码仍可登录')
+    ok(/新建 0 个/.test(run('seed', 'roster.json')), '重跑 seed 不重复建号，只同步姓名/角色/学号')
+    ok(
+      (await post('/auth/login', { username: ACCOUNTS.admin.username, password: ACCOUNTS.admin.next })).status === 200,
+      '重跑 seed 后已改的密码仍可登录',
+    )
+    ok(
+      (await post('/auth/login', { username: 'outsider', password: 'keep-me-please' })).status === 200,
+      'seed 不碰名单外的账号',
+    )
+    // 学生把一个学号号改成新密码后，reset 应当能把它掰回学号
+    const stuBefore = await activate(ACCOUNTS.student.username, ACCOUNTS.student.initial, ACCOUNTS.student.next)
+    ok(stuBefore.status === 'SUCCESS', '学生用学号完成首登改密')
+    ok(/1 个账号已重置/.test(run('reset', ACCOUNTS.student.username)), 'reset 单个账号')
+    ok(
+      (await post('/auth/login', { username: ACCOUNTS.student.username, password: ACCOUNTS.student.initial })).status === 200,
+      'reset 后密码回到学号',
+    )
   }
 
-  const repToken = (await activate('shuxue', 'init-rep', 'new-rep-pw')).token
-  const stuToken = (await activate('xuesheng', 'init-stu', 'new-stu-pw')).token
+  const repToken = (await activate(ACCOUNTS.rep.username, ACCOUNTS.rep.initial, ACCOUNTS.rep.next)).token
+  const stuToken = (await activate(ACCOUNTS.student.username, ACCOUNTS.student.initial, ACCOUNTS.student.next)).token
 
   step('公开读（学生扫码即可看）')
   const board = await fetch(`${base}/board?date=${DATE}`)
@@ -178,10 +203,16 @@ try {
   ok((await save({ subject: '语文', content: 'x' }, { 'X-Board-Token': 'wrong' })).status === 401, '错误白板令牌 → 401')
   ok((await save({ subject: '语文', content: '背诵课文' })).status === 200, '白板令牌：全科可写')
   ok((await save({ subject: '数学', content: 'x' }, auth(stuToken))).status === 403, '普通同学 → 403')
-  ok((await save({ subject: '数学', content: '第 1 页' }, auth(repToken))).status === 200, '课代表写绑定科目 → 200')
-  const cross = await save({ subject: '英语', content: 'x' }, auth(repToken))
-  ok(cross.status === 403 && /英语/.test((await cross.json()).error), '课代表写别的科目 → 403 且说明科目')
+  // 刘佩涵是化学课代表：只有化学能写
+  ok((await save({ subject: '化学', content: '配平练习 1-10' }, auth(repToken))).status === 200, '课代表写绑定科目（化学）→ 200')
+  ok((await save({ subject: '数学', content: 'x' }, auth(repToken))).status === 403, '课代表写别的科目（数学）→ 403')
   ok((await save({ subject: '英语', content: '抄单词' }, auth(adminToken))).status === 200, '管理员全科可写')
+  // 同科多人：另一名化学课代表也必须能写（subject 上没有唯一约束）
+  const anotherRep = await activate('zhangqianyue', '240853', 'new-rep2-pw')
+  ok(
+    (await save({ subject: '化学', content: '配平练习 11-20' }, auth(anotherRep.token))).status === 200,
+    '同一科的第二名课代表也能写',
+  )
 
   step('字段校验')
   ok((await save({ date: '2026-11-1', subject: '数学', content: 'x' })).status === 400, '非法 date → 400')
@@ -191,10 +222,13 @@ try {
 
   step('写入 → 读取往返 + 幂等')
   const readBack = await (await fetch(`${base}/board?date=${DATE}`)).json()
-  ok(readBack.subjects['数学'].content === '第 1 页', '读回课代表写入的内容')
-  ok(Object.keys(readBack.subjects).length === 3, `三科都有内容（白板/课代表/管理员各写一科，${Object.keys(readBack.subjects).length}）`)
-  const before = readBack.subjects['数学'].updatedAt
-  const dup = await (await save({ subject: '数学', content: '第 1 页' }, auth(repToken))).json()
+  ok(readBack.subjects['化学'].content === '配平练习 11-20', '读回第二名课代表最后写入的内容')
+  ok(
+    ['语文', '化学', '英语'].every((subject) => readBack.subjects[subject]),
+    `白板/课代表/管理员写的三科都在（${Object.keys(readBack.subjects).join('、')}）`,
+  )
+  const before = readBack.subjects['化学'].updatedAt
+  const dup = await (await save({ subject: '化学', content: '配平练习 11-20' }, auth(repToken))).json()
   ok(dup.updatedAt === before, '同内容重复保存不改 updatedAt')
 
   step('历史流水已下线')
@@ -210,13 +244,23 @@ try {
   ok(limited?.headers.get('Retry-After') === '60', '429 带 Retry-After 头')
   ok((await limited.json()).error.includes('频繁'), '429 报文说明原因')
 
-  step('登录接口限流')
-  let loginLimited = null
-  for (let i = 0; i < 20 && !loginLimited; i += 1) {
-    const res = await post('/auth/login', { username: 'admin', password: 'wrong' })
-    if (res.status === 429) loginLimited = res
+  step('登录限流按账号，不按 IP')
+  // 全班共用学校 NAT 的同一个出口 IP：按 IP 卡登录会把整个班一起锁死。
+  // 必须是「同一个账号连错才被挡」，别的账号照常能登。
+  {
+    let limited = null
+    for (let i = 0; i < 20 && !limited; i += 1) {
+      const res = await post('/auth/login', { username: 'outsider', password: 'wrong' })
+      if (res.status === 429) limited = res
+    }
+    ok(limited !== null, '同一账号连错触发 429')
+    ok(limited.headers.get('Retry-After') === '60', '429 带 Retry-After 头')
+    // 同一 IP 下别的账号不受影响 —— 这是班级场景的关键
+    ok(
+      (await post('/auth/login', { username: ACCOUNTS.admin.username, password: ACCOUNTS.admin.next })).status === 200,
+      '同一出口 IP 的其他账号仍可正常登录',
+    )
   }
-  ok(loginLimited !== null, '撞库式连错触发 429')
 
   console.log(`\n全部通过：${passed} 项断言`)
 } catch (err) {

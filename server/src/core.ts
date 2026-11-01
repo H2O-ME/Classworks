@@ -21,6 +21,7 @@ export type UserRow = {
   role: Role
   subject: string | null
   is_activated: number
+  student_id: string | null
 }
 
 const HOMEWORKS_DDL = `
@@ -38,7 +39,8 @@ CREATE TABLE IF NOT EXISTS users (
   password_hash TEXT NOT NULL,
   role TEXT NOT NULL DEFAULT 'student',
   subject TEXT DEFAULT NULL,
-  is_activated INTEGER NOT NULL DEFAULT 0
+  is_activated INTEGER NOT NULL DEFAULT 0,
+  student_id TEXT DEFAULT NULL
 );
 CREATE TABLE IF NOT EXISTS homeworks (
   date TEXT NOT NULL, subject TEXT NOT NULL, content TEXT NOT NULL DEFAULT '',
@@ -53,7 +55,15 @@ export function openDb() {
   db.pragma('journal_mode = WAL') // 读写并发更稳；数据库文件会附带 -wal/-shm
   db.exec(SCHEMA)
   migrate(db)
+  addStudentIdColumn(db)
   return db
+}
+
+// 后加的列：老库没有 student_id，补上（SQLite 的 ADD COLUMN 不支持 IF NOT EXISTS）
+function addStudentIdColumn(db: Database.Database) {
+  const columns = db.prepare('PRAGMA table_info(users)').all() as { name: string }[]
+  if (columns.some((column) => column.name === 'student_id')) return
+  db.exec('ALTER TABLE users ADD COLUMN student_id TEXT DEFAULT NULL')
 }
 
 // 旧库是 (room, date, subject) 三键 + history_logs 流水。单班模型保留最新一版内容即可。

@@ -26,10 +26,10 @@ function writeStorage(store, key, value) {
   }
 }
 
-// 免密令牌优先级最高：讲台大屏每天开机都靠它，出现即接管
+// 白板免密令牌：讲台快捷方式 ?key=<令牌>，出现即接管（免密优先级高于登录）
 function initBoardToken() {
   const params = new URLSearchParams(window.location.search);
-  const fromUrl = (params.get("board_token") || "").trim();
+  const fromUrl = (params.get("key") || "").trim();
   if (fromUrl) {
     state.boardToken = fromUrl.slice(0, 128);
     try {
@@ -46,7 +46,7 @@ function initBoardToken() {
   }
   // 令牌在地址栏明文会被学生看到，立即抹掉（路由还会再 replaceState 一次，见 main.js）
   if (fromUrl) {
-    params.delete("board_token");
+    params.delete("key");
     const search = params.toString();
     window.history.replaceState(
       window.history.state,
@@ -69,8 +69,8 @@ initAuth();
 export function stripKeyFromUrl() {
   if (typeof window === "undefined") return;
   const url = new URL(window.location.href);
-  if (!url.searchParams.has("board_token")) return;
-  url.searchParams.delete("board_token");
+  if (!url.searchParams.has("key")) return;
+  url.searchParams.delete("key");
   window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
 }
 
@@ -135,5 +135,6 @@ export function useAuth() {
     token: computed(() => state.token),
     boardToken: computed(() => state.boardToken),
     logout,
+    refreshIdentity,
   };
 }
