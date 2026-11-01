@@ -96,6 +96,17 @@ try {
   ok(hist.items[0].content === '背诵课文' && hist.items[0].createdAt >= hist.items[2].createdAt, 'history 倒序（最新在前）')
   ok((await (await fetch(`${base}/board?room=class-101&date=${DATE}`)).json()).subjects['语文'].content === '背诵课文', '第二次写入同样可读回')
 
+  step('写接口限流')
+  // 前面已经写了几次，这里继续写到触发 429 为止（上限 30/分钟）
+  let limited = null
+  for (let i = 0; i < 40 && !limited; i += 1) {
+    const res = await save({ subject: '地理', content: `限流探测 ${i}` })
+    if (res.status === 429) limited = res
+  }
+  ok(limited !== null, '超过阈值后返回 429')
+  ok(limited?.headers.get('Retry-After') === '60', '429 带 Retry-After 头')
+  ok((await limited.json()).error.includes('频繁'), '429 报文说明原因')
+
   console.log(`\n全部通过：${passed} 项断言`)
 } catch (err) {
   console.error('\n✗ 自检失败：', err)

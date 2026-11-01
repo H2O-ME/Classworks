@@ -1,5 +1,6 @@
 // Classworks 后端：Hono + SQLite(WAL)。接口见 README.md。
 import { Hono } from 'hono'
+import type { Context } from 'hono'
 import { cors } from 'hono/cors'
 import { serve } from '@hono/node-server'
 import Database from 'better-sqlite3'
@@ -70,6 +71,37 @@ function keyOk(provided?: string) {
   return a.length === b.length && timingSafeEqual(a, b)
 }
 
+// 写接口限流：密钥一旦泄露，没有它就能被脚本无限刷。
+// 按来源 IP 每分钟计数，单进程内存即可 —— ponytail: 上限是多实例部署时会各算一份，
+// 那台机器只跑一个容器，够用；真要扩多实例就换成 Redis 计数。
+const WRITE_LIMIT = 30
+const WRITE_WINDOW_MS = 60_000
+const writeHits = new Map<string, { count: number; resetAt: number }>()
+
+// nginx 反代后 socket 地址恒为 127.0.0.1，必须取 X-Real-IP；直连兜底用 socket
+function clientIp(c: Context) {
+  return c.req.header('X-Real-IP') || c.req.header('X-Forwarded-For')?.split(',')[0].trim() || 'unknown'
+}
+
+function tooManyWrites(ip: string) {
+  const now = Date.now()
+  const hit = writeHits.get(ip)
+  if (!hit || now >= hit.resetAt) {
+    writeHits.set(ip, { count: 1, resetAt: now + WRITE_WINDOW_MS })
+    return false
+  }
+  hit.count += 1
+  return hit.count > WRITE_LIMIT
+}
+
+// 内存计数不该无限增长：顺手清掉过期窗口。每 1000 次调用扫一遍，成本可忽略。
+let sweeps = 0
+function sweepWriteHits() {
+  if (++sweeps % 1000 !== 0) return
+  const now = Date.now()
+  for (const [ip, hit] of writeHits) if (now >= hit.resetAt) writeHits.delete(ip)
+}
+
 const app = new Hono()
 
 app.use(
@@ -98,6 +130,11 @@ app.get('/api/board', (c) => {
 
 app.post('/api/board/save', async (c) => {
   if (!keyOk(c.req.header('X-Write-Key'))) return c.json({ error: '写入密钥无效' }, 401)
+  sweepWriteHits()
+  if (tooManyWrites(clientIp(c))) {
+    c.header('Retry-After', String(WRITE_WINDOW_MS / 1000))
+    return c.json({ error: '提交过于频繁，请稍后再试' }, 429)
+  }
   const body = await c.req.json().catch(() => null)
   if (!body || typeof body !== 'object') return c.json({ error: '请求体非法' }, 400)
   const parsed = parse(body as Record<string, unknown>, true)
