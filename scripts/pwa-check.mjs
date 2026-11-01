@@ -38,6 +38,20 @@ assert.deepEqual(duplicates, [], `预缓存清单存在重复 URL: ${duplicates.
 // PWA 安装/更新会拿不到图标（iOS/Chrome 表现为白色占位图）。
 const manifest = JSON.parse(readFileSync(new URL("../dist/manifest.webmanifest", import.meta.url), "utf8"));
 assert.ok(Array.isArray(manifest.icons) && manifest.icons.length > 0, "manifest 没有图标");
+
+// 回归守卫：start_url 必须带 ?key=，否则装出来的 PWA 图标点开是只读的。
+// 踩过的坑：start_url 曾是裸 "./"，讲台双击桌面图标永远没有编辑权，
+// 只能改用「创建快捷方式」绕，PWA 装了等于白装。
+{
+  const url = new URL(manifest.start_url, "https://example.com/");
+  const key = url.searchParams.get("key");
+  assert.ok(key, `manifest.start_url 必须带 ?key= 白板口令（当前 ${manifest.start_url}）`);
+  assert.ok(
+    url.origin + url.pathname === "https://example.com/",
+    `start_url 应指向站点根路径，当前 ${manifest.start_url}`,
+  );
+}
+
 for (const icon of manifest.icons) {
   const iconPath = icon.src.replace(/^\//, "");
   assert.ok(existsSync(new URL(iconPath, distRoot)), `manifest 图标不存在: ${icon.src}`);

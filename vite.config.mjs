@@ -11,7 +11,12 @@ import { fileURLToPath, URL } from "node:url";
 import vueDevTools from "vite-plugin-vue-devtools";
 
 export default defineConfig(({ mode }) => {
-  loadEnv(mode, process.cwd(), "");
+  const env = loadEnv(mode, process.cwd(), "");
+  // 白板口令写进 manifest 的 start_url：这样从桌面图标启动的 PWA 自带 ?key=，
+  // 讲台每天冰点还原后双击就能编辑，不用再手动输地址。
+  // 代价说清楚：manifest.webmanifest 是公开文件，谁都能读到这个值。
+  // 学校场景里没人会去读它，所以接受；要改口令必须同时改 server/.env 的 BOARD_TOKEN 与这里后重新构建。
+  const boardKey = env.VITE_BOARD_TOKEN || "seewo";
   return {
     base: "./",
     plugins: [
@@ -50,7 +55,9 @@ export default defineConfig(({ mode }) => {
           theme_color: "#09090b",
           background_color: "#09090b",
           display: "standalone",
-          start_url: "./",
+          // 带口令启动：PWA 图标点开即为可编辑的白板模式（否则 manifest 的 start_url
+          // 只能是裸路径，装出来的图标永远只读，讲台就得另建快捷方式）。
+          start_url: `./?key=${boardKey}`,
           scope: "./",
           icons: [
             {
