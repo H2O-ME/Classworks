@@ -25,7 +25,7 @@
         境外 Node.js 后端（Hono + SQLite/WAL）
 ```
 
-- 前端：`src/`，页面走文件路由（`src/pages/`），数据逻辑在 `src/composables/`，API 封装在 `src/api/`
+- 前端：`src/`，页面走文件路由（`src/pages/`），数据逻辑在 `src/composables/`，API 封装在 `src/api/`，基础组件在 `src/components/ui/`（shadcn-vue CLI 生成）
 - 后端：`server/`，三个业务接口 + 健康检查，SQLite 落在数据卷里
 
 ## 开发

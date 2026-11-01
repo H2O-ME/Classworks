@@ -13,13 +13,13 @@
         >
           返回首页
         </router-link>
-        <button
-          type="button"
+        <Button
+          variant="ghost"
           class="btn-tonal"
           @click="$router.back()"
         >
           返回上一页
-        </button>
+        </Button>
       </div>
     </section>
   </div>
@@ -27,6 +27,7 @@
 
 <script setup>
 // 404 兜底页：不需要状态，单个根元素以便路由过渡动画生效
+import { Button } from "@/components/ui/button";
 </script>
 
 <style scoped>
@@ -76,6 +77,8 @@ p {
 .btn-flat,
 .btn-tonal {
   display: inline-flex;
+  width: auto;
+  height: auto;
   min-height: 44px;
   align-items: center;
   justify-content: center;
@@ -86,7 +89,7 @@ p {
   font-size: 14px;
   font-weight: 700;
   text-decoration: none;
-  cursor: pointer;
+  box-shadow: none;
 }
 
 .btn-flat {
@@ -96,6 +99,7 @@ p {
 
 .btn-flat:hover {
   background: #42a5f5;
+  color: #ffffff;
 }
 
 .btn-tonal {
@@ -105,5 +109,6 @@ p {
 
 .btn-tonal:hover {
   background: rgba(33, 150, 243, 0.22);
+  color: #90caf9;
 }
 </style>

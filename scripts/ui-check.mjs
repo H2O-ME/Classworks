@@ -4,14 +4,15 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { columnCount, distribute } from "../src/components/home/masonry.js";
 
-// 断点：<760 1 列，<1240 2 列，<1680 3 列，否则 4 列
+// 断点：<760 1 列，<1240 2 列，其余 3 列（封顶 3：大屏 4 列会压窄卡片，正文难读）
 assert.equal(columnCount(320), 1);
 assert.equal(columnCount(759), 1);
 assert.equal(columnCount(760), 2);
 assert.equal(columnCount(1239), 2);
 assert.equal(columnCount(1240), 3);
-assert.equal(columnCount(1679), 3);
-assert.equal(columnCount(1680), 4);
+assert.equal(columnCount(1680), 3);
+assert.equal(columnCount(1868), 3);
+assert.equal(columnCount(2560), 3);
 
 // 列分配：每张卡进当前最矮的列
 const items = [
@@ -40,6 +41,8 @@ assert.deepEqual(distribute([], 3, () => 1).map((column) => column.length), [0, 
       `列类名绑定的 ${name} 必须是本组件里声明的变量（不能是 import 进来的函数）`,
     );
   }
+  // 封顶 3 列：CSS 里不该再有 columns-4 的网格定义，免得误以为大屏会排 4 列
+  assert.ok(!grid.includes("columns-4"), "HomeworkGrid 里不该再有 columns-4（列数已封顶 3）");
 }
 
 console.log("ui-check ok");

@@ -143,7 +143,6 @@ function estimateCardHeight(item) {
 .masonry-board.columns-1 { grid-template-columns: 1fr; }
 .masonry-board.columns-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .masonry-board.columns-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.masonry-board.columns-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 
 .masonry-column,
 .masonry-column-inner {
@@ -282,8 +281,7 @@ function estimateCardHeight(item) {
   }
 
   .masonry-board.columns-2,
-  .masonry-board.columns-3,
-  .masonry-board.columns-4 {
+  .masonry-board.columns-3 {
     grid-template-columns: 1fr;
   }
 

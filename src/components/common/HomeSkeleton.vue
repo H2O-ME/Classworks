@@ -45,12 +45,6 @@
   }
 }
 
-@media (min-width: 1680px) {
-  .skeleton-grid {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
-}
-
 /* 与 .homework-card 同形态：同底色/描边/圆角，挂载后无缝衔接 */
 .skeleton-card {
   min-height: 148px;

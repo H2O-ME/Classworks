@@ -99,160 +99,148 @@
     />
 
     <!-- 复制到今天二次确认：小屏/手表误触会直接覆盖今天的内容，全端确认一次 -->
-    <div
-      v-if="copyConfirmVisible"
-      class="dialog-overlay"
-      @click.self="copyConfirmVisible = false"
+    <Dialog
+      :open="copyConfirmVisible"
+      @update:open="copyConfirmVisible = $event"
     >
-      <div
-        class="copy-confirm-card"
-        role="dialog"
-        aria-modal="true"
-      >
-        <div class="copy-confirm-title">
-          复制作业到今天？
+      <DialogContent>
+        <div class="copy-confirm-card">
+          <DialogTitle class="copy-confirm-title">
+            复制作业到今天？
+          </DialogTitle>
+          <p class="copy-confirm-text">
+            将把 {{ dateLabel }} 的作业复制到今天，今天已有的内容会被覆盖。
+          </p>
+          <div class="copy-confirm-actions">
+            <Button
+              variant="ghost"
+              class="copy-confirm-cancel"
+              @click="copyConfirmVisible = false"
+            >
+              取消
+            </Button>
+            <Button
+              class="copy-confirm-solid"
+              @click="confirmCopyToToday"
+            >
+              确认复制
+            </Button>
+          </div>
         </div>
-        <p class="copy-confirm-text">
-          将把 {{ dateLabel }} 的作业复制到今天，今天已有的内容会被覆盖。
-        </p>
-        <div class="copy-confirm-actions">
-          <button
-            type="button"
-            class="copy-confirm-cancel"
-            @click="copyConfirmVisible = false"
-          >
-            取消
-          </button>
-          <button
-            type="button"
-            class="copy-confirm-solid"
-            @click="confirmCopyToToday"
-          >
-            确认复制
-          </button>
-        </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
 
     <!-- 409 并发冲突：让用户选云端还是本地，不静默覆盖 -->
-    <div
-      v-if="conflict"
-      class="dialog-overlay"
-      @click.self="closeConflict"
+    <Dialog
+      :open="!!conflict"
+      @update:open="!$event && closeConflict()"
     >
-      <div
-        class="copy-confirm-card copy-confirm-card-wide"
-        role="dialog"
-        aria-modal="true"
-      >
-        <div class="copy-confirm-title">
-          「{{ conflict.subject }}」在别处被改过
-        </div>
-        <p class="copy-confirm-text">
-          云端版本比你编辑时更新，请选择保留哪一版。
-        </p>
-        <div class="conflict-grid">
-          <div class="conflict-box">
-            <div class="conflict-label">
-              云端版本
+      <DialogContent>
+        <div class="copy-confirm-card copy-confirm-card-wide">
+          <DialogTitle class="copy-confirm-title">
+            「{{ conflict?.subject }}」在别处被改过
+          </DialogTitle>
+          <p class="copy-confirm-text">
+            云端版本比你编辑时更新，请选择保留哪一版。
+          </p>
+          <div class="conflict-grid">
+            <div class="conflict-box">
+              <div class="conflict-label">
+                云端版本
+              </div>
+              <p class="conflict-content">
+                {{ conflict?.cloudContent || "（空）" }}
+              </p>
             </div>
-            <p class="conflict-content">
-              {{ conflict.cloudContent || "（空）" }}
-            </p>
-          </div>
-          <div class="conflict-box">
-            <div class="conflict-label">
-              我的版本
+            <div class="conflict-box">
+              <div class="conflict-label">
+                我的版本
+              </div>
+              <p class="conflict-content">
+                {{ conflict?.localContent || "（空）" }}
+              </p>
             </div>
-            <p class="conflict-content">
-              {{ conflict.localContent || "（空）" }}
-            </p>
+          </div>
+          <div class="copy-confirm-actions">
+            <Button
+              variant="ghost"
+              class="copy-confirm-cancel"
+              @click="takeCloud"
+            >
+              用云端版本
+            </Button>
+            <Button
+              class="copy-confirm-solid"
+              @click="keepLocal"
+            >
+              用我的版本覆盖
+            </Button>
           </div>
         </div>
-        <div class="copy-confirm-actions">
-          <button
-            type="button"
-            class="copy-confirm-cancel"
-            @click="takeCloud"
-          >
-            用云端版本
-          </button>
-          <button
-            type="button"
-            class="copy-confirm-solid"
-            @click="keepLocal"
-          >
-            用我的版本覆盖
-          </button>
-        </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
 
     <!-- 随机点名：先一级全班名单，再二级抽取滚动定格 -->
-    <div
-      v-if="rollVisible"
-      class="dialog-overlay"
-      @click.self="closeRollCall"
+    <Dialog
+      :open="rollVisible"
+      @update:open="$event || closeRollCall()"
     >
-      <div
-        class="pick-card"
-        role="dialog"
-        aria-modal="true"
-      >
-        <div class="pick-head">
-          <i-mdi-account-question-outline class="pick-head-icon" />
-          <span>随机点名</span>
-        </div>
+      <DialogContent>
+        <div class="pick-card">
+          <DialogTitle class="pick-head">
+            <i-mdi-account-question-outline class="pick-head-icon" />
+            <span>随机点名</span>
+          </DialogTitle>
 
-        <div
-          v-if="rollStep === 'list'"
-          class="roster-grid"
-        >
-          <span
-            v-for="name in rollRoster"
-            :key="name"
-            class="roster-chip"
-          >
-            {{ name }}
-          </span>
-        </div>
-
-        <template v-else>
           <div
-            class="pick-stage"
-            :class="{ 'pick-landed': rollLanded }"
+            v-if="rollStep === 'list'"
+            class="roster-grid"
           >
-            <div class="pick-name">
-              {{ rollName }}
-            </div>
-            <div class="pick-hint">
-              {{ rollRolling ? "正在抽取…" : "抽中" }}
-            </div>
+            <span
+              v-for="name in rollRoster"
+              :key="name"
+              class="roster-chip"
+            >
+              {{ name }}
+            </span>
           </div>
-          <div class="pick-count">
-            共 {{ rollRoster.length }} 人
-          </div>
-        </template>
 
-        <div class="pick-actions">
-          <button
-            type="button"
-            class="pick-ghost"
-            @click="rollStep === 'pick' ? openRollCall() : closeRollCall()"
-          >
-            {{ rollStep === "pick" ? "名单" : "关闭" }}
-          </button>
-          <button
-            type="button"
-            class="pick-solid"
-            :disabled="rollRolling"
-            @click="doRoll()"
-          >
-            {{ rollStep === "pick" ? "再抽一次" : "随机点名" }}
-          </button>
+          <template v-else>
+            <div
+              class="pick-stage"
+              :class="{ 'pick-landed': rollLanded }"
+            >
+              <div class="pick-name">
+                {{ rollName }}
+              </div>
+              <div class="pick-hint">
+                {{ rollRolling ? "正在抽取…" : "抽中" }}
+              </div>
+            </div>
+            <div class="pick-count">
+              共 {{ rollRoster.length }} 人
+            </div>
+          </template>
+
+          <div class="pick-actions">
+            <Button
+              variant="ghost"
+              class="pick-ghost"
+              @click="rollStep === 'pick' ? openRollCall() : closeRollCall()"
+            >
+              {{ rollStep === "pick" ? "名单" : "关闭" }}
+            </Button>
+            <Button
+              class="pick-solid"
+              :disabled="rollRolling"
+              @click="doRoll()"
+            >
+              {{ rollStep === "pick" ? "再抽一次" : "随机点名" }}
+            </Button>
+          </div>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
 
     <!-- 同步提示：一次性/常驻都走公共 AppToast -->
     <AppToast
@@ -272,6 +260,8 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue"
 import AppToast from "@/components/AppToast.vue";
 import FloatingToolbar from "@/components/FloatingToolbar.vue";
 import HomeworkEditDialog from "@/components/HomeworkEditDialog.vue";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import HomeSkeleton from "@/components/common/HomeSkeleton.vue";
 import HomeworkGrid from "@/components/home/HomeworkGrid.vue";
 import SubjectAddCard from "@/components/home/SubjectAddCard.vue";
@@ -637,7 +627,9 @@ onBeforeUnmount(() => {
   margin-top: 18px;
 }
 
-.copy-confirm-cancel {
+/* 覆盖 shadcn Button 默认盒模型：选择器前缀让特异性高于 Tailwind 单类工具类 */
+.copy-confirm-card .copy-confirm-cancel {
+  height: auto;
   min-height: 40px;
   padding: 0 16px;
   border: 0;
@@ -647,14 +639,16 @@ onBeforeUnmount(() => {
   font-family: inherit;
   font-size: 14px;
   font-weight: 600;
-  cursor: pointer;
+  box-shadow: none;
 }
 
-.copy-confirm-cancel:hover {
+.copy-confirm-card .copy-confirm-cancel:hover {
   background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.72);
 }
 
-.copy-confirm-solid {
+.copy-confirm-card .copy-confirm-solid {
+  height: auto;
   min-height: 40px;
   padding: 0 20px;
   border: 0;
@@ -664,11 +658,12 @@ onBeforeUnmount(() => {
   font-family: inherit;
   font-size: 14px;
   font-weight: 800;
-  cursor: pointer;
+  box-shadow: none;
 }
 
-.copy-confirm-solid:hover {
+.copy-confirm-card .copy-confirm-solid:hover {
   background: #ffffff;
+  color: #121212;
 }
 
 .conflict-grid {
@@ -802,7 +797,8 @@ onBeforeUnmount(() => {
   margin-top: 18px;
 }
 
-.pick-ghost {
+.pick-card .pick-ghost {
+  height: auto;
   min-height: 44px;
   padding: 0 18px;
   border: 0;
@@ -812,14 +808,16 @@ onBeforeUnmount(() => {
   font-family: inherit;
   font-size: 14px;
   font-weight: 600;
-  cursor: pointer;
+  box-shadow: none;
 }
 
-.pick-ghost:hover {
+.pick-card .pick-ghost:hover {
   background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.72);
 }
 
-.pick-solid {
+.pick-card .pick-solid {
+  height: auto;
   min-height: 44px;
   padding: 0 26px;
   border: 0;
@@ -829,14 +827,15 @@ onBeforeUnmount(() => {
   font-family: inherit;
   font-size: 15px;
   font-weight: 800;
-  cursor: pointer;
+  box-shadow: none;
 }
 
-.pick-solid:hover {
+.pick-card .pick-solid:hover {
   background: #ffffff;
+  color: #121212;
 }
 
-.pick-solid:disabled {
+.pick-card .pick-solid:disabled {
   opacity: 0.6;
   cursor: default;
 }
@@ -921,8 +920,8 @@ onBeforeUnmount(() => {
     flex-direction: column;
   }
 
-  .copy-confirm-cancel,
-  .copy-confirm-solid {
+  .copy-confirm-card .copy-confirm-cancel,
+  .copy-confirm-card .copy-confirm-solid {
     width: 100%;
     min-height: 44px;
   }
@@ -931,8 +930,8 @@ onBeforeUnmount(() => {
     flex-direction: column;
   }
 
-  .pick-ghost,
-  .pick-solid {
+  .pick-card .pick-ghost,
+  .pick-card .pick-solid {
     width: 100%;
     min-height: 48px;
   }

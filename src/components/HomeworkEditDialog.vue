@@ -1,73 +1,73 @@
 <template>
-  <div
-    v-if="modelValue"
-    class="dialog-overlay"
-    :class="{ 'dialog-overlay-mobile': mobile }"
-    @click.self="closeDialog"
+  <Dialog
+    :open="modelValue"
+    @update:open="onOpenChange"
   >
-    <div
-      ref="dialogCard"
-      class="editor-card"
-      :class="{ 'editor-card-mobile': mobile }"
-      role="dialog"
-      aria-modal="true"
-      :aria-label="title"
-    >
+    <DialogContent :class="{ 'dialog-surface-full': mobile }">
       <div
-        class="dialog-header"
-        title="拖动可移动"
-        @pointerdown="startDrag"
+        ref="dialogCard"
+        class="editor-card"
+        :class="{ 'editor-card-mobile': mobile }"
       >
-        <div class="dialog-title">
-          {{ title }}
-        </div>
-        <button
-          type="button"
-          class="dialog-close"
-          :aria-label="copy.close"
-          title="关闭"
-          @click="persistAndClose"
+        <div
+          class="dialog-header"
+          title="拖动可移动"
+          @pointerdown="startDrag"
         >
-          <i-mdi-close class="dialog-close-icon" />
-        </button>
-      </div>
-
-      <div class="dialog-body">
-        <div class="editor-well">
-          <textarea
-            ref="inputRef"
-            v-model="content"
-            class="editor-textarea"
-            :placeholder="copy.placeholder"
-            @keydown.ctrl.enter.prevent="persistAndClose"
-          />
-          <button
-            type="button"
-            class="tool-chip"
-            @click="pasteFromClipboard"
+          <DialogTitle class="dialog-title">
+            {{ title }}
+          </DialogTitle>
+          <Button
+            variant="ghost"
+            size="icon"
+            class="dialog-close"
+            :aria-label="copy.close"
+            title="关闭"
+            @click="persistAndClose"
           >
-            <i-mdi-content-paste class="tool-chip-icon" />
-            <span>{{ copy.paste }}</span>
-          </button>
+            <i-mdi-close class="dialog-close-icon" />
+          </Button>
+        </div>
+
+        <div class="dialog-body">
+          <div class="editor-well">
+            <Textarea
+              ref="inputRef"
+              v-model="content"
+              class="editor-textarea"
+              :placeholder="copy.placeholder"
+              @keydown.ctrl.enter.prevent="persistAndClose"
+            />
+            <Button
+              variant="outline"
+              class="tool-chip"
+              @click="pasteFromClipboard"
+            >
+              <i-mdi-content-paste class="tool-chip-icon" />
+              <span>{{ copy.paste }}</span>
+            </Button>
+          </div>
+        </div>
+
+        <div class="editor-footer">
+          <Button
+            class="dialog-btn-solid"
+            title="Ctrl+Enter"
+            @click="persistAndClose"
+          >
+            {{ copy.save }}
+          </Button>
         </div>
       </div>
-
-      <div class="editor-footer">
-        <button
-          type="button"
-          class="dialog-btn-solid"
-          title="Ctrl+Enter"
-          @click="persistAndClose"
-        >
-          {{ copy.save }}
-        </button>
-      </div>
-    </div>
-  </div>
+    </DialogContent>
+  </Dialog>
 </template>
 
 <script setup>
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 
 const copy = {
   close: "关闭",
@@ -107,6 +107,12 @@ function resetDragTransform() {
   if (!element) return;
   element.style.transform = "";
   element.style.transition = "";
+}
+
+// ESC / 点遮罩 / 关闭键：Dialog 的关闭回调统一走这里，有未保存修改就落一版
+function onOpenChange(open) {
+  if (open) return;
+  closeDialog();
 }
 
 watch(
@@ -158,7 +164,7 @@ function endDrag() {
   window.removeEventListener("pointerup", endDrag);
 }
 
-// ESC / 点遮罩兜底：有未保存修改就落一版（原 v-dialog 的关闭路径）
+// 有未保存修改就落一版（原 v-dialog 的关闭路径）
 function closeDialog() {
   if (dirty) {
     emit("save", { content: content.value.trim() });
@@ -184,7 +190,8 @@ async function pasteFromClipboard() {
 }
 
 function insertAtCursor(text) {
-  const textarea = inputRef.value;
+  // Textarea 是 shadcn 组件，$el 才是真实 textarea 节点
+  const textarea = inputRef.value?.$el ?? inputRef.value;
   if (!textarea) {
     content.value += text;
     return;
@@ -198,21 +205,14 @@ function insertAtCursor(text) {
   });
 }
 
-function onKeydown(event) {
-  if (!props.modelValue || event.key !== "Escape") return;
-  closeDialog();
-}
-
 onMounted(() => {
   updateMobile();
   window.addEventListener("resize", updateMobile);
-  window.addEventListener("keydown", onKeydown);
 });
 
 onBeforeUnmount(() => {
   endDrag();
   window.removeEventListener("resize", updateMobile);
-  window.removeEventListener("keydown", onKeydown);
 });
 </script>
 
@@ -246,7 +246,7 @@ onBeforeUnmount(() => {
   cursor: grabbing;
 }
 
-.dialog-title {
+.dialog-header .dialog-title {
   position: relative;
   min-width: 0;
   padding-left: 12px;
@@ -254,6 +254,7 @@ onBeforeUnmount(() => {
   font-size: 17px;
   font-weight: 800;
   line-height: 1.2;
+  letter-spacing: normal;
 }
 
 .dialog-title::before {
@@ -268,22 +269,20 @@ onBeforeUnmount(() => {
   transform: translateY(-50%);
 }
 
-.dialog-close {
-  display: inline-flex;
+.dialog-header .dialog-close {
   width: 32px;
   height: 32px;
+  min-width: 32px;
   flex: 0 0 auto;
-  align-items: center;
-  justify-content: center;
   padding: 0;
   border: 0;
   border-radius: 8px;
   background: transparent;
   color: rgba(255, 255, 255, 0.6);
-  cursor: pointer;
+  box-shadow: none;
 }
 
-.dialog-close:hover {
+.dialog-header .dialog-close:hover {
   background: rgba(255, 255, 255, 0.06);
   color: rgba(255, 255, 255, 0.9);
 }
@@ -314,13 +313,15 @@ onBeforeUnmount(() => {
   border-color: rgba(174, 191, 221, 0.28);
 }
 
-.editor-textarea {
+.editor-well .editor-textarea {
   display: block;
   width: 100%;
   height: 100%;
+  min-height: 0;
   /* 底部留出浮层粘贴键的高度，末行不被遮 */
   padding: 16px 18px 56px;
   border: 0;
+  border-radius: 0;
   background: transparent;
   color: #f2f2f2;
   font: inherit;
@@ -330,19 +331,27 @@ onBeforeUnmount(() => {
   caret-color: #aebfdd;
   outline: none;
   resize: none;
+  box-shadow: none;
 }
 
-.editor-textarea::placeholder {
+.editor-well .editor-textarea:focus-visible {
+  outline: none;
+  box-shadow: none;
+  border: 0;
+}
+
+.editor-well .editor-textarea::placeholder {
   color: rgba(255, 255, 255, 0.3);
 }
 
 /* 粘贴：编辑井右下角浮层，不占底部操作区。原版用 blur 毛玻璃，改纯色 */
-.tool-chip {
+.editor-well .tool-chip {
   position: absolute;
   right: 12px;
   bottom: 12px;
   z-index: 1;
   display: inline-flex;
+  height: auto;
   align-items: center;
   gap: 6px;
   min-height: 32px;
@@ -354,13 +363,14 @@ onBeforeUnmount(() => {
   font-family: inherit;
   font-size: 12.5px;
   font-weight: 700;
-  cursor: pointer;
+  box-shadow: none;
   transition: background-color 0.18s ease, border-color 0.18s ease;
 }
 
-.tool-chip:hover {
+.editor-well .tool-chip:hover {
   border-color: rgba(255, 255, 255, 0.22);
   background: rgba(38, 38, 38, 0.96);
+  color: rgba(255, 255, 255, 0.82);
 }
 
 .tool-chip-icon {
@@ -379,8 +389,9 @@ onBeforeUnmount(() => {
 }
 
 /* 通栏单一主操作：保存条 */
-.dialog-btn-solid {
+.editor-footer .dialog-btn-solid {
   width: 100%;
+  height: auto;
   min-height: 44px;
   padding: 0;
   border: 0;
@@ -391,18 +402,15 @@ onBeforeUnmount(() => {
   font-size: 15px;
   font-weight: 800;
   letter-spacing: 0.02em;
-  cursor: pointer;
+  box-shadow: none;
 }
 
-.dialog-btn-solid:hover {
+.editor-footer .dialog-btn-solid:hover {
   background: #ffffff;
+  color: #121212;
 }
 
 /* ── 手机全屏：铺满整屏，编辑井撑开、操作沉底 ── */
-.dialog-overlay-mobile {
-  padding: 0;
-}
-
 .editor-card-mobile {
   width: 100%;
   max-width: none;

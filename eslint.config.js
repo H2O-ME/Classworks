@@ -21,6 +21,16 @@ export default [
     },
   },
   {
+    // shadcn-vue CLI 生成的组件：保持与上游一致，方便 `shadcn-vue diff` 增量升级。
+    // 它们的 prop 声明风格（全部 required:false 且无 default）会触发这两条规则。
+    name: 'app/shadcn-ui',
+    files: ['src/components/ui/**/*.vue'],
+    rules: {
+      'vue/require-default-prop': 'off',
+      'vue/html-self-closing': 'off',
+    },
+  },
+  {
     languageOptions: {
       globals: {
         // Browser globals

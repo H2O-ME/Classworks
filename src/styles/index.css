@@ -24,6 +24,32 @@ html::-webkit-scrollbar {
   --sab: env(safe-area-inset-bottom, 0px);
   --sal: env(safe-area-inset-left, 0px);
   --sar: env(safe-area-inset-right, 0px);
+
+  /*
+   * shadcn-vue 令牌（tailwind.config.js 里映射成 bg-background / border-border 等）。
+   * 深色是唯一主题，深色值直接落在 :root，不用 .dark 开关。
+   * 页面观感仍由各组件自己的 CSS 决定，这些变量只服务 src/components/ui/ 里的基础组件。
+   */
+  --background: 240 10% 3.9%;
+  --foreground: 0 0% 98%;
+  --card: 240 10% 5.5%;
+  --card-foreground: 0 0% 98%;
+  --popover: 240 6% 12%;
+  --popover-foreground: 0 0% 98%;
+  --primary: 0 0% 98%;
+  --primary-foreground: 240 5.9% 10%;
+  --secondary: 240 3.7% 15.9%;
+  --secondary-foreground: 0 0% 98%;
+  --muted: 240 3.7% 15.9%;
+  --muted-foreground: 240 5% 64.9%;
+  --accent: 240 3.7% 15.9%;
+  --accent-foreground: 0 0% 98%;
+  --destructive: 0 62.8% 30.6%;
+  --destructive-foreground: 0 0% 98%;
+  --border: 240 3.7% 15.9%;
+  --input: 240 3.7% 15.9%;
+  --ring: 240 4.9% 83.9%;
+  --radius: 0.5rem;
 }
 
 body {
@@ -106,8 +132,21 @@ body {
   gap: 10px;
 }
 
-/* ── 弹窗遮罩：纯色半透明，不用背景模糊/缩放动画 ── */
-.dialog-overlay {
+/* ── 弹窗（shadcn Dialog 承载，观感沿用原版）── */
+/* 遮罩：纯色半透明，不用背景模糊/缩放动画（希沃弱核显掉帧） */
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(8, 8, 8, 0.66);
+}
+
+/*
+ * 承接层铺满视口只负责居中，自身不吃指针事件：
+ * 点空白处会落到下面的遮罩上，由 Dialog 的 pointer-down-outside 关窗；
+ * 卡片内部保留事件。居中不用 transform，把 transform 整个留给弹窗拖拽。
+ */
+.dialog-surface {
   position: fixed;
   inset: 0;
   z-index: 200;
@@ -115,7 +154,17 @@ body {
   align-items: center;
   justify-content: center;
   padding: 16px;
-  background: rgba(8, 8, 8, 0.66);
+  pointer-events: none;
+  outline: none;
+}
+
+.dialog-surface > * {
+  pointer-events: auto;
+}
+
+/* 手机全屏弹窗：去掉外边距，卡片自己铺满 */
+.dialog-surface-full {
+  padding: 0;
 }
 
 @media (max-width: 700px) {
