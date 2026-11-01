@@ -1,3 +1,4 @@
+// 名单与加权抽签的纯函数（无副作用，便于 `node src/utils/selfcheck.mjs` 直接断言）
 const DEFAULT_ROSTER = [
   "邴楷航",
   "常鑫圻",
@@ -54,14 +55,12 @@ const DEFAULT_ROSTER = [
   "朱晨宇",
 ];
 
+// 权重为 0 的名字正常出现在名单里，但永远抽不中
+const ZERO_WEIGHT_NAMES = new Set(["田瀚文"]);
+
 export function getDefaultRoster() {
   return [...DEFAULT_ROSTER];
 }
-
-// 权重为 0 的名字正常出现在名单里，但永远抽不中
-const ZERO_WEIGHT_NAMES = new Set([
-  "田瀚文",
-]);
 
 export function getPickWeight(name) {
   return ZERO_WEIGHT_NAMES.has(name) ? 0 : 1;

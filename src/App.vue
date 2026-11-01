@@ -1,5 +1,5 @@
 <template>
-  <v-app class="app-shell">
+  <div class="app-shell">
     <div class="app-gradient-background" />
 
     <router-view v-slot="{ Component, route }">
@@ -13,16 +13,15 @@
         />
       </transition>
     </router-view>
-  </v-app>
+  </div>
 </template>
 
 <script setup>
 </script>
 
 <style>
-@import "@/styles/index.scss";
-
 .app-shell {
+  min-height: 100dvh;
   background: #111111;
   color: rgba(255, 255, 255, 0.92);
 }
@@ -58,5 +57,12 @@
     100% 28px,
     28px 100%,
     auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .md3-enter-active,
+  .md3-leave-active {
+    transition: none;
+  }
 }
 </style>

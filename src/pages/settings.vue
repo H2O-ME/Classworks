@@ -1,181 +1,290 @@
 <template>
-  <v-app-bar
-    class="no-select board-app-bar"
-    elevation="0"
-  >
-    <div class="app-bar-inner">
-      <div class="app-bar-title">
-        设置
+  <div class="page">
+    <header class="no-select board-app-bar">
+      <div class="app-bar-inner">
+        <div class="app-bar-title">
+          设置
+        </div>
+        <div class="app-bar-actions">
+          <router-link
+            class="nav-button"
+            to="/"
+            aria-label="返回首页"
+          >
+            <i-mdi-chevron-left class="nav-icon" />
+            <span>首页</span>
+          </router-link>
+        </div>
       </div>
-      <div class="app-bar-actions">
-        <router-link
-          class="nav-button"
-          to="/"
-          aria-label="返回首页"
-        >
-          <v-icon
-            icon="mdi-chevron-left"
-            size="19"
-          />
-          <span>首页</span>
-        </router-link>
-      </div>
-    </div>
-  </v-app-bar>
+    </header>
 
-  <div class="settings-scroll">
-    <div class="settings-body">
-      <div class="settings-grid">
-        <!-- 云端同步 -->
+    <div class="settings-scroll">
+      <div class="settings-body">
+        <div class="settings-grid">
+          <!-- 访问权限：写权限由地址里的密钥决定，没有本地开关 -->
+          <section class="panel">
+            <div class="panel-head">
+              <div class="panel-icon">
+                <i-mdi-shield-check-outline class="panel-icon-glyph" />
+              </div>
+              <div class="panel-copy">
+                <h2 class="panel-title">
+                  访问权限
+                </h2>
+                <p class="panel-desc">
+                  写权限来自地址里的密钥，读出后立刻从地址栏抹掉，只存在本机。
+                </p>
+              </div>
+              <span
+                class="status-chip"
+                :class="isWritable ? 'status-on' : 'status-off'"
+              >
+                {{ isWritable ? "可读写" : "只读" }}
+              </span>
+            </div>
+
+            <div class="panel-rows">
+              <div class="panel-row">
+                <span>当前教室</span>
+                <strong>{{ room }}</strong>
+              </div>
+              <div class="panel-row">
+                <span>写权限</span>
+                <strong>{{ isWritable ? "可写" : "只读" }}</strong>
+              </div>
+            </div>
+
+            <div
+              v-if="isWritable"
+              class="panel-actions"
+            >
+              <button
+                type="button"
+                class="nav-button"
+                @click="forgetKey"
+              >
+                清除本机写权限
+              </button>
+            </div>
+          </section>
+
+          <!-- 云端连接：后端连通性 -->
+          <section class="panel">
+            <div class="panel-head">
+              <div class="panel-icon">
+                <i-mdi-cloud-sync-outline class="panel-icon-glyph" />
+              </div>
+              <div class="panel-copy">
+                <h2 class="panel-title">
+                  云端连接
+                </h2>
+                <p class="panel-desc">
+                  作业数据存在教室后端服务器上；本机会缓存最近一次内容，断网也能看。
+                </p>
+              </div>
+              <span
+                class="status-chip"
+                :class="healthClass"
+              >
+                {{ healthLabel }}
+              </span>
+            </div>
+
+            <div class="panel-rows">
+              <div class="panel-row">
+                <span>接口地址</span>
+                <strong class="panel-row-mono">{{ API_BASE || "同源 /api" }}</strong>
+              </div>
+            </div>
+
+            <div class="panel-actions">
+              <button
+                type="button"
+                class="solid-btn"
+                :disabled="health === 'checking'"
+                @click="checkHealth"
+              >
+                {{ health === "checking" ? "检测中…" : "重新检测" }}
+              </button>
+              <span
+                v-if="health === 'fail'"
+                class="panel-error"
+              >
+                {{ healthError }}
+              </span>
+            </div>
+          </section>
+        </div>
+
+        <!-- 变更历史：原主页面没有这个入口，挪到设置页 -->
         <section class="panel">
           <div class="panel-head">
             <div class="panel-icon">
-              <v-icon
-                icon="mdi-cloud-sync-outline"
-                size="20"
-              />
+              <i-mdi-history class="panel-icon-glyph" />
             </div>
             <div class="panel-copy">
               <h2 class="panel-title">
-                云端同步
+                变更历史
               </h2>
               <p class="panel-desc">
-                开启后，作业的每次改动都会推送到云端，并在所有设备间保持一致。
+                每次保存都会留下一条记录，可以回填到当前版本。
               </p>
             </div>
-            <span
-              class="status-chip"
-              :class="syncEnabled ? 'status-on' : 'status-off'"
-            >
-              {{ syncEnabled ? "已连接" : "已关闭" }}
-            </span>
-          </div>
-
-          <div class="toggle-row">
-            <span class="toggle-label">启用云端同步</span>
             <button
-              class="switch"
-              :class="{ 'switch-on': syncEnabled }"
               type="button"
-              role="switch"
-              :aria-checked="syncEnabled"
-              aria-label="启用云端同步"
-              @click="toggleSync"
+              class="nav-button"
+              @click="openHistory"
             >
-              <span class="switch-knob" />
+              查看变更历史
             </button>
           </div>
         </section>
       </div>
-
-      <!-- 数据策略 -->
-      <section class="panel panel-policy">
-        <div class="panel-head">
-          <div class="panel-icon">
-            <v-icon
-              icon="mdi-shield-check-outline"
-              size="20"
-            />
-          </div>
-          <div class="panel-copy">
-            <h2 class="panel-title">
-              数据策略
-            </h2>
-            <p class="panel-desc">
-              同步过程始终遵循的三条原则。
-            </p>
-          </div>
-        </div>
-
-        <div class="policy-list">
-          <div class="policy-item">
-            <div class="policy-item-icon">
-              <v-icon
-                icon="mdi-laptop"
-                size="16"
-              />
-            </div>
-            <div class="policy-item-copy">
-              <strong>本地优先</strong>
-              <span>作业首先保存在本机浏览器，断网也能正常使用。</span>
-            </div>
-          </div>
-          <div class="policy-item">
-            <div class="policy-item-icon">
-              <v-icon
-                icon="mdi-cloud-upload-outline"
-                size="16"
-              />
-            </div>
-            <div class="policy-item-copy">
-              <strong>增量备份</strong>
-              <span>每次编辑只把有改动的学科推送到云端，流量极小。</span>
-            </div>
-          </div>
-          <div class="policy-item">
-            <div class="policy-item-icon">
-              <v-icon
-                icon="mdi-history"
-                size="16"
-              />
-            </div>
-            <div class="policy-item-copy">
-              <strong>可回退</strong>
-              <span>云端内容覆盖本地前会自动留存快照，可一键找回。</span>
-            </div>
-          </div>
-        </div>
-      </section>
     </div>
-  </div>
 
-  <!-- 同步状态提示：一次性浮动提示，不占卡片布局 -->
-  <AppToast
-    :show="syncToastVisible"
-    :message="syncToastText"
-    icon="mdi-cloud-sync-outline"
-    @dismiss="syncToastVisible = false"
-  />
+    <!-- 历史流水：最近 20 条，可一键回填 -->
+    <div
+      v-if="historyVisible"
+      class="dialog-overlay"
+      @click.self="historyVisible = false"
+    >
+      <div
+        class="history-card"
+        role="dialog"
+        aria-modal="true"
+      >
+        <div class="history-head">
+          <h2>变更历史</h2>
+          <span class="history-date">{{ dateLabel }}</span>
+          <button
+            type="button"
+            class="history-close"
+            @click="historyVisible = false"
+          >
+            关闭
+          </button>
+        </div>
+
+        <p
+          v-if="history.length === 0"
+          class="history-empty"
+        >
+          这一天还没有变更记录
+        </p>
+        <ul
+          v-else
+          class="history-list"
+        >
+          <li
+            v-for="item in history"
+            :key="item.id"
+          >
+            <div class="history-meta">
+              {{ formatTime(item.createdAt) }} · {{ item.subject }}
+            </div>
+            <p class="history-content">
+              {{ item.content || "（空）" }}
+            </p>
+            <button
+              type="button"
+              class="nav-button"
+              @click="restore(item)"
+            >
+              回填
+            </button>
+          </li>
+        </ul>
+      </div>
+    </div>
+
+    <AppToast
+      :show="toast.show"
+      :message="toast.message"
+      icon="mdi-cloud-sync-outline"
+      @dismiss="toast.show = false"
+    />
+  </div>
 </template>
 
-<script>
-import { getSyncEnabled, setSyncEnabled, watchSyncState } from "@/utils/sync";
+<script setup>
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from "vue";
+import AppToast from "@/components/AppToast.vue";
+import { API_BASE, formatTime, getHealth } from "@/api/board";
+import { useAuth } from "@/composables/useAuth";
+import { useBoard } from "@/composables/useBoard";
+import { formatDateLabel, formatDateKey } from "@/utils/board";
 
-export default {
-  name: "SettingsPage",
-  data() {
-    return {
-      previousTitle: null,
-      syncEnabled: getSyncEnabled(),
-      syncToastVisible: false,
-      syncToastText: "",
-      unsubscribeSyncState: null,
-    };
-  },
-  mounted() {
-    this.previousTitle = document.title;
-    document.title = "设置";
-    this.unsubscribeSyncState = watchSyncState(({ enabled }) => {
-      this.syncEnabled = enabled;
-    });
-  },
-  beforeUnmount() {
-    document.title = this.previousTitle;
-    this.unsubscribeSyncState?.();
-  },
-  methods: {
-    toggleSync() {
-      const next = !this.syncEnabled;
-      setSyncEnabled(next);
-      this.syncToastText = next ? "云端同步已开启" : "云端同步已关闭";
-      this.syncToastVisible = true;
-    },
-  },
-};
+const { room, isWritable } = useAuth();
+const { history, loadHistory, restoreFromHistory } = useBoard();
+
+const todayKey = formatDateKey(new Date());
+const dateLabel = computed(() => formatDateLabel(todayKey));
+
+const health = ref("checking");
+const healthError = ref("");
+const historyVisible = ref(false);
+const toast = reactive({ show: false, message: "" });
+
+const healthLabel = computed(
+  () => ({ checking: "检测中", ok: "已连接", fail: "连接失败" })[health.value],
+);
+const healthClass = computed(
+  () => ({ checking: "status-off", ok: "status-on", fail: "status-fail" })[health.value],
+);
+
+function flash(message) {
+  toast.message = message;
+  toast.show = true;
+}
+
+async function checkHealth() {
+  health.value = "checking";
+  healthError.value = "";
+  try {
+    const result = await getHealth();
+    health.value = result?.ok === false ? "fail" : "ok";
+    if (result?.ok === false) healthError.value = "后端返回异常";
+  } catch (error) {
+    health.value = "fail";
+    healthError.value = error.status === 0 ? "网络不可达" : error.message;
+  }
+}
+
+async function openHistory() {
+  historyVisible.value = true;
+  await loadHistory();
+}
+
+async function restore(item) {
+  const result = await restoreFromHistory(item);
+  flash(result.ok ? `已回填「${item.subject}」` : "回填失败，请稍后重试");
+}
+
+function forgetKey() {
+  try {
+    window.localStorage.removeItem("classworks:auth");
+  } catch (error) {
+    console.warn("清除写权限失败:", error);
+  }
+  // 内存里的密钥也一起清掉：重新加载后即变为只读
+  window.location.reload();
+}
+
+let previousTitle = null;
+
+onMounted(() => {
+  previousTitle = document.title;
+  document.title = "设置";
+  checkHealth();
+});
+
+onBeforeUnmount(() => {
+  document.title = previousTitle;
+});
 </script>
 
 <style scoped>
-/* 顶栏共用样式（board-app-bar / app-bar-*）在 src/styles/index.scss */
+/* 顶栏共用样式（board-app-bar / app-bar-*）在 src/styles/index.css */
 
 .nav-button {
   display: inline-flex;
@@ -187,9 +296,11 @@ export default {
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.035);
   color: rgba(255, 255, 255, 0.78);
+  font-family: inherit;
   font-size: 13px;
   font-weight: 600;
   text-decoration: none;
+  cursor: pointer;
   transition:
     transform 180ms ease,
     border-color 180ms ease,
@@ -202,6 +313,11 @@ export default {
   border-color: rgba(255, 255, 255, 0.14);
   background: rgba(255, 255, 255, 0.065);
   color: rgba(255, 255, 255, 0.96);
+}
+
+.nav-icon {
+  width: 19px;
+  height: 19px;
 }
 
 /* ── 滚动区：占满剩余视口，内部滚动，不出现右侧滚动条 ── */
@@ -220,7 +336,7 @@ export default {
   height: 0;
 }
 
-/* ── 主体：双栏网格 + 策略卡；内容不足一屏时垂直居中，超出则自然滚动 ── */
+/* ── 主体：双栏网格 + 历史卡；内容不足一屏时垂直居中，超出则自然滚动 ── */
 .settings-body {
   display: flex;
   flex-direction: column;
@@ -241,10 +357,6 @@ export default {
   gap: 16px;
   margin-top: auto;
   align-items: start;
-}
-
-.panel-policy {
-  margin-bottom: auto;
 }
 
 /* ── 卡片 ── */
@@ -277,6 +389,11 @@ export default {
   border-radius: 8px;
   background: #202020;
   color: rgba(255, 255, 255, 0.72);
+}
+
+.panel-icon-glyph {
+  width: 20px;
+  height: 20px;
 }
 
 .panel-copy {
@@ -330,24 +447,185 @@ export default {
   border-color: rgba(255, 255, 255, 0.12);
   color: rgba(255, 255, 255, 0.5);
 }
+.status-fail {
+  border-color: rgba(255, 69, 58, 0.35);
+  background: rgba(255, 69, 58, 0.1);
+  color: #ff6961;
+}
 
-/* ── 开关行 ── */
-.toggle-row {
+/* ── 信息行：与原来的 .toggle-row 同一套分隔线语言 ── */
+.panel-rows {
+  margin-top: 18px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.panel-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  margin-top: 18px;
-  padding-top: 16px;
-  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  padding: 8px 0;
+  font-size: 14px;
 }
 
-.toggle-label {
+.panel-row > span {
+  color: rgba(255, 255, 255, 0.56);
+}
+
+.panel-row > strong {
+  max-width: 64%;
+  overflow: hidden;
   color: #f5f5f5;
-  font-size: 15px;
   font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
+.panel-row-mono {
+  font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+  font-size: 12.5px;
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.panel-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.panel-error {
+  color: #ff6961;
+  font-size: 12px;
+}
+
+.solid-btn {
+  min-height: 44px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 10px;
+  background: #f3f3f3;
+  color: #121212;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.solid-btn:hover {
+  background: #ffffff;
+}
+
+.solid-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+/* ── 变更历史弹窗 ── */
+.history-card {
+  display: flex;
+  width: 100%;
+  max-width: 680px;
+  max-height: 82vh;
+  flex-direction: column;
+  padding: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  background: #171717;
+  box-shadow: 0 24px 56px rgba(0, 0, 0, 0.32);
+}
+
+.history-head {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.history-head h2 {
+  flex: 1 1 auto;
+  margin: 0;
+  color: #f1f1f1;
+  font-size: 17px;
+  font-weight: 800;
+}
+
+.history-date {
+  flex: 0 0 auto;
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 13px;
+}
+
+.history-close {
+  min-height: 36px;
+  flex: 0 0 auto;
+  padding: 0 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.035);
+  color: rgba(255, 255, 255, 0.78);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.history-empty {
+  margin: 0;
+  padding: 32px 0;
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 13px;
+  text-align: center;
+}
+
+.history-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 14px 0 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.history-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.history-meta {
+  min-width: 116px;
+  flex: 0 0 auto;
+  color: rgba(255, 255, 255, 0.42);
+  font-size: 12px;
+}
+
+.history-content {
+  display: -webkit-box;
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.history-list .nav-button {
+  flex: 0 0 auto;
+  padding: 0 12px;
+}
+
+/* ponytail: 本版没有本地开关项（写权限由 URL 密钥决定），保留原开关样式，
+   以后真出现需要开关的设置项可直接用，不必重画。 */
 .switch {
   position: relative;
   flex: 0 0 auto;
@@ -385,55 +663,7 @@ export default {
 .switch-on::before { background: #34c759; }
 .switch-on .switch-knob { transform: translateX(20px); }
 
-/* ── 数据策略 ── */
-.policy-list {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 14px;
-  margin-top: 18px;
-  padding-top: 16px;
-  border-top: 1px solid rgba(255, 255, 255, 0.07);
-}
-
-.policy-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  min-width: 0;
-}
-
-.policy-item-icon {
-  display: inline-flex;
-  width: 30px;
-  height: 30px;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 7px;
-  background: #202020;
-  color: rgba(255, 255, 255, 0.6);
-}
-
-.policy-item-copy {
-  min-width: 0;
-}
-
-.policy-item-copy strong {
-  display: block;
-  margin-bottom: 2px;
-  color: rgba(255, 255, 255, 0.85);
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.policy-item-copy span {
-  color: rgba(255, 255, 255, 0.46);
-  font-size: 12px;
-  line-height: 1.55;
-}
-
-/* ── 桌面：双栏 + 策略三列 ── */
+/* ── 桌面：双栏 ── */
 @media (min-width: 900px) {
   .settings-body {
     gap: 18px;
@@ -447,11 +677,6 @@ export default {
 
   .panel {
     padding: 24px;
-  }
-
-  .policy-list {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 18px;
   }
 }
 
@@ -498,15 +723,15 @@ export default {
     font-size: 12px;
   }
 
-  .toggle-row,
-  .policy-list {
+  .panel-rows {
     margin-top: 12px;
     padding-top: 12px;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .switch-knob, .switch::before {
+  .switch-knob,
+  .switch::before {
     transition: none;
     animation: none;
   }

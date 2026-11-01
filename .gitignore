@@ -185,3 +185,14 @@ package-lock.json
 AGENTS.md
 
 .zcode/
+
+# 云端数据导出备份（含真实作业内容，不入库）
+backups/
+
+# 后端 SQLite 数据与本地环境
+server/data/
+server/*.sqlite
+server/*.sqlite-journal
+server/*.sqlite-wal
+server/*.sqlite-shm
+server/.env

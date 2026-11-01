@@ -1,0 +1,15 @@
+services:
+  api:
+    build: .
+    image: classworks-server:latest
+    container_name: classworks-server
+    restart: unless-stopped
+    env_file: .env
+    # 只暴露给本机反代（Caddy/Nginx），公网不直接访问 3100。
+    ports:
+      - "127.0.0.1:3100:3100"
+    volumes:
+      - classworks-data:/app/data
+
+volumes:
+  classworks-data:

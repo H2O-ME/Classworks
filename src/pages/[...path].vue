@@ -1,5 +1,5 @@
 <template>
-  <v-container class="not-found-page">
+  <div class="not-found-page">
     <section class="not-found-panel">
       <div class="not-found-code">
         404
@@ -7,28 +7,26 @@
       <h1>页面不存在</h1>
       <p>这个地址没有可用页面，可能是旧功能已经被移除。</p>
       <div class="not-found-actions">
-        <v-btn
-          color="primary"
-          variant="flat"
+        <router-link
+          class="btn-flat"
           to="/"
         >
           返回首页
-        </v-btn>
-        <v-btn
-          variant="tonal"
+        </router-link>
+        <button
+          type="button"
+          class="btn-tonal"
           @click="$router.back()"
         >
           返回上一页
-        </v-btn>
+        </button>
       </div>
     </section>
-  </v-container>
+  </div>
 </template>
 
-<script>
-export default {
-  name: "NotFoundPage",
-};
+<script setup>
+// 404 兜底页：不需要状态，单个根元素以便路由过渡动画生效
 </script>
 
 <style scoped>
@@ -36,6 +34,7 @@ export default {
   display: grid;
   min-height: 100dvh;
   place-items: center;
+  padding: 16px;
 }
 
 .not-found-panel {
@@ -58,6 +57,7 @@ h1 {
   margin: 14px 0 8px;
   color: #f3f3f3;
   font-size: 24px;
+  font-weight: 700;
 }
 
 p {
@@ -70,5 +70,40 @@ p {
   justify-content: center;
   gap: 10px;
   margin-top: 22px;
+}
+
+/* 原版 v-btn color=primary variant=flat / variant=tonal 的观感 */
+.btn-flat,
+.btn-tonal {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.btn-flat {
+  background: #2196f3;
+  color: #ffffff;
+}
+
+.btn-flat:hover {
+  background: #42a5f5;
+}
+
+.btn-tonal {
+  background: rgba(33, 150, 243, 0.14);
+  color: #90caf9;
+}
+
+.btn-tonal:hover {
+  background: rgba(33, 150, 243, 0.22);
 }
 </style>

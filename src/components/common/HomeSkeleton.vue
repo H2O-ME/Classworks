@@ -1,12 +1,9 @@
 <template>
-  <!-- 纯 CSS 骨架屏：形态与真实看板一致（作业卡），避免 VSkeletonLoader 渲染冲突 -->
-  <v-container
-    class="main-window skeleton-container no-select"
-    fluid
-  >
+  <!-- 纯 CSS 骨架屏：形态与真实看板一致（作业卡），避免加载完布局跳动 -->
+  <div class="main-window skeleton-container no-select">
     <div class="skeleton-grid">
       <div
-        v-for="n in cardCount"
+        v-for="n in 6"
         :key="n"
         class="skeleton-card skeleton-pulse"
       >
@@ -15,20 +12,17 @@
         <div class="skeleton-line skeleton-line--short" />
       </div>
     </div>
-  </v-container>
+  </div>
 </template>
 
 <script setup>
-import { computed } from 'vue'
-import { useDisplay } from 'vuetify'
-
-const { mobile } = useDisplay()
-const cardCount = computed(() => (mobile.value ? 3 : 6))
+// 纯 CSS 骨架：只做形状占位，无 JS 依赖
 </script>
 
 <style scoped>
 .skeleton-container {
   max-width: 1720px;
+  margin: 0 auto;
   padding: 20px 32px 76px;
 }
 
@@ -99,6 +93,13 @@ const cardCount = computed(() => (mobile.value ? 3 : 6))
 @media (prefers-reduced-motion: reduce) {
   .skeleton-pulse {
     animation: none;
+  }
+}
+
+/* 移动端只留 3 张骨架，与原版 useDisplay().mobile 的 3/6 一致 */
+@media (max-width: 600px) {
+  .skeleton-card:nth-child(n + 4) {
+    display: none;
   }
 }
 

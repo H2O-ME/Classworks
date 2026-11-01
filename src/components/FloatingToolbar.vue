@@ -1,99 +1,134 @@
 <template>
   <div class="floating-toolbar-container">
-    <v-card
-      class="floating-toolbar"
-      elevation="0"
-    >
+    <div class="floating-toolbar">
       <div class="toolbar-buttons">
-        <v-btn
-          icon="mdi-chevron-left"
-          variant="text"
+        <button
+          type="button"
+          class="tool-btn"
           title="前一天"
+          aria-label="前一天"
           @click="$emit('prev-day')"
-        />
-        <v-btn
-          icon="mdi-format-font-size-decrease"
-          variant="text"
+        >
+          <i-mdi-chevron-left />
+        </button>
+        <button
+          type="button"
+          class="tool-btn"
           :title="`缩小字体（当前 ${currentFontSize}px）`"
+          aria-label="缩小字体"
           @click="$emit('zoom', 'out')"
-        />
+        >
+          <i-mdi-format-font-size-decrease />
+        </button>
         <div class="font-size-indicator">
           {{ currentFontSize }}px
         </div>
-        <v-btn
-          icon="mdi-format-font-size-increase"
-          variant="text"
+        <button
+          type="button"
+          class="tool-btn"
           :title="`放大字体（当前 ${currentFontSize}px）`"
+          aria-label="放大字体"
           @click="$emit('zoom', 'up')"
-        />
-
-        <v-menu
-          :close-on-content-click="false"
-          location="top"
         >
-          <template #activator="{ props }">
-            <v-btn
-              icon="mdi-calendar-month-outline"
-              variant="text"
+          <i-mdi-format-font-size-increase />
+        </button>
+
+        <!-- 日期选择：Popover + 原生 date 输入，不引日历组件 -->
+        <PopoverRoot v-model:open="dateOpen">
+          <PopoverTrigger as-child>
+            <button
+              type="button"
+              class="tool-btn"
               title="选择日期"
-              v-bind="props"
-            />
-          </template>
-          <v-card
-            class="date-picker-card"
-            border
-          >
-            <v-date-picker
-              :model-value="selectedDate"
-              color="primary"
-              @update:model-value="$emit('date-select', $event)"
-            />
-          </v-card>
-        </v-menu>
+              aria-label="选择日期"
+            >
+              <i-mdi-calendar-month-outline />
+            </button>
+          </PopoverTrigger>
+          <PopoverPortal>
+            <PopoverContent
+              side="top"
+              :side-offset="8"
+              class="date-picker-card"
+            >
+              <input
+                id="toolbar-date-input"
+                type="date"
+                class="date-picker-input"
+                aria-label="跳转到日期"
+                :value="dateInputValue"
+                @change="onDateChange"
+              >
+            </PopoverContent>
+          </PopoverPortal>
+        </PopoverRoot>
 
-        <v-btn
+        <button
           v-if="!isToday"
-          icon="mdi-chevron-right"
-          variant="text"
+          type="button"
+          class="tool-btn"
           title="后一天"
+          aria-label="后一天"
           @click="$emit('next-day')"
-        />
-        <v-btn
-          icon="mdi-account-question-outline"
-          variant="text"
+        >
+          <i-mdi-chevron-right />
+        </button>
+        <button
+          type="button"
+          class="tool-btn"
           title="随机点名"
+          aria-label="随机点名"
           @click="$emit('pick-student')"
-        />
+        >
+          <i-mdi-account-question-outline />
+        </button>
       </div>
-    </v-card>
+    </div>
 
-    <v-btn
-      v-if="!isToday"
+    <!-- 复制到今天：小屏误触会覆盖当天内容，页面侧还有二次确认；只读态不显示 -->
+    <button
+      v-if="!isToday && writable"
+      type="button"
       class="side-action-btn"
-      color="grey-darken-3"
-      elevation="0"
-      prepend-icon="mdi-content-copy"
-      rounded="lg"
-      :loading="copyToTodayLoading"
       :disabled="copyToTodayLoading"
       @click="$emit('copy-to-today')"
     >
-      复制到今天
-    </v-btn>
+      <i-mdi-content-copy class="side-action-icon" />
+      {{ copyToTodayLoading ? "复制中…" : "复制到今天" }}
+    </button>
   </div>
 </template>
 
-<script>
-export default {
-  name: "FloatingToolbar",
-  props: {
-    selectedDate: { type: [String, Date], required: true },
-    isToday: { type: Boolean, required: true },
-    copyToTodayLoading: { type: Boolean, default: false },
-    currentFontSize: { type: Number, default: 16 },
-  },
-  emits: ["prev-day", "next-day", "zoom", "date-select", "copy-to-today", "pick-student"],
-};
+<script setup>
+import { computed, ref } from "vue";
+import { PopoverContent, PopoverPortal, PopoverRoot, PopoverTrigger } from "reka-ui";
+
+const props = defineProps({
+  selectedDate: { type: [String, Date], required: true },
+  isToday: { type: Boolean, required: true },
+  // 只读（无写密钥）时藏掉写操作入口
+  writable: { type: Boolean, default: true },
+  copyToTodayLoading: { type: Boolean, default: false },
+  currentFontSize: { type: Number, default: 16 },
+});
+const emit = defineEmits(["prev-day", "next-day", "zoom", "date-select", "copy-to-today", "pick-student"]);
+
+const dateOpen = ref(false);
+
+const dateInputValue = computed(() => {
+  const date = props.selectedDate instanceof Date ? props.selectedDate : new Date(props.selectedDate);
+  if (Number.isNaN(date.getTime())) return "";
+  const pad = (value) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+});
+
+function onDateChange(event) {
+  const value = event.target.value;
+  if (!value) return;
+  // 页面侧 goToDate 认 YYYYMMDD（本地日期分量，避开 new Date("YYYY-MM-DD") 的 UTC 解析）
+  emit("date-select", value.replace(/-/g, ""));
+  dateOpen.value = false;
+}
 </script>
 
 <style scoped>
@@ -112,10 +147,10 @@ export default {
   bottom: calc(18px + var(--sab, 0px));
   transform: translateX(-50%);
   padding: 10px 12px;
-  border-radius: 8px !important;
+  border-radius: 8px;
   pointer-events: auto;
-  backdrop-filter: blur(10px);
-  background: rgba(20, 20, 20, 0.96) !important;
+  /* 原版是 blur(10px) 毛玻璃；希沃弱核显上背景模糊是掉帧主因，改同色纯色 */
+  background: rgba(20, 20, 20, 0.96);
   border: 1px solid rgba(255, 255, 255, 0.08);
   box-shadow: 0 10px 22px rgba(0, 0, 0, 0.18);
   animation: toolbar-rise 0.4s cubic-bezier(0.22, 1, 0.36, 1);
@@ -133,16 +168,33 @@ export default {
   gap: 6px;
 }
 
-.toolbar-buttons :deep(.v-btn) {
-  min-width: 42px;
+.tool-btn {
+  display: inline-flex;
   width: 42px;
   height: 42px;
+  min-width: 42px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
   border-radius: 6px;
+  background: transparent;
   color: rgba(255, 255, 255, 0.82);
+  cursor: pointer;
 }
 
-.toolbar-buttons :deep(.v-btn:hover) {
+.tool-btn:hover {
   background: rgba(255, 255, 255, 0.06);
+}
+
+.tool-btn:active {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.tool-btn :deep(svg) {
+  width: 24px;
+  height: 24px;
 }
 
 .font-size-indicator {
@@ -157,20 +209,57 @@ export default {
   position: absolute;
   right: 20px;
   bottom: calc(20px + var(--sab, 0px));
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 16px;
   pointer-events: auto;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  color: #f1f1f1 !important;
-  background: #1d1d1d !important;
-  border-radius: 8px !important;
-  min-height: 44px;
-  padding-inline: 16px !important;
+  border-radius: 8px;
+  color: #f1f1f1;
+  background: #1d1d1d;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
   animation: float-in 0.38s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
+.side-action-btn:hover {
+  background: #252525;
+}
+
+.side-action-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.side-action-icon {
+  width: 18px;
+  height: 18px;
+}
+
 .date-picker-card {
-  overflow: hidden;
-  border-radius: 8px !important;
-  background: #181818 !important;
+  z-index: 130;
+  padding: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  background: #181818;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.28);
+}
+
+.date-picker-input {
+  display: block;
+  min-height: 40px;
+  padding: 0 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  background: #1f1f1f;
+  color: #f1f1f1;
+  font-family: inherit;
+  font-size: 14px;
+  color-scheme: dark;
 }
 
 @keyframes toolbar-rise {
@@ -205,10 +294,10 @@ export default {
     gap: 4px;
   }
 
-  .toolbar-buttons :deep(.v-btn) {
-    min-width: 38px;
+  .tool-btn {
     width: 38px;
     height: 38px;
+    min-width: 38px;
   }
 
   .font-size-indicator {
@@ -219,6 +308,13 @@ export default {
   .side-action-btn {
     right: 14px;
     bottom: calc(70px + var(--sab, 0px));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .floating-toolbar,
+  .side-action-btn {
+    animation: none;
   }
 }
 </style>

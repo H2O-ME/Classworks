@@ -1,18 +1,17 @@
 <template>
-  <v-dialog
-    v-model="dialogVisible"
-    :fullscreen="mobile"
-    max-width="720"
-    width="92%"
-    scrim="rgba(8, 8, 8, 0.66)"
-    transition="dialog-transition"
+  <div
+    v-if="modelValue"
+    class="dialog-overlay"
+    :class="{ 'dialog-overlay-mobile': mobile }"
+    @click.self="closeDialog"
   >
-    <v-card
+    <div
       ref="dialogCard"
       class="editor-card"
       :class="{ 'editor-card-mobile': mobile }"
-      border
-      rounded="lg"
+      role="dialog"
+      aria-modal="true"
+      :aria-label="title"
     >
       <div
         class="dialog-header"
@@ -22,16 +21,18 @@
         <div class="dialog-title">
           {{ title }}
         </div>
-        <v-btn
+        <button
+          type="button"
           class="dialog-close"
-          icon="mdi-close"
-          variant="text"
           :aria-label="copy.close"
+          title="关闭"
           @click="persistAndClose"
-        />
+        >
+          <i-mdi-close class="dialog-close-icon" />
+        </button>
       </div>
 
-      <v-card-text class="dialog-body">
+      <div class="dialog-body">
         <div class="editor-well">
           <textarea
             ref="inputRef"
@@ -45,36 +46,49 @@
             class="tool-chip"
             @click="pasteFromClipboard"
           >
-            <v-icon
-              icon="mdi-content-paste"
-              size="16"
-            />
+            <i-mdi-content-paste class="tool-chip-icon" />
             <span>{{ copy.paste }}</span>
           </button>
         </div>
-      </v-card-text>
+      </div>
 
       <div class="editor-footer">
-        <v-btn
+        <button
+          type="button"
           class="dialog-btn-solid"
-          variant="flat"
           title="Ctrl+Enter"
           @click="persistAndClose"
         >
           {{ copy.save }}
-        </v-btn>
+        </button>
       </div>
-    </v-card>
-  </v-dialog>
+    </div>
+  </div>
 </template>
 
-<script>
-import {
-  buildSavePayload,
-  createEditorState,
-  EDITOR_COPY,
-} from "@/utils/homeworkEditor";
-import { useDisplay } from "vuetify";
+<script setup>
+import { nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+
+const copy = {
+  close: "关闭",
+  save: "保存并关闭",
+  placeholder: "输入作业内容，每行一项会更清晰。",
+  paste: "粘贴",
+};
+
+const props = defineProps({
+  modelValue: { type: Boolean, required: true },
+  title: { type: String, required: true },
+  initialContent: { type: String, default: "" },
+});
+const emit = defineEmits(["update:modelValue", "save"]);
+
+const inputRef = ref(null);
+const dialogCard = ref(null);
+const content = ref("");
+const mobile = ref(false);
+let dirty = false;
+let drag = null;
 
 // 解析 "matrix(a,b,c,d,tx,ty)" 的平移分量；transform 为空/无效时按 0,0 处理
 function parseTransform(transform) {
@@ -84,131 +98,136 @@ function parseTransform(transform) {
   return { x: parts[4] || 0, y: parts[5] || 0 };
 }
 
-export default {
-  name: "HomeworkEditDialog",
-  props: {
-    modelValue: { type: Boolean, required: true },
-    title: { type: String, required: true },
-    initialContent: { type: String, default: "" },
-  },
-  emits: ["update:modelValue", "save"],
-  setup() {
-    const { mobile } = useDisplay();
-    return { mobile };
-  },
-  data() {
-    return {
-      ...createEditorState(),
-      copy: EDITOR_COPY,
-      drag: null,
-    };
-  },
-  computed: {
-    dialogVisible: {
-      get() {
-        return this.modelValue;
-      },
-      set(value) {
-        this.$emit("update:modelValue", value);
-      },
-    },
-  },
-  watch: {
-    modelValue(value) {
-      if (value) {
-        Object.assign(this, createEditorState(this.initialContent));
-        this.$nextTick(() => {
-          // 清掉上次拖拽残留的内联 transform/transition，保证居中与进入过渡
-          const overlay = this.$refs.dialogCard?.$el?.closest(".v-overlay__content");
-          overlay?.style && (overlay.style.transform = "");
-          overlay?.style && (overlay.style.transition = "");
-          this.$refs.inputRef?.focus();
-        });
-      } else if (this.dirty) {
-        // ESC / 点击遮罩由 v-dialog 直接关窗、不经按钮：兜底落一版内容，未保存修改不丢
-        this.$emit("save", buildSavePayload(this.content));
-        this.dirty = false;
-      }
-    },
-    content() {
-      this.updateDirtyState();
-    },
-  },
-  beforeUnmount() {
-    this.endDrag();
-  },
-  methods: {
-    // 拖拽移动对话框：基于初始 transform 累加位移（v-overlay 用 transform 定位居中，直接覆写会甩飞）
-    startDrag(event) {
-      if (this.mobile || event.button !== 0) return;
-      const overlay = this.$refs.dialogCard?.$el?.closest(".v-overlay__content");
-      if (!overlay) return;
-      const transform = window.getComputedStyle(overlay).transform || "";
-      const base = parseTransform(transform);
-      this.drag = { overlay, startX: event.clientX, startY: event.clientY, baseX: base.x, baseY: base.y };
-      overlay.style.transition = "none";
-      window.addEventListener("pointermove", this.onDrag);
-      window.addEventListener("pointerup", this.endDrag);
-      event.preventDefault();
-    },
-    onDrag(event) {
-      if (!this.drag) return;
-      const { overlay, startX, startY, baseX, baseY } = this.drag;
-      overlay.style.transform = `translate(${baseX + event.clientX - startX}px, ${baseY + event.clientY - startY}px)`;
-    },
-    endDrag() {
-      if (!this.drag) return;
-      this.drag = null;
-      window.removeEventListener("pointermove", this.onDrag);
-      window.removeEventListener("pointerup", this.endDrag);
-    },
-    updateDirtyState() {
-      this.dirty = this.content !== this.initialContent;
-    },
-    // $emit 不返回 Promise：父组件的异步保存在后台继续，这里直接关窗（主页有「已同步到云端」提示兜底）
-    persistAndClose() {
-      this.$emit("save", buildSavePayload(this.content));
-      this.dirty = false; // 置 false 防止 watch(modelValue=false) 兜底再发一次
-      this.dialogVisible = false;
-    },
-    async pasteFromClipboard() {
-      try {
-        const text = await navigator.clipboard.readText();
-        if (text) this.insertAtCursor(text);
-      } catch (error) {
-        console.warn("读取剪贴板失败:", error);
-      }
-    },
-    insertAtCursor(text) {
-      const textarea = this.$refs.inputRef;
+function updateMobile() {
+  mobile.value = window.innerWidth < 600;
+}
 
-      if (!textarea) {
-        this.content += text;
-        return;
-      }
+function resetDragTransform() {
+  const element = dialogCard.value;
+  if (!element) return;
+  element.style.transform = "";
+  element.style.transition = "";
+}
 
-      const start = textarea.selectionStart;
-      const end = textarea.selectionEnd;
-      this.content = this.content.slice(0, start) + text + this.content.slice(end);
-
-      this.$nextTick(() => {
-        textarea.focus();
-        textarea.setSelectionRange(start + text.length, start + text.length);
+watch(
+  () => props.modelValue,
+  (visible) => {
+    if (visible) {
+      content.value = props.initialContent;
+      dirty = false;
+      nextTick(() => {
+        // 清掉上次拖拽残留的内联 transform/transition，保证居中与进入动画
+        resetDragTransform();
+        inputRef.value?.focus();
       });
-    },
+    } else if (dirty) {
+      // 关窗时若有未保存修改，兜底落一版，未保存修改不丢
+      emit("save", { content: content.value.trim() });
+      dirty = false;
+    }
   },
-};
+);
+
+watch(content, (value) => {
+  dirty = value !== props.initialContent;
+});
+
+// 拖拽移动弹窗：基于初始 transform 累加位移，标题栏按下即可拖动
+function startDrag(event) {
+  if (mobile.value || event.button !== 0) return;
+  const element = dialogCard.value;
+  if (!element) return;
+  const base = parseTransform(window.getComputedStyle(element).transform);
+  drag = { element, startX: event.clientX, startY: event.clientY, baseX: base.x, baseY: base.y };
+  element.style.transition = "none";
+  window.addEventListener("pointermove", onDrag);
+  window.addEventListener("pointerup", endDrag);
+  event.preventDefault();
+}
+
+function onDrag(event) {
+  if (!drag) return;
+  const { element, startX, startY, baseX, baseY } = drag;
+  element.style.transform = `translate(${baseX + event.clientX - startX}px, ${baseY + event.clientY - startY}px)`;
+}
+
+function endDrag() {
+  if (!drag) return;
+  drag = null;
+  window.removeEventListener("pointermove", onDrag);
+  window.removeEventListener("pointerup", endDrag);
+}
+
+// ESC / 点遮罩兜底：有未保存修改就落一版（原 v-dialog 的关闭路径）
+function closeDialog() {
+  if (dirty) {
+    emit("save", { content: content.value.trim() });
+    dirty = false;
+  }
+  emit("update:modelValue", false);
+}
+
+// $emit 不返回 Promise：父组件的异步保存在后台继续，这里直接关窗（失败有 toast 兜底）
+function persistAndClose() {
+  emit("save", { content: content.value.trim() });
+  dirty = false;
+  emit("update:modelValue", false);
+}
+
+async function pasteFromClipboard() {
+  try {
+    const text = await navigator.clipboard.readText();
+    if (text) insertAtCursor(text);
+  } catch (error) {
+    console.warn("读取剪贴板失败:", error);
+  }
+}
+
+function insertAtCursor(text) {
+  const textarea = inputRef.value;
+  if (!textarea) {
+    content.value += text;
+    return;
+  }
+  const start = textarea.selectionStart;
+  const end = textarea.selectionEnd;
+  content.value = content.value.slice(0, start) + text + content.value.slice(end);
+  nextTick(() => {
+    textarea.focus();
+    textarea.setSelectionRange(start + text.length, start + text.length);
+  });
+}
+
+function onKeydown(event) {
+  if (!props.modelValue || event.key !== "Escape") return;
+  closeDialog();
+}
+
+onMounted(() => {
+  updateMobile();
+  window.addEventListener("resize", updateMobile);
+  window.addEventListener("keydown", onKeydown);
+});
+
+onBeforeUnmount(() => {
+  endDrag();
+  window.removeEventListener("resize", updateMobile);
+  window.removeEventListener("keydown", onKeydown);
+});
 </script>
 
 <style scoped>
 /* 大屏编辑器：整卡即编辑面 —— 紧凑头部 + 大字编辑井 + 底部操作条 */
 .editor-card {
   display: flex;
+  width: 92%;
+  max-width: 720px;
+  max-height: 92vh;
   flex-direction: column;
   overflow: hidden;
-  background: #171717 !important;
-  border-color: rgba(255, 255, 255, 0.08) !important;
-  border-radius: 16px !important;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  background: #171717;
   box-shadow: 0 24px 56px rgba(0, 0, 0, 0.32);
   animation: dialog-card-in 0.28s cubic-bezier(0.22, 1, 0.36, 1);
 }
@@ -250,17 +269,34 @@ export default {
 }
 
 .dialog-close {
+  display: inline-flex;
+  width: 32px;
+  height: 32px;
   flex: 0 0 auto;
-  width: 32px !important;
-  height: 32px !important;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
   border-radius: 8px;
-  color: rgba(255, 255, 255, 0.6) !important;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+}
+
+.dialog-close:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.dialog-close-icon {
+  width: 20px;
+  height: 20px;
 }
 
 .dialog-body {
   flex: 1 1 auto;
   min-height: 0;
-  padding: 0 16px !important;
+  padding: 0 16px;
 }
 
 /* 编辑井：一整块浅凹面承载输入，粘贴浮在右下角 */
@@ -300,7 +336,7 @@ export default {
   color: rgba(255, 255, 255, 0.3);
 }
 
-/* 粘贴：编辑井右下角半透明浮层，不占底部操作区 */
+/* 粘贴：编辑井右下角浮层，不占底部操作区。原版用 blur 毛玻璃，改纯色 */
 .tool-chip {
   position: absolute;
   right: 12px;
@@ -313,17 +349,23 @@ export default {
   padding: 0 12px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 8px;
-  background: rgba(23, 23, 23, 0.88);
-  backdrop-filter: blur(6px);
+  background: rgba(23, 23, 23, 0.96);
   color: rgba(255, 255, 255, 0.82);
+  font-family: inherit;
   font-size: 12.5px;
   font-weight: 700;
+  cursor: pointer;
   transition: background-color 0.18s ease, border-color 0.18s ease;
 }
 
 .tool-chip:hover {
   border-color: rgba(255, 255, 255, 0.22);
-  background: rgba(38, 38, 38, 0.92);
+  background: rgba(38, 38, 38, 0.96);
+}
+
+.tool-chip-icon {
+  width: 16px;
+  height: 16px;
 }
 
 .editor-footer {
@@ -340,18 +382,33 @@ export default {
 .dialog-btn-solid {
   width: 100%;
   min-height: 44px;
-  border-radius: 10px !important;
-  background: #f3f3f3 !important;
-  color: #121212 !important;
-  font-size: 15px !important;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: #f3f3f3;
+  color: #121212;
+  font-family: inherit;
+  font-size: 15px;
   font-weight: 800;
   letter-spacing: 0.02em;
+  cursor: pointer;
+}
+
+.dialog-btn-solid:hover {
+  background: #ffffff;
 }
 
 /* ── 手机全屏：铺满整屏，编辑井撑开、操作沉底 ── */
+.dialog-overlay-mobile {
+  padding: 0;
+}
+
 .editor-card-mobile {
+  width: 100%;
+  max-width: none;
   height: 100%;
-  border-radius: 0 !important;
+  max-height: none;
+  border-radius: 0;
 }
 
 .editor-card-mobile .dialog-body {

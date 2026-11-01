@@ -1,6 +1,14 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * 深色是唯一主题：希沃大屏与教室环境都偏好低亮度。
+ * 颜色一律用十六进制与 rgba —— 老 WebView 不认 oklch()/color-mix()。
+ */
 html {
   scroll-behavior: smooth;
-  /* 隐藏文档级滚动条：看板是大屏展示型页面，滚动靠滚轮/触摸，滚动条只会破坏画面 */
+  /* 看板是大屏展示型页面：隐藏文档级滚动条，滚动靠滚轮/触摸 */
   scrollbar-width: none;
 }
 
@@ -10,11 +18,8 @@ html::-webkit-scrollbar {
   height: 0;
 }
 
-/* 覆盖 Vuetify reset 的 html{overflow-y:scroll}：:root 特异性更高可生效,
-   又低于 v-dialog 滚动锁 html.overflow-y-hidden(0,1,1)，对话框滚动锁定不受影响 */
 :root {
-  overflow-y: auto;
-  /* 刘海屏安全区变量：view 视口 viewport-fit=cover 下内容会顶入圆角/底部横条区，留白统一用这些变量 */
+  /* 刘海屏安全区变量：viewport-fit=cover 下内容会顶入圆角/底部横条区 */
   --sat: env(safe-area-inset-top, 0px);
   --sab: env(safe-area-inset-bottom, 0px);
   --sal: env(safe-area-inset-left, 0px);
@@ -24,9 +29,18 @@ html::-webkit-scrollbar {
 body {
   margin: 0;
   background: #111111;
-  /* 移动端 PWA：禁双击缩放抖动、去掉点击灰色高亮、下拉回弹交给浏览器滚动而非 body 弹性 */
+  color: rgba(255, 255, 255, 0.92);
+  /* 与原版（Vuetify 默认）保持一致：Roboto 缺失时回落 sans-serif，
+     换成 system-ui/Segoe UI 会改变字宽与疏密，整页观感随之偏移 */
+  font-family: Roboto, sans-serif;
+  /* 移动端 PWA：禁双击缩放抖动、去掉点击灰色高亮、下拉回弹交给浏览器滚动 */
   -webkit-tap-highlight-color: transparent;
   overscroll-behavior-y: none;
+}
+
+/* 路由过渡要求每页单一根元素，统一挂 .page */
+.page {
+  min-height: 100dvh;
 }
 
 .no-select {
@@ -54,11 +68,15 @@ body {
 
 /* ── 页面顶栏（主页/设置页共用）── */
 .board-app-bar {
-  backdrop-filter: blur(12px);
-  background: rgba(18, 18, 18, 0.96) !important;
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  /* 原版是 blur 毛玻璃；希沃弱核显上背景模糊是掉帧主因，改同色纯色 */
+  background: rgba(18, 18, 18, 0.96);
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   /* 刘海屏竖屏：状态栏区域留白，内容整体下移到安全区内 */
-  height: calc(64px + var(--sat, 0px)) !important;
+  height: calc(64px + var(--sat, 0px));
   padding-top: var(--sat, 0px);
 }
 
@@ -69,6 +87,7 @@ body {
   gap: 20px;
   width: 100%;
   max-width: 1680px;
+  height: 100%;
   margin: 0 auto;
   padding: 0 22px 0 42px;
 }
@@ -85,6 +104,18 @@ body {
   flex: 0 0 auto;
   align-items: center;
   gap: 10px;
+}
+
+/* ── 弹窗遮罩：纯色半透明，不用背景模糊/缩放动画 ── */
+.dialog-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(8, 8, 8, 0.66);
 }
 
 @media (max-width: 700px) {

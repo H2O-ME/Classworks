@@ -8,10 +8,13 @@
       :aria-live="persistent ? 'assertive' : 'polite'"
       @click="dismiss"
     >
-      <v-icon
-        v-if="icon"
-        :icon="icon"
-        size="18"
+      <i-mdi-cloud-sync-outline
+        v-if="icon === 'mdi-cloud-sync-outline'"
+        class="app-toast-icon"
+      />
+      <i-mdi-cloud-check-outline
+        v-else
+        class="app-toast-icon"
       />
       <span class="app-toast-text">{{ message }}</span>
       <button
@@ -42,9 +45,10 @@ export default {
   props: {
     show: { type: Boolean, default: false },
     message: { type: String, default: "" },
+    // 仅两种：云端已同步（默认）/ 云端同步中（设置页）
     icon: { type: String, default: "mdi-cloud-check-outline" },
     action: { type: String, default: "" },
-    // 自动消失毫秒数；<=0 表示常驻，仅靠点击或动作按钮关闭
+    // 自动消失毫秒数；persistent 或 <=0 表示常驻，仅靠点击或动作按钮关闭
     duration: { type: Number, default: 2400 },
     persistent: { type: Boolean, default: false },
   },
@@ -68,19 +72,23 @@ export default {
     },
   },
   watch: {
-    show(visible) {
-      if (visible) {
-        if (this.timer) clearTimeout(this.timer);
-        if (!toastRegistry.includes(this.stackToken)) toastRegistry.push(this.stackToken);
-        if (this.duration > 0) {
-          this.timer = setTimeout(() => this.$emit("dismiss"), this.duration);
+    // immediate：调用方常用 :key 换实例刷新文案，挂载时 show 已经是 true
+    show: {
+      immediate: true,
+      handler(visible) {
+        if (visible) {
+          if (this.timer) clearTimeout(this.timer);
+          if (!toastRegistry.includes(this.stackToken)) toastRegistry.push(this.stackToken);
+          if (!this.persistent && this.duration > 0) {
+            this.timer = setTimeout(() => this.$emit("dismiss"), this.duration);
+          }
+        } else {
+          if (this.timer) clearTimeout(this.timer);
+          this.timer = null;
+          const index = toastRegistry.indexOf(this.stackToken);
+          if (index !== -1) toastRegistry.splice(index, 1);
         }
-      } else {
-        if (this.timer) clearTimeout(this.timer);
-        this.timer = null;
-        const index = toastRegistry.indexOf(this.stackToken);
-        if (index !== -1) toastRegistry.splice(index, 1);
-      }
+      },
     },
   },
   beforeUnmount() {
@@ -116,6 +124,12 @@ export default {
   color: #dce8f5;
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.22);
   cursor: pointer;
+}
+
+.app-toast-icon {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
 }
 
 .app-toast-text {

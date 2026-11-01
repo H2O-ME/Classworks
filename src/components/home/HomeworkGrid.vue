@@ -3,7 +3,7 @@
     <div class="board-main-pane">
       <div
         class="masonry-board"
-        :class="`columns-${columnCount}`"
+        :class="`columns-${columnCountValue}`"
       >
         <div
           v-for="(column, columnIndex) in columns"
@@ -15,9 +15,10 @@
               v-for="(item, itemIndex) in column"
               :key="item.key"
               class="homework-card"
-              role="button"
-              tabindex="0"
-              :aria-label="`编辑${item.name}作业`"
+              :class="{ 'homework-card-readonly': readonly }"
+              :role="readonly ? undefined : 'button'"
+              :tabindex="readonly ? undefined : 0"
+              :aria-label="readonly ? undefined : `编辑${item.name}作业`"
               :style="{ '--card-delay': `${columnIndex * 56 + itemIndex * 42}ms` }"
               @click="handleCardClick(item.key)"
               @keydown.enter="handleCardClick(item.key)"
@@ -27,9 +28,9 @@
                 <div class="homework-card-subject">
                   {{ item.name }}
                 </div>
-                <v-icon
-                  icon="mdi-pencil-outline"
-                  size="15"
+                <i-mdi-pencil-outline
+                  v-if="!readonly"
+                  class="homework-card-pencil"
                 />
               </header>
 
@@ -52,8 +53,9 @@
       </div>
     </div>
 
+    <!-- 独立添加入口：单行幽灵胶囊，不进作业卡网格，明显更小更弱；只读态不显示 -->
     <section
-      v-if="unusedSubjects.length"
+      v-if="!readonly && unusedSubjects.length"
       class="subject-add-tiles"
       aria-label="添加学科作业"
     >
@@ -68,75 +70,55 @@
   </div>
 </template>
 
-<script>
+<script setup>
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import SubjectAddCard from "./SubjectAddCard.vue";
+import { columnCount, distribute } from "./masonry.js";
 
-export default {
-  name: "HomeworkGrid",
-  components: { SubjectAddCard },
-  props: {
-    sortedItems: { type: Array, required: true },
-    unusedSubjects: { type: Array, required: true },
-    contentStyle: { type: Object, default: () => ({}) },
-    updatedKeys: { type: Array, default: () => [] },
-  },
-  emits: ["open-dialog"],
-  data() {
-    return {
-      viewportWidth: typeof window === "undefined" ? 1200 : window.innerWidth,
-    };
-  },
-  computed: {
-    columnCount() {
-      if (this.viewportWidth < 760) return 1;
-      if (this.viewportWidth < 1240) return 2;
-      if (this.viewportWidth < 1680) return 3;
-      return 4;
-    },
-    columns() {
-      const columns = Array.from({ length: this.columnCount }, () => []);
-      const columnHeights = new Array(this.columnCount).fill(0);
+const props = defineProps({
+  sortedItems: { type: Array, required: true },
+  unusedSubjects: { type: Array, required: true },
+  contentStyle: { type: Object, default: () => ({}) },
+  updatedKeys: { type: Array, default: () => [] },
+  // 只读（学生扫码，无写密钥）：不绑点击、不显示铅笔、文字可选中复制
+  readonly: { type: Boolean, default: false },
+});
+const emit = defineEmits(["open-dialog"]);
 
-      for (const item of this.sortedItems) {
-        let targetColumn = 0;
-        for (let index = 1; index < columnHeights.length; index += 1) {
-          if (columnHeights[index] < columnHeights[targetColumn]) {
-            targetColumn = index;
-          }
-        }
-        columns[targetColumn].push(item);
-        columnHeights[targetColumn] += this.estimateCardHeight(item);
-      }
+const viewportWidth = ref(typeof window === "undefined" ? 1200 : window.innerWidth);
 
-      return columns;
-    },
-  },
-  mounted() {
-    window.addEventListener("resize", this.handleResize);
-  },
-  beforeUnmount() {
-    window.removeEventListener("resize", this.handleResize);
-  },
-  methods: {
-    handleResize() {
-      this.viewportWidth = window.innerWidth;
-    },
-    handleCardClick(key) {
-      this.$emit("open-dialog", key);
-    },
-    formatContent(content) {
-      return String(content || "")
-        .split("\n")
-        .map((line) => line.trim())
-        .filter(Boolean);
-    },
-    estimateCardHeight(item) {
-      const lines = this.formatContent(item.content);
-      const textUnits = lines.reduce((total, line) => total + Math.max(1, Math.ceil(line.length / 14)), 0);
-      return 96 + textUnits * 20;
-    },
-  },
-};
+const columnCountValue = computed(() => columnCount(viewportWidth.value));
+const columns = computed(() =>
+  distribute(props.sortedItems, columnCountValue.value, estimateCardHeight),
+);
+
+function handleResize() {
+  viewportWidth.value = window.innerWidth;
+}
+
+onMounted(() => window.addEventListener("resize", handleResize));
+onBeforeUnmount(() => window.removeEventListener("resize", handleResize));
+
+function handleCardClick(key) {
+  if (props.readonly) return;
+  emit("open-dialog", key);
+}
+
+function formatContent(content) {
+  return String(content || "")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
+// 估算影响列分配，不追求像素级准确：只比较卡片之间的相对高度
+function estimateCardHeight(item) {
+  const textUnits = formatContent(item.content).reduce(
+    (total, line) => total + Math.max(1, Math.ceil(line.length / 14)),
+    0,
+  );
+  return 96 + textUnits * 20;
+}
 </script>
 
 <style scoped>
@@ -203,6 +185,23 @@ export default {
   outline-offset: 1px;
 }
 
+/* 只读态：卡片不可点、不动效，正文可选中复制 */
+.homework-card-readonly {
+  cursor: default;
+}
+
+.homework-card-readonly:hover {
+  transform: none;
+  border-color: rgba(255, 255, 255, 0.08);
+  background: #191919;
+  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.1);
+}
+
+.homework-card-readonly .homework-card-content {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
 .content-updated .content-line {
   animation: content-line-update 0.9s ease-out;
 }
@@ -233,6 +232,13 @@ export default {
   font-size: 16px;
   font-weight: 700;
   line-height: 1.25;
+}
+
+.homework-card-pencil {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+  color: rgba(255, 255, 255, 0.55);
 }
 
 .homework-card-content {

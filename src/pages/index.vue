@@ -1,577 +1,473 @@
 <template>
-  <v-app-bar
-    class="no-select board-app-bar"
-    elevation="0"
-  >
-    <div class="app-bar-inner">
-      <div class="app-bar-title">
-        {{ titleText }}
-      </div>
-      <div class="app-bar-actions">
-        <div class="date-pill">
-          {{ dateLabel }}
+  <div class="page">
+    <header class="no-select board-app-bar">
+      <div class="app-bar-inner">
+        <div class="app-bar-title">
+          {{ titleText }}
         </div>
-        <router-link
-          class="settings-button"
-          to="/settings"
-          aria-label="打开设置"
+        <div class="app-bar-actions">
+          <div class="date-pill">
+            {{ dateLabel }}
+          </div>
+          <router-link
+            class="settings-button"
+            to="/settings"
+            aria-label="打开设置"
+          >
+            <i-mdi-cog-outline class="settings-icon" />
+          </router-link>
+        </div>
+      </div>
+    </header>
+
+    <HomeSkeleton v-if="!ready" />
+
+    <div
+      v-else
+      class="board-shell board-shell-ready"
+    >
+      <div
+        class="main-window board-container"
+        :class="{ 'no-select': isWritable }"
+      >
+        <section
+          v-if="gridItems.length === 0"
+          class="empty-state"
         >
-          <v-icon
-            icon="mdi-cog-outline"
-            size="19"
+          <div class="empty-hero">
+            <div class="empty-hero-date">
+              {{ dateLabel }} · 星期{{ weekdayLabel }}
+            </div>
+            <h1 class="empty-hero-title">
+              {{ emptyTitle }}
+            </h1>
+          </div>
+
+          <template v-if="isWritable">
+            <div class="empty-divider">
+              <span>选择学科开始录入</span>
+            </div>
+
+            <div class="empty-quick-grid">
+              <SubjectAddCard
+                v-for="(subject, index) in defaultSubjects"
+                :key="subject.name"
+                :subject="subject"
+                :style="{ '--tile-delay': `${index * 40}ms` }"
+                @add="openDialog(subject.name)"
+              />
+            </div>
+          </template>
+        </section>
+
+        <section
+          v-else
+          class="populated-board"
+        >
+          <HomeworkGrid
+            :sorted-items="gridItems"
+            :unused-subjects="unusedList"
+            :content-style="contentStyle"
+            :updated-keys="flashKeys"
+            :readonly="!isWritable"
+            @open-dialog="openDialog"
           />
-        </router-link>
+        </section>
       </div>
     </div>
-  </v-app-bar>
 
-  <HomeSkeleton v-if="!dataReady" />
+    <HomeworkEditDialog
+      v-if="isWritable"
+      v-model="dialogVisible"
+      :title="dialogTitle"
+      :initial-content="dialogContent"
+      @save="handleSave"
+    />
 
-  <div
-    v-else
-    class="board-shell board-shell-ready"
-  >
-    <v-container
-      class="main-window board-container no-select"
-      fluid
+    <FloatingToolbar
+      :selected-date="selectedDate"
+      :is-today="isToday"
+      :writable="isWritable"
+      :copy-to-today-loading="copying"
+      :current-font-size="fontSize"
+      @prev-day="goToDate(shiftDate(currentDate, -1))"
+      @next-day="goToDate(shiftDate(currentDate, 1))"
+      @zoom="zoom"
+      @date-select="goToDate"
+      @copy-to-today="copyConfirmVisible = true"
+      @pick-student="openRollCall"
+    />
+
+    <!-- 复制到今天二次确认：小屏/手表误触会直接覆盖今天的内容，全端确认一次 -->
+    <div
+      v-if="copyConfirmVisible"
+      class="dialog-overlay"
+      @click.self="copyConfirmVisible = false"
     >
-      <section
-        v-if="sortedItems.length === 0"
-        class="empty-state"
-      >
-        <div class="empty-hero">
-          <div class="empty-hero-date">
-            {{ dateLabel }} · 星期{{ weekdayLabel }}
-          </div>
-          <h1 class="empty-hero-title">
-            {{ emptyTitle }}
-          </h1>
-        </div>
-
-        <div class="empty-divider">
-          <span>选择学科开始录入</span>
-        </div>
-
-        <div class="empty-quick-grid">
-          <SubjectAddCard
-            v-for="(subject, index) in availableSubjects"
-            :key="subject.name"
-            :subject="subject"
-            :style="{ '--tile-delay': `${index * 40}ms` }"
-            @add="openDialog(subject.name)"
-          />
-        </div>
-      </section>
-
-      <section
-        v-else
-        class="populated-board"
-      >
-        <HomeworkGrid
-          :sorted-items="sortedItems"
-          :unused-subjects="unusedSubjects"
-          :content-style="contentStyle"
-          :updated-keys="updatedCardKeys"
-          @open-dialog="openDialog"
-        />
-      </section>
-    </v-container>
-  </div>
-
-  <HomeworkEditDialog
-    v-model="dialogVisible"
-    :initial-content="textareaContent"
-    :title="dialogTitle"
-    @save="handleHomeworkSave"
-  />
-
-  <FloatingToolbar
-    :is-today="isToday"
-    :copy-to-today-loading="loading.copyToToday"
-    :selected-date="selectedDateObj"
-    :current-font-size="currentFontSizeValue"
-    @zoom="zoom"
-    @date-select="handleDateSelect"
-    @prev-day="navigateDay(-1)"
-    @next-day="navigateDay(1)"
-    @copy-to-today="copyConfirmVisible = true"
-    @pick-student="openPickStudent"
-  />
-
-  <!-- 随机点名：先一级全班名单，再二级抽取滚动定格 -->
-  <v-dialog
-    v-model="pickVisible"
-    max-width="640"
-    width="92%"
-    scrim="rgba(8, 8, 8, 0.66)"
-  >
-    <v-card
-      class="pick-card"
-      border
-      rounded="xl"
-    >
-      <div class="pick-head">
-        <v-icon
-          icon="mdi-account-question-outline"
-          size="22"
-        />
-        <span>随机点名</span>
-      </div>
       <div
-        v-if="pickStep === 'list'"
-        class="roster-grid"
+        class="copy-confirm-card"
+        role="dialog"
+        aria-modal="true"
       >
-        <span
-          v-for="name in roster"
-          :key="name"
-          class="roster-chip"
-        >
-          {{ name }}
-        </span>
-      </div>
-      <template v-else>
-        <div
-          class="pick-stage"
-          :class="{ 'pick-landed': pickLanded }"
-        >
-          <div class="pick-name">
-            {{ pickName }}
-          </div>
-          <div class="pick-hint">
-            {{ pickRolling ? "正在抽取…" : "抽中" }}
-          </div>
+        <div class="copy-confirm-title">
+          复制作业到今天？
         </div>
-        <div class="pick-count">
-          共 {{ roster.length }} 人
+        <p class="copy-confirm-text">
+          将把 {{ dateLabel }} 的作业复制到今天，今天已有的内容会被覆盖。
+        </p>
+        <div class="copy-confirm-actions">
+          <button
+            type="button"
+            class="copy-confirm-cancel"
+            @click="copyConfirmVisible = false"
+          >
+            取消
+          </button>
+          <button
+            type="button"
+            class="copy-confirm-solid"
+            @click="confirmCopyToToday"
+          >
+            确认复制
+          </button>
         </div>
-      </template>
-      <div class="pick-actions">
-        <v-btn
-          v-if="pickStep === 'pick'"
-          class="pick-ghost"
-          variant="text"
-          @click="pickStep = 'list'"
-        >
-          名单
-        </v-btn>
-        <v-btn
-          v-else
-          class="pick-ghost"
-          variant="text"
-          @click="pickVisible = false"
-        >
-          关闭
-        </v-btn>
-        <v-btn
-          class="pick-solid"
-          variant="flat"
-          :loading="pickRolling"
-          @click="pickStep === 'pick' ? shufflePick() : startPick()"
-        >
-          {{ pickStep === 'pick' ? '再抽一次' : '随机点名' }}
-        </v-btn>
       </div>
-    </v-card>
-  </v-dialog>
+    </div>
 
-  <!-- 复制到今天二次确认：小屏/手表误触会直接覆盖今天的内容，全端确认一次 -->
-  <v-dialog
-    v-model="copyConfirmVisible"
-    max-width="420"
-    width="92%"
-    scrim="rgba(8, 8, 8, 0.66)"
-  >
-    <v-card
-      class="copy-confirm-card"
-      border
-      rounded="lg"
+    <!-- 409 并发冲突：让用户选云端还是本地，不静默覆盖 -->
+    <div
+      v-if="conflict"
+      class="dialog-overlay"
+      @click.self="closeConflict"
     >
-      <div class="copy-confirm-title">
-        复制作业到今天？
+      <div
+        class="copy-confirm-card copy-confirm-card-wide"
+        role="dialog"
+        aria-modal="true"
+      >
+        <div class="copy-confirm-title">
+          「{{ conflict.subject }}」在别处被改过
+        </div>
+        <p class="copy-confirm-text">
+          云端版本比你编辑时更新，请选择保留哪一版。
+        </p>
+        <div class="conflict-grid">
+          <div class="conflict-box">
+            <div class="conflict-label">
+              云端版本
+            </div>
+            <p class="conflict-content">
+              {{ conflict.cloudContent || "（空）" }}
+            </p>
+          </div>
+          <div class="conflict-box">
+            <div class="conflict-label">
+              我的版本
+            </div>
+            <p class="conflict-content">
+              {{ conflict.localContent || "（空）" }}
+            </p>
+          </div>
+        </div>
+        <div class="copy-confirm-actions">
+          <button
+            type="button"
+            class="copy-confirm-cancel"
+            @click="takeCloud"
+          >
+            用云端版本
+          </button>
+          <button
+            type="button"
+            class="copy-confirm-solid"
+            @click="keepLocal"
+          >
+            用我的版本覆盖
+          </button>
+        </div>
       </div>
-      <p class="copy-confirm-text">
-        将把 {{ dateLabel }} 的作业复制到今天，今天已有的内容会被覆盖。
-      </p>
-      <div class="copy-confirm-actions">
-        <v-btn
-          class="copy-confirm-cancel"
-          variant="text"
-          @click="copyConfirmVisible = false"
+    </div>
+
+    <!-- 随机点名：先一级全班名单，再二级抽取滚动定格 -->
+    <div
+      v-if="rollVisible"
+      class="dialog-overlay"
+      @click.self="closeRollCall"
+    >
+      <div
+        class="pick-card"
+        role="dialog"
+        aria-modal="true"
+      >
+        <div class="pick-head">
+          <i-mdi-account-question-outline class="pick-head-icon" />
+          <span>随机点名</span>
+        </div>
+
+        <div
+          v-if="rollStep === 'list'"
+          class="roster-grid"
         >
-          取消
-        </v-btn>
-        <v-btn
-          class="copy-confirm-solid"
-          variant="flat"
-          @click="confirmCopyToToday"
-        >
-          确认复制
-        </v-btn>
+          <span
+            v-for="name in rollRoster"
+            :key="name"
+            class="roster-chip"
+          >
+            {{ name }}
+          </span>
+        </div>
+
+        <template v-else>
+          <div
+            class="pick-stage"
+            :class="{ 'pick-landed': rollLanded }"
+          >
+            <div class="pick-name">
+              {{ rollName }}
+            </div>
+            <div class="pick-hint">
+              {{ rollRolling ? "正在抽取…" : "抽中" }}
+            </div>
+          </div>
+          <div class="pick-count">
+            共 {{ rollRoster.length }} 人
+          </div>
+        </template>
+
+        <div class="pick-actions">
+          <button
+            type="button"
+            class="pick-ghost"
+            @click="rollStep === 'pick' ? openRollCall() : closeRollCall()"
+          >
+            {{ rollStep === "pick" ? "名单" : "关闭" }}
+          </button>
+          <button
+            type="button"
+            class="pick-solid"
+            :disabled="rollRolling"
+            @click="doRoll()"
+          >
+            {{ rollStep === "pick" ? "再抽一次" : "随机点名" }}
+          </button>
+        </div>
       </div>
-    </v-card>
-  </v-dialog>
+    </div>
 
-  <!-- 云端同步提示（持续显示，点击任意处或按钮后消失） -->
-  <AppToast
-    :show="syncNoticeVisible"
-    message="检测到云端更新"
-    persistent
-    action="回退"
-    @action="handleRollbackLatest"
-    @dismiss="dismissSyncNotice"
-  />
-
-  <!-- 已同步到云端提示（自动消失） -->
-  <AppToast
-    :show="syncPushedToast"
-    message="已同步到云端"
-    @dismiss="dismissPushedToast"
-  />
+    <!-- 同步提示：一次性/常驻都走公共 AppToast -->
+    <AppToast
+      :key="toast.seq"
+      :show="toast.show"
+      :message="toast.message"
+      :action="toast.action"
+      :persistent="toast.persistent"
+      @action="onToastAction"
+      @dismiss="toast.show = false"
+    />
+  </div>
 </template>
 
-<script>
-import { defineAsyncComponent } from "vue";
+<script setup>
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
+import AppToast from "@/components/AppToast.vue";
+import FloatingToolbar from "@/components/FloatingToolbar.vue";
+import HomeworkEditDialog from "@/components/HomeworkEditDialog.vue";
 import HomeSkeleton from "@/components/common/HomeSkeleton.vue";
 import HomeworkGrid from "@/components/home/HomeworkGrid.vue";
 import SubjectAddCard from "@/components/home/SubjectAddCard.vue";
+import { useBoard } from "@/composables/useBoard";
+import { useRollCall } from "@/composables/useRollCall";
 import {
+  SUBJECTS,
   formatDateKey,
+  formatDateLabel,
   getDefaultSubjects,
-  getSortedHomeworkItems,
-  getUnusedSubjects,
-  normalizeBoardData,
+  getFontSize,
+  parseDateArg,
+  shiftDate,
+  toGridItems,
+  unusedSubjects,
 } from "@/utils/board";
-import { getDefaultRoster, pickRandomIndex } from "@/utils/roster";
-import { getData, setData, addDirty, snapshotDate } from "@/utils/storage";
-import {
-  rollbackToLatest,
-  scheduleSyncNow,
-  startPeriodicSync,
-  stopPeriodicSync,
-  watchSyncState,
-} from "@/utils/sync";
-import { getSetting, setSetting } from "@/utils/settings";
+import { getFontLevel, setFontLevel } from "@/utils/settings";
 
-const FloatingToolbar = defineAsyncComponent(() => import("@/components/FloatingToolbar.vue"));
-const HomeworkEditDialog = defineAsyncComponent(() => import("@/components/HomeworkEditDialog.vue"));
+const {
+  isWritable,
+  currentDate,
+  boardData,
+  syncState,
+  hasPending,
+  conflict,
+  load,
+  saveSubject,
+  resolveConflictKeepLocal,
+  resolveConflictTakeCloud,
+  retryNow,
+  dispose,
+} = useBoard();
 
-export default {
-  name: "ClassworksBoard",
-  components: {
-    FloatingToolbar,
-    HomeworkEditDialog,
-    HomeworkGrid,
-    HomeSkeleton,
-    SubjectAddCard,
-  },
-  data() {
-    return {
-      dateString: "",
-      selectedDateObj: new Date(),
-      isToday: true,
-      boardData: normalizeBoardData(),
-      dialogVisible: false,
-      copyConfirmVisible: false,
-      dialogTitle: "",
-      textareaContent: "",
-      currentEditSubject: "",
-      dataReady: false,
-      availableSubjects: getDefaultSubjects(),
-      loading: { copyToToday: false },
-      fontSizeLevel: getSetting("display.fontSizeLevel") || 0,
-      syncNoticeVisible: false,
-      syncPushedToast: false,
-      updatedCardKeys: [],
-      previousTitle: null,
-      unsubscribeSyncState: null,
-      roster: getDefaultRoster(),
-      pickVisible: false,
-      pickStep: "list",
-      pickName: "",
-      pickIndex: -1,
-      pickRolling: false,
-      pickLanded: false,
-      pickRaf: null,
-      pickTimer: null,
-    };
-  },
-  computed: {
-    titleText() {
-      return this.isToday ? "今天的作业" : `${this.dateLabel} 的作业`;
-    },
-    emptyTitle() {
-      return this.isToday ? "今天还没有作业记录" : "这一天暂时没有作业记录";
-    },
-    dateLabel() {
-      const date = this.selectedDateObj;
-      return `${date.getMonth() + 1} 月 ${date.getDate()} 日`;
-    },
-    weekdayLabel() {
-      return ["日", "一", "二", "三", "四", "五", "六"][this.selectedDateObj.getDay()];
-    },
-    sortedItems() {
-      return getSortedHomeworkItems(this.boardData, this.availableSubjects);
-    },
-    unusedSubjects() {
-      return getUnusedSubjects(this.boardData, this.availableSubjects);
-    },
-    contentStyle() {
-      return { fontSize: `${this.currentFontSizeValue}px` };
-    },
-    currentFontSizeValue() {
-      return Math.max(12, Math.min(40, 16 + this.fontSizeLevel));
-    },
-  },
-  async mounted() {
-    this.previousTitle = document.title;
-    document.title = "作业看板";
-    try {
-      await this.initializeData();
-      this.dataReady = true;
-      this.unsubscribeSyncState = watchSyncState(({ enabled }) => {
-        if (enabled) {
-          startPeriodicSync({
-            onPulled: (pulledDates) => this.handlePulledDates(pulledDates),
-            onConflict: (conflictKeys) => this.handleConflicts(conflictKeys),
-          });
-        } else {
-          stopPeriodicSync();
-        }
+const {
+  visible: rollVisible,
+  step: rollStep,
+  name: rollName,
+  roster: rollRoster,
+  rolling: rollRolling,
+  landed: rollLanded,
+  open: openRollCall,
+  roll: doRoll,
+  close: closeRollCall,
+} = useRollCall();
+
+const saveTimer = ref(null);
+const todayKey = formatDateKey(new Date());
+const ready = ref(false);
+const defaultSubjects = getDefaultSubjects();
+
+const gridItems = computed(() => toGridItems(boardData.value));
+const unusedList = computed(() => unusedSubjects(gridItems.value));
+const isToday = computed(() => currentDate.value === todayKey);
+const dateLabel = computed(() => formatDateLabel(currentDate.value));
+const weekdayLabel = computed(() => ["日", "一", "二", "三", "四", "五", "六"][parseDateArg(currentDate.value).getDay()]);
+const titleText = computed(() => (isToday.value ? "今天的作业" : `${dateLabel.value} 的作业`));
+const emptyTitle = computed(() => (isToday.value ? "今天还没有作业记录" : "这一天暂时没有作业记录"));
+const selectedDate = computed(() => parseDateArg(currentDate.value));
+
+const fontLevel = ref(getFontLevel());
+const fontSize = computed(() => getFontSize(fontLevel.value));
+const contentStyle = computed(() => ({ fontSize: `${fontSize.value}px` }));
+
+const flashKeys = ref([]);
+const dialogVisible = ref(false);
+const dialogTitle = ref("");
+const dialogContent = ref("");
+const copyConfirmVisible = ref(false);
+const copying = ref(false);
+
+const toast = reactive({ show: false, message: "", action: "", persistent: false, seq: 0, handler: null });
+
+function flash(message, options = {}) {
+  Object.assign(toast, {
+    show: true,
+    message,
+    action: options.action || "",
+    persistent: Boolean(options.persistent),
+    handler: options.handler || null,
+    seq: toast.seq + 1,
+  });
+}
+
+function onToastAction() {
+  const handler = toast.handler;
+  toast.show = false;
+  handler?.();
+}
+
+// 离线/失败时给一条常驻可重试提示，恢复后自动消失；没有本地改动则只提示连不上
+watch(syncState, (state) => {
+  if (state === "offline" || state === "error") {
+    if (hasPending.value) {
+      flash(state === "offline" ? "离线，改动已暂存，联网后自动重试" : "同步失败，改动已暂存", {
+        action: "立即重试",
+        persistent: true,
+        handler: retryNow,
       });
-    } catch (error) {
-      console.error("初始化失败:", error);
+    } else {
+      flash(state === "offline" ? "连不上后端，当前显示本地缓存" : "同步失败");
     }
-  },
-  beforeUnmount() {
-    document.title = this.previousTitle;
-    stopPeriodicSync();
-    this.stopPickTimers();
-    this.unsubscribeSyncState?.();
-  },
-  methods: {
-    syncAfterEdit() {
-      scheduleSyncNow({
-        onPulled: (pulledDates) => this.handlePulledDates(pulledDates),
-        onPushed: () => this.showPushedToast(),
-        onConflict: (conflictKeys) => this.handleConflicts(conflictKeys),
-      });
-    },
-    flashUpdatedCards() {
-      this.updatedCardKeys = this.sortedItems.map((item) => item.key);
-      setTimeout(() => {
-        this.updatedCardKeys = [];
-      }, 1000);
-    },
-    async initializeData() {
-      const urlParams = new URLSearchParams(window.location.search);
-      const dateFromUrl = urlParams.get("date");
-      const today = new Date();
-      let currentDate = today;
+  } else if (toast.persistent) {
+    toast.show = false;
+  }
+});
 
-      if (dateFromUrl && /^\d{8}$/.test(dateFromUrl)) {
-        // 按本地时区分量构造：new Date("YYYY-MM-DD") 按 UTC 解析，UTC 以西会错一天
-        currentDate = new Date(
-          Number(dateFromUrl.slice(0, 4)),
-          Number(dateFromUrl.slice(4, 6)) - 1,
-          Number(dateFromUrl.slice(6, 8)),
-        );
+async function goToDate(value) {
+  const date = formatDateKey(parseDateArg(value));
+  if (date === currentDate.value) return;
+  await load(date);
+}
+
+function openDialog(subject) {
+  // 只读模式不绑编辑：入口本身不渲染，这里再兜一层
+  if (!isWritable.value) return;
+  dialogTitle.value = subject;
+  dialogContent.value = boardData.value[subject] || "";
+  dialogVisible.value = true;
+}
+
+async function handleSave(payload) {
+  const subject = dialogTitle.value;
+  if (!subject || !isWritable.value) return;
+  const result = await saveSubject(subject, payload?.content ?? "");
+  if (result.ok) {
+    flashKeys.value = [subject];
+    clearTimeout(saveTimer.value);
+    saveTimer.value = setTimeout(() => (flashKeys.value = []), 1000);
+    flash("已保存");
+  } else if (result.unauthorized) {
+    flash("写权限无效，改动只留在本机", { persistent: true });
+  }
+}
+
+function closeConflict() {
+  conflict.value = null;
+}
+
+async function keepLocal() {
+  const result = await resolveConflictKeepLocal();
+  flash(result.ok ? "已用本机版本覆盖" : "覆盖失败，请稍后重试");
+}
+
+function takeCloud() {
+  resolveConflictTakeCloud();
+  flash("已同步为云端版本");
+}
+
+// 复制到今天：按学科逐一提交，源里没有的学科清空，避免留下隔夜的旧作业
+async function confirmCopyToToday() {
+  copyConfirmVisible.value = false;
+  if (!isWritable.value || isToday.value) return;
+  copying.value = true;
+  const source = { ...boardData.value };
+  try {
+    await load(todayKey);
+    for (const subject of SUBJECTS) {
+      const target = source[subject] || "";
+      if ((boardData.value[subject] || "") === target) continue;
+      const result = await saveSubject(subject, target);
+      if (result.unauthorized) {
+        flash("写权限无效，未能复制", { persistent: true });
+        return;
       }
+    }
+    flash("已复制到今天");
+  } finally {
+    copying.value = false;
+  }
+}
 
-      this.selectedDateObj = currentDate;
-      this.dateString = formatDateKey(currentDate);
-      this.isToday = this.dateString === formatDateKey(today);
+function zoom(direction) {
+  const next = direction === "up" ? fontLevel.value + 1 : fontLevel.value - 1;
+  fontLevel.value = Math.max(-4, Math.min(24, next));
+  setFontLevel(fontLevel.value);
+}
 
-      await this.downloadData();
-    },
-    async downloadData() {
-      try {
-        const response = await getData(`classworks-data-${this.dateString}`);
-        this.boardData = normalizeBoardData(response);
-      } catch (error) {
-        console.error("加载作业失败:", error);
-        this.boardData = normalizeBoardData();
-      }
-    },
-    async uploadData() {
-      return setData(`classworks-data-${this.dateString}`, this.boardData);
-    },
-    openDialog(subject) {
-      this.currentEditSubject = subject;
-      this.dialogTitle = subject;
-      this.textareaContent = this.boardData.homework[subject]?.content || "";
-      this.dialogVisible = true;
-    },
-    async handleHomeworkSave(payload) {
-      if (!this.currentEditSubject) return;
+let previousTitle = null;
 
-      const subject = this.currentEditSubject;
-      const existing = this.boardData.homework[subject] || {};
-      const after = payload?.content || "";
-      const options = payload?.options || {};
+onMounted(async () => {
+  previousTitle = document.title;
+  document.title = "作业看板";
+  const requested = formatDateKey(parseDateArg(new URLSearchParams(window.location.search).get("date") || todayKey));
+  // load 的同步前缀先把本地缓存填进 boardData：命中缓存就立刻出内容，没有才等第一次 GET
+  const pending = load(requested);
+  ready.value = Object.keys(boardData.value).length > 0;
+  await pending;
+  ready.value = true;
+});
 
-      // 保存前后对本机做 diff：只有内容或 options 变化的学科才进脏集（本机没动过的不推）
-      const subjectChanged = (existing.content || "") !== after
-        || JSON.stringify(existing.options || {}) !== JSON.stringify(options);
-
-      if (!after.trim()) {
-        delete this.boardData.homework[subject];
-      } else {
-        this.boardData.homework[subject] = {
-          ...existing,
-          content: after,
-          options,
-        };
-      }
-
-      const saved = await this.uploadData();
-      if (!saved) return;
-      if (subjectChanged) {
-        await addDirty([`${this.dateString}|${subject}`]);
-      }
-      this.syncAfterEdit();
-    },
-    zoom(direction) {
-      this.fontSizeLevel = direction === "up" ? Math.min(this.fontSizeLevel + 1, 24) : Math.max(this.fontSizeLevel - 1, -4);
-      setSetting("display.fontSizeLevel", this.fontSizeLevel);
-    },
-    async handleDateSelect(dateValue) {
-      if (!dateValue) return;
-
-      const selectedDate = new Date(dateValue);
-      const nextDateString = formatDateKey(selectedDate);
-      if (nextDateString === this.dateString) return;
-
-      this.selectedDateObj = selectedDate;
-      this.dateString = nextDateString;
-      this.isToday = nextDateString === formatDateKey(new Date());
-      await this.downloadData();
-    },
-    navigateDay(offset) {
-      const currentDate = new Date(this.selectedDateObj);
-      currentDate.setDate(currentDate.getDate() + offset);
-      this.handleDateSelect(currentDate);
-    },
-    confirmCopyToToday() {
-      this.copyConfirmVisible = false;
-      this.copyHomeworkToToday();
-    },
-    // 随机点名：开弹窗先展示一级全班名单，二级才滚动抽取
-    openPickStudent() {
-      this.stopPickTimers();
-      this.pickStep = "list";
-      this.pickVisible = true;
-    },
-    startPick() {
-      this.pickStep = "pick";
-      this.shufflePick();
-    },
-    stopPickTimers() {
-      cancelAnimationFrame(this.pickRaf);
-      clearTimeout(this.pickTimer);
-      this.pickRaf = null;
-      this.pickTimer = null;
-      this.pickRolling = false;
-    },
-    // 滚动阶段用 rAF 高频换名 + 指数减速，定格后补一个弹跳收尾
-    shufflePick() {
-      if (this.pickRolling) return;
-      this.stopPickTimers();
-      this.pickRolling = true;
-      this.pickLanded = false;
-      const start = performance.now();
-      const duration = 1100;
-      const frame = (now) => {
-        const elapsed = now - start;
-        this.pickIndex = pickRandomIndex(this.roster, this.pickIndex);
-        this.pickName = this.pickIndex >= 0 ? this.roster[this.pickIndex] : "";
-        if (elapsed < duration) {
-          this.pickRaf = requestAnimationFrame(frame);
-        } else {
-          this.pickRaf = null;
-          this.pickLanded = true;
-          this.pickTimer = setTimeout(() => {
-            this.pickTimer = null;
-            this.pickRolling = false;
-          }, 450);
-        }
-      };
-      this.pickRaf = requestAnimationFrame(frame);
-    },
-    async copyHomeworkToToday() {      if (this.loading.copyToToday) return;
-      this.loading.copyToToday = true;
-
-      try {
-        const sourceHomework = JSON.parse(JSON.stringify(this.boardData.homework));
-        const today = new Date();
-        this.selectedDateObj = today;
-        this.dateString = formatDateKey(today);
-        this.isToday = true;
-        await this.replaceBoardWith(sourceHomework);
-      } catch (error) {
-        console.error("复制到今天失败:", error);
-      } finally {
-        this.loading.copyToToday = false;
-      }
-    },
-    // 用 sourceHomework 整日替换当前查看日：先留快照防误覆盖；内容变化/被删学科标脏（墓碑防云端复活），写回并触发同步
-    async replaceBoardWith(sourceHomework) {
-      const previous = normalizeBoardData(await getData(`classworks-data-${this.dateString}`)).homework;
-      const dirtyEntries = [];
-      for (const [key, value] of Object.entries(sourceHomework)) {
-        if (!value?.content?.trim()) continue;
-        if ((previous[key]?.content || "") !== value.content) dirtyEntries.push(`${this.dateString}|${key}`);
-      }
-      for (const [key, value] of Object.entries(previous)) {
-        if (value?.content?.trim() && !sourceHomework[key]?.content?.trim()) {
-          dirtyEntries.push(`${this.dateString}|${key}`);
-        }
-      }
-
-      await snapshotDate(this.dateString);
-      this.boardData.homework = Object.fromEntries(
-        Object.entries(sourceHomework).filter(([, value]) => value?.content?.trim()),
-      );
-      const saved = await this.uploadData();
-      if (!saved) return;
-      if (dirtyEntries.length) {
-        await addDirty(dirtyEntries);
-      }
-      this.syncAfterEdit();
-    },
-    async handlePulledDates(pulledDates) {
-      if (!pulledDates?.includes(this.dateString)) return;
-      await this.downloadData();
-      this.flashUpdatedCards();
-      this.syncNoticeVisible = true;
-    },
-    handleConflicts(conflictKeys) {
-      // 真并发：本机推的条目被其他设备更新覆盖 → 弹通知条，可一键回退到本机版本
-      if (!conflictKeys?.length) return;
-      if (conflictKeys.some((key) => key.startsWith(`${this.dateString}|`))) {
-        this.syncNoticeVisible = true;
-      }
-    },
-    dismissSyncNotice() {
-      this.syncNoticeVisible = false;
-    },
-    showPushedToast() {
-      this.syncPushedToast = true;
-    },
-    dismissPushedToast() {
-      this.syncPushedToast = false;
-    },
-    async handleRollbackLatest() {
-      this.dismissSyncNotice();
-      // 回退本地立即生效（乐观更新）：恢复快照后马上刷新页面，KV 推送在后台完成
-      const result = await rollbackToLatest(this.dateString, {
-        onPushed: () => this.showPushedToast(),
-      });
-      if (!result.ok) return;
-      await this.downloadData();
-      this.flashUpdatedCards();
-    },
-  },
-};
+onBeforeUnmount(() => {
+  document.title = previousTitle;
+  clearTimeout(saveTimer.value);
+  dispose();
+  closeRollCall();
+});
 </script>
 
 <style scoped>
@@ -609,6 +505,11 @@ export default {
   border-color: rgba(255, 255, 255, 0.14);
   background: rgba(255, 255, 255, 0.065);
   color: rgba(255, 255, 255, 0.96);
+}
+
+.settings-icon {
+  width: 19px;
+  height: 19px;
 }
 
 .board-shell {
@@ -666,8 +567,6 @@ export default {
   line-height: 1.15;
 }
 
-
-
 /* 细线分隔语:给主按钮与学科阵列一段呼吸 */
 .empty-divider {
   display: flex;
@@ -703,11 +602,19 @@ export default {
   animation: fade-up 0.32s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-/* ── 复制到今天确认对话框 ── */
+/* ── 复制到今天确认 / 409 冲突裁决对话框 ── */
 .copy-confirm-card {
+  width: 100%;
+  max-width: 420px;
   padding: 20px;
-  background: #171717 !important;
-  border-color: rgba(255, 255, 255, 0.08) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  background: #171717;
+  box-shadow: 0 24px 56px rgba(0, 0, 0, 0.32);
+}
+
+.copy-confirm-card-wide {
+  max-width: 640px;
 }
 
 .copy-confirm-title {
@@ -730,11 +637,82 @@ export default {
   margin-top: 18px;
 }
 
+.copy-confirm-cancel {
+  min-height: 40px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.72);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.copy-confirm-cancel:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.copy-confirm-solid {
+  min-height: 40px;
+  padding: 0 20px;
+  border: 0;
+  border-radius: 10px;
+  background: #f3f3f3;
+  color: #121212;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.copy-confirm-solid:hover {
+  background: #ffffff;
+}
+
+.conflict-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.conflict-box {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 8px;
+  background: #1a1a1a;
+}
+
+.conflict-label {
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.conflict-content {
+  max-height: 38vh;
+  margin: 6px 0 0;
+  overflow-y: auto;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  user-select: text;
+}
+
 /* ── 随机点名 ── */
 .pick-card {
+  width: 92%;
+  max-width: 640px;
   padding: 22px 22px 18px;
-  background: #171717 !important;
-  border-color: rgba(255, 255, 255, 0.08) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  background: #171717;
+  box-shadow: 0 24px 56px rgba(0, 0, 0, 0.32);
   text-align: center;
 }
 
@@ -748,13 +726,18 @@ export default {
   font-weight: 800;
 }
 
+.pick-head-icon {
+  width: 22px;
+  height: 22px;
+}
+
 .roster-grid {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
   align-content: flex-start;
   gap: 10px;
-  max-height: 52dvh;
+  max-height: 52vh;
   margin-top: 16px;
   overflow-y: auto;
   scrollbar-width: none;
@@ -821,18 +804,41 @@ export default {
 
 .pick-ghost {
   min-height: 44px;
-  padding-inline: 18px;
-  color: rgba(255, 255, 255, 0.72) !important;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.72);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.pick-ghost:hover {
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .pick-solid {
   min-height: 44px;
-  padding-inline: 26px;
-  border-radius: 12px !important;
-  background: #f3f3f3 !important;
-  color: #121212 !important;
+  padding: 0 26px;
+  border: 0;
+  border-radius: 12px;
+  background: #f3f3f3;
+  color: #121212;
+  font-family: inherit;
   font-size: 15px;
   font-weight: 800;
+  cursor: pointer;
+}
+
+.pick-solid:hover {
+  background: #ffffff;
+}
+
+.pick-solid:disabled {
+  opacity: 0.6;
+  cursor: default;
 }
 
 @keyframes pick-land {
@@ -844,43 +850,6 @@ export default {
 @media (prefers-reduced-motion: reduce) {
   .pick-landed .pick-name {
     animation: none;
-  }
-}
-
-@media (max-width: 380px) {
-  .pick-actions {
-    flex-direction: column;
-  }
-
-  .pick-ghost,
-  .pick-solid {
-    width: 100%;
-    min-height: 48px;
-  }
-}
-
-.copy-confirm-cancel {
-  min-height: 40px;
-  color: rgba(255, 255, 255, 0.72) !important;
-}
-
-.copy-confirm-solid {
-  min-height: 40px;
-  border-radius: 10px !important;
-  background: #f3f3f3 !important;
-  color: #121212 !important;
-  font-weight: 800;
-}
-
-@media (max-width: 380px) {
-  .copy-confirm-actions {
-    flex-direction: column;
-  }
-
-  .copy-confirm-cancel,
-  .copy-confirm-solid {
-    width: 100%;
-    min-height: 44px;
   }
 }
 
@@ -938,6 +907,34 @@ export default {
 
   .empty-quick-grid {
     gap: 12px;
+  }
+}
+
+@media (max-width: 600px) {
+  .conflict-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 380px) {
+  .copy-confirm-actions {
+    flex-direction: column;
+  }
+
+  .copy-confirm-cancel,
+  .copy-confirm-solid {
+    width: 100%;
+    min-height: 44px;
+  }
+
+  .pick-actions {
+    flex-direction: column;
+  }
+
+  .pick-ghost,
+  .pick-solid {
+    width: 100%;
+    min-height: 48px;
   }
 }
 </style>

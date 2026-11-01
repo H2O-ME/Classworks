@@ -4,10 +4,7 @@
     class="add-tile"
     @click="$emit('add')"
   >
-    <v-icon
-      icon="mdi-plus"
-      size="16"
-    />
+    <i-mdi-plus class="add-tile-icon" />
     <span class="add-tile-name">{{ subject.name }}</span>
   </button>
 </template>
@@ -49,6 +46,12 @@ defineEmits(["add"]);
 
 .add-tile:active {
   transform: translateY(0);
+}
+
+.add-tile-icon {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
 }
 
 .add-tile-name {
