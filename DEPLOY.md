@@ -84,6 +84,35 @@ win\install.cmd -Url https://example.com -Key <BOARD_TOKEN>
 - 需要真正离线、全屏锁定、托盘常驻时，才考虑做原生薄壳（Tauri + 只加载远程 URL），见下方说明。
 - 需要正式安装的 PWA：浏览器地址栏右侧「安装」按钮，图标由 `public/pwa/icon.svg` 生成。
 
+## 五、Windows 客户端（可选）
+
+`client/` 是 Tauri 薄壳：只开一个窗口加载线上看板，**不含业务逻辑、不内嵌前端产物**，所以网页发版后客户端自动就是新版，不需要重新分发。
+
+| 项 | 实测 |
+| --- | --- |
+| 安装包（NSIS） | 1.1 MB |
+| 绿色 exe | 3.0 MB |
+| 运行时 | 主进程 ≈38 MB + 6 个系统 WebView2 进程（工作集约 +400 MB，其中大量是共享 DLL） |
+
+构建（任选其一）：
+
+```bash
+# 本机（需 Rust + WebView2 运行时）
+cd client && pnpm dlx @tauri-apps/cli@^2 build
+
+# CI：Actions → Windows 客户端 → Run workflow，产物在 Artifacts
+# 或推 client-v* 标签自动出包
+```
+
+产物：`client/target/release/bundle/nsis/作业看板_x.y.z_x64-setup.exe`（安装版）与 `client/target/release/classworks-board.exe`（绿色版，放非还原分区即可）。
+
+注意：
+
+- **未签名**：首次运行会弹「Windows 已保护你的电脑」，点「更多信息 → 仍要运行」；个别杀软可能误报，需加白名单
+- 客户端里白板口令写在 `client/tauri.conf.json` 的窗口 `url` 上（`?key=seewo`），改口令要重新出包；不想重新出包就用 `win/install.cmd` 的快捷方式方案
+- 冰点还原：把绿色 exe 放非还原分区（如 `D:\Classworks\`）
+- 不需要离线使用就不必装：PWA / `--app` 快捷方式零安装、占用更低
+
 ## 注意
 
 - **强制更新机制（2026-11）**：SW 改自写（`injectManifest`，源码 `src/sw.js`）。新版激活时会 `clients.navigate()` **强制重载所有还开着的旧页面**，并 `cleanupOutdatedCaches` 清旧预缓存 —— 教室大屏/PWA 不需要人手动刷新。首次安装不会触发（无旧缓存时才跳过）。

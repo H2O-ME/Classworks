@@ -65,65 +65,67 @@
       <!-- ══ 外观 ══ -->
       <div
         v-show="section === 'appearance'"
-        class="grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]"
+        class="flex flex-col gap-4"
       >
-        <div class="flex flex-col gap-4">
-          <!-- 字体市场 -->
-          <Card class="border-border bg-card">
-            <CardHeader class="gap-1.5 p-5 pb-3">
-              <div class="flex items-start justify-between gap-3">
-                <div class="flex items-center gap-2.5">
-                  <i-mdi-format-font class="size-5 text-muted-foreground" />
-                  <CardTitle class="text-base">
-                    字体市场
-                  </CardTitle>
-                </div>
-                <Badge
-                  variant="secondary"
-                  class="shrink-0 gap-1 font-medium"
-                >
-                  在线字体按需加载
-                </Badge>
-              </div>
-              <CardDescription class="text-xs leading-relaxed">
-                选定即时生效，只下载页面用到的字形分片；断网时自动回落系统字体。
-              </CardDescription>
-            </CardHeader>
+        <!-- 字体市场：铺满一整行，宽屏 6 张横排，正好用掉大屏宽度 -->
 
-            <CardContent class="p-5 pt-0">
-              <div class="font-grid">
-                <button
-                  v-for="font in FONTS"
-                  :key="font.id"
-                  type="button"
-                  class="font-card"
-                  :class="{ 'font-card-active': appearance.fontFamily === font.id }"
-                  :aria-pressed="appearance.fontFamily === font.id"
-                  @click="pickFont(font)"
-                >
-                  <div class="flex items-center justify-between gap-2">
-                    <span
-                      class="font-card-name"
-                      :style="{ fontFamily: font.stack }"
-                    >{{ font.name }}</span>
-                    <span class="font-tag">
-                      {{ loadingFont === font.id ? "加载中" : font.css ? "在线" : "本地" }}
-                    </span>
-                  </div>
-                  <div
-                    class="font-card-sample"
+        <Card class="border-border bg-card">
+          <CardHeader class="gap-1.5 p-5 pb-3">
+            <div class="flex items-start justify-between gap-3">
+              <div class="flex items-center gap-2.5">
+                <i-mdi-format-font class="size-5 text-muted-foreground" />
+                <CardTitle class="text-base">
+                  字体市场
+                </CardTitle>
+              </div>
+              <Badge
+                variant="secondary"
+                class="shrink-0 gap-1 font-medium"
+              >
+                在线字体按需加载
+              </Badge>
+            </div>
+            <CardDescription class="text-xs leading-relaxed">
+              选定即时生效，只下载页面用到的字形分片；断网时自动回落系统字体。
+            </CardDescription>
+          </CardHeader>
+
+          <CardContent class="p-5 pt-0">
+            <div class="font-grid">
+              <button
+                v-for="font in FONTS"
+                :key="font.id"
+                type="button"
+                class="font-card"
+                :class="{ 'font-card-active': appearance.fontFamily === font.id }"
+                :aria-pressed="appearance.fontFamily === font.id"
+                @click="pickFont(font)"
+              >
+                <div class="flex items-center justify-between gap-2">
+                  <span
+                    class="font-card-name"
                     :style="{ fontFamily: font.stack }"
-                  >
-                    语文作业 Aa
-                  </div>
-                  <div class="font-card-desc">
-                    {{ font.desc }}
-                  </div>
-                </button>
-              </div>
-            </CardContent>
-          </Card>
+                  >{{ font.name }}</span>
+                  <span class="font-tag">
+                    {{ loadingFont === font.id ? "加载中" : font.css ? "在线" : "本地" }}
+                  </span>
+                </div>
+                <div
+                  class="font-card-sample"
+                  :style="{ fontFamily: font.stack }"
+                >
+                  语文作业 Aa
+                </div>
+                <div class="font-card-desc">
+                  {{ font.desc }}
+                </div>
+              </button>
+            </div>
+          </CardContent>
+        </Card>
 
+        <!-- 微调（左）| 预览（右）：两列高度接近，避免右列出现大片空白 -->
+        <div class="grid gap-4 lg:grid-cols-2 lg:items-start">
           <!-- 字体微调 -->
           <Card class="border-border bg-card">
             <CardHeader class="gap-1.5 p-5 pb-3">
@@ -171,48 +173,48 @@
               </div>
             </CardContent>
           </Card>
-        </div>
 
-        <!-- 实时预览 -->
-        <div class="self-start lg:sticky lg:top-[8.5rem]">
-          <Card class="border-border bg-card">
-            <CardHeader class="gap-1.5 p-5 pb-3">
-              <div class="flex items-center gap-2.5">
-                <i-mdi-eye-outline class="size-5 text-muted-foreground" />
-                <CardTitle class="text-base">
-                  实时预览
-                </CardTitle>
-              </div>
-              <CardDescription class="text-xs leading-relaxed">
-                与首页作业卡同一套样式，改动即时反映。
-              </CardDescription>
-            </CardHeader>
-
-            <CardContent class="p-5 pt-0">
-              <article class="preview-card">
-                <div class="preview-head">
-                  <span class="preview-subject">语文</span>
-                  <i-mdi-pencil-outline class="preview-pencil" />
+          <!-- 实时预览 -->
+          <div class="self-start lg:sticky lg:top-[8.5rem]">
+            <Card class="border-border bg-card">
+              <CardHeader class="gap-1.5 p-5 pb-3">
+                <div class="flex items-center gap-2.5">
+                  <i-mdi-eye-outline class="size-5 text-muted-foreground" />
+                  <CardTitle class="text-base">
+                    实时预览
+                  </CardTitle>
                 </div>
-                <div
-                  class="preview-body"
-                  :style="previewStyle"
-                >
-                  <div
-                    v-for="(line, index) in PREVIEW_LINES"
-                    :key="index"
-                    class="preview-line"
-                  >
-                    {{ line }}
+                <CardDescription class="text-xs leading-relaxed">
+                  与首页作业卡同一套样式，改动即时反映。
+                </CardDescription>
+              </CardHeader>
+
+              <CardContent class="p-5 pt-0">
+                <article class="preview-card">
+                  <div class="preview-head">
+                    <span class="preview-subject">语文</span>
+                    <i-mdi-pencil-outline class="preview-pencil" />
                   </div>
-                </div>
-              </article>
-              <p class="mt-3 text-xs leading-relaxed text-muted-foreground">
-                字号 {{ previewPx }}px · 行距 {{ appearance.lineHeight }} · 字距
-                {{ appearance.letterSpacing }}em · 段距 {{ appearance.paragraphGap }}em
-              </p>
-            </CardContent>
-          </Card>
+                  <div
+                    class="preview-body"
+                    :style="previewStyle"
+                  >
+                    <div
+                      v-for="(line, index) in PREVIEW_LINES"
+                      :key="index"
+                      class="preview-line"
+                    >
+                      {{ line }}
+                    </div>
+                  </div>
+                </article>
+                <p class="mt-3 text-xs leading-relaxed text-muted-foreground">
+                  字号 {{ previewPx }}px · 行距 {{ appearance.lineHeight }} · 字距
+                  {{ appearance.letterSpacing }}em · 段距 {{ appearance.paragraphGap }}em
+                </p>
+              </CardContent>
+            </Card>
+          </div>
         </div>
       </div>
 
