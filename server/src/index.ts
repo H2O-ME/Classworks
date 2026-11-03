@@ -99,7 +99,7 @@ app.use(
   }),
 )
 
-app.get('/api/health', (c) => c.json({ ok: true }))
+app.get('/api/health', (c) => c.json({ ok: true, build: '20261104-0031' }))
 
 // 白板口令校验：前端绝不能凭「URL 里有个 key」就解锁全科编辑。
 // 地址栏截断/手误（?key=see）会让 UI 假可写 —— 写接口本来就拒，但画面已经乐观改过了，
