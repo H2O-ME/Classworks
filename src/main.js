@@ -1,5 +1,4 @@
 import { createApp } from "vue";
-import { registerSW } from "virtual:pwa-register";
 import App from "./App.vue";
 import router from "@/router";
 import "@/styles/index.css";
@@ -23,18 +22,31 @@ app.mount("#app");
 router.isReady().then(stripKeyFromUrl);
 
 function registerAppServiceWorker() {
-  registerSW({
-    immediate: true,
-    onRegisteredSW(_, registration) {
-      if (!registration) return;
-      // 教室大屏常驻不关：只靠 1 小时轮询，发版后可能一小时才换上。
-      // 回到前台/重新获得焦点时补一次检查（离线时静默失败，不影响使用）。
+  if (!("serviceWorker" in navigator)) return;
+
+  // 新 SW 接管时旧页面跑的还是旧 JS：直接重载，教室大屏不会有人手动刷新。
+  // hadController 为 false（首次安装）时不重载，避免首次访问白刷一次。
+  const hadController = Boolean(navigator.serviceWorker.controller);
+  let reloading = false;
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (!hadController || reloading) return;
+    reloading = true;
+    location.reload();
+  });
+
+  navigator.serviceWorker
+    // updateViaCache:"none"：sw.js 本身绝不吃 HTTP/CDN 缓存，否则永远发现不了新版本
+    .register(`${import.meta.env.BASE_URL}sw.js`, { updateViaCache: "none" })
+    .then((registration) => {
       const checkUpdate = () => registration.update().catch(() => null);
-      setInterval(checkUpdate, 60 * 60 * 1000);
+      // 教室大屏常驻：光靠 10 分钟轮询太慢，回前台/重新聚焦时补一次
+      setInterval(checkUpdate, 10 * 60 * 1000);
       document.addEventListener("visibilitychange", () => {
         if (document.visibilityState === "visible") checkUpdate();
       });
       window.addEventListener("focus", checkUpdate);
-    },
-  });
+      // 进页面先查一次，别让已经开着的页面等满一个轮询周期
+      checkUpdate();
+    })
+    .catch((error) => console.warn("Service Worker 注册失败:", error));
 }

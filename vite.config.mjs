@@ -25,26 +25,28 @@ export default defineConfig(({ mode }) => {
       Layouts(),
       Vue(),
       VitePWA({
-        registerType: "autoUpdate",
+        // 自写 SW（injectManifest）：需要「升级时强制重载旧页面」，generateSW 做不到
+        strategies: "injectManifest",
+        srcDir: "src",
+        filename: "sw.js",
+        // 注册交给 main.js 手写：要带 updateViaCache:"none" + 定时/回前台检查
+        injectRegister: false,
+        // globPatterns 已覆盖 png/ico/svg，别再让插件按 manifest.icons 追加一遍（会产生重复预缓存条目）
+        includeManifestIcons: false,
+        includeAssets: [],
         // dev SW 关闭：开启时 dev service worker 会拦截 .vue/.css 等模块请求，
         // 缓存错乱时回退 index.html(text/html)，触发 "Expected JavaScript-or-Wasm module but got text/html" 严格 MIME 报错。
         devOptions: {
           enabled: false,
         },
-        injectRegister: "auto",
-        // globPatterns 已经把 dist 里所有 png/ico/svg/webmanifest 收进预缓存，再开 includeAssets 只会重复登记
-        includeAssets: [],
-        includeManifestIcons: false,
-        strategies: "generateSW",
-        workbox: {
+        injectManifest: {
+          // SW 不压缩：体积无所谓（不进预缓存），但教室里排查「版本没换」时能直接读源码，
+          // 也让 pwa-check 能按名字断言关键逻辑没被删
+          minify: false,
           // 单一架构：全部构建产物进预缓存（带内容版本号），导航回退到预缓存的 index.html。
-          // 更新 = 新 sw.js 原子换入，cleanupOutdatedCaches 清掉旧版本预缓存。
-          // 首页不需要 banner.jpg（只给社交分享用），用 globIgnores 剔出预缓存，省 39KB 首装流量
+          // 首页不需要 banner.jpg（只给社交分享用），剔出预缓存省 39KB 首装流量
           globPatterns: ["**/*.{js,css,html,ico,png,svg,jpg,woff,woff2,ttf}"],
           globIgnores: ["banner.jpg"],
-          navigateFallback: "index.html",
-          clientsClaim: true,
-          skipWaiting: true,
         },
         manifest: {
           id: "/",

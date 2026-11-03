@@ -65,5 +65,8 @@ docker compose logs -f    # 看启动与健康检查
 
 ## 注意
 
-- 旧 Service Worker 缓存不刷新是"部署后看到旧资源"的首因；本项目 SW 已配置 `skipWaiting` + `cleanupOutdatedCaches`，重新打开站点即接管
+- **强制更新机制（2026-11）**：SW 改自写（`injectManifest`，源码 `src/sw.js`）。新版激活时会 `clients.navigate()` **强制重载所有还开着的旧页面**，并 `cleanupOutdatedCaches` 清旧预缓存 —— 教室大屏/PWA 不需要人手动刷新。首次安装不会触发（无旧缓存时才跳过）。
+- 客户端注册带 `updateViaCache: "none"`，`sw.js` 绝不吃浏览器缓存；另外每 10 分钟轮询一次、切回页面或窗口聚焦时立即检查。
+- **CDN 必须让 `/sw.js`、`/index.html`、`/manifest.webmanifest` 不缓存**（源站已回 `no-cache`）。若 CDN 强制 TTL，设备会永远拉不到新 SW —— 这是"换了版还是旧界面"的唯一外部原因。验证：`curl -I https://<站点>/sw.js` 看是否出现 `X-Cache: HIT` 或与你刚部署的 `Last-Modified` 不符。
+- 旧 Service Worker 缓存不刷新是"部署后看到旧资源"的首因；现在由新 SW 主动重载兜底。
 - 部署脚本改动要同时改本仓 `scripts/deploy.sh` 与服务器 `/opt/classworks/bin/deploy.sh`（服务器端由 deploy job 之外的一次性 scp 同步）

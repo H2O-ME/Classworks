@@ -11,9 +11,15 @@ const sw = readFileSync(swPath, "utf8");
 assert.match(sw, /NavigationRoute/, "缺少 navigateFallback 导航回退");
 assert.match(sw, /cleanupOutdatedCaches/, "缺少旧预缓存清理");
 assert.match(sw, /skipWaiting/, "缺少 skipWaiting");
-assert.match(sw, /clientsClaim/, "缺少 clientsClaim");
+assert.match(sw, /clients\.claim/, "缺少 clients.claim（新 SW 要立刻接管旧页面）");
 assert.match(sw, /"index.html"/, "预缓存清单缺少 index.html");
 assert.match(sw, /manifest\.webmanifest/, "预缓存清单缺少 manifest.webmanifest");
+
+// 强制旧设备换新：升级激活后必须主动重载还开着的窗口，否则教室大屏永远跑旧 JS。
+// 这是 injectManifest 自写 SW 的核心目的，回退成 generateSW 或删掉这段就等于放弃强制更新。
+assert.match(sw, /clients\.navigate|\.navigate\(/, "缺少「升级后强制重载旧页面」逻辑（clients.navigate）");
+assert.match(sw, /matchAll\(\{\s*type:\s*"window"\s*\}\)/, "缺少对窗口客户端的枚举（clients.matchAll）");
+assert.ok(!sw.includes("__WB_MANIFEST"), "预缓存清单未注入（还是 self.__WB_MANIFEST 占位符）");
 
 // 不得出现运行时缓存与外挂脚本（旧架构残留，会导致换新版本后仍看到老 UI）。
 // 注意：generateSW 用 define(["./workbox-xxx"]) 加载 workbox 运行时 chunk，属正常；只禁外挂缓存管理器。
@@ -23,7 +29,8 @@ for (const banned of ["scripts-cache", "styles-cache", "images-cache", "pages-ca
 
 // 预缓存里的每个 URL 都不应指向已不存在的文件（precache 404 会导致新 SW 安装失败、旧 SW 永远占坑）
 const distRoot = new URL("../dist/", import.meta.url);
-const entries = [...sw.matchAll(/\{url:"([^"]+)",revision:/g)].map((m) => m[1]);
+// sw.js 不压缩，注入清单是 {"revision":...,"url":"..."} 形式；只取 url 字段即可
+const entries = [...sw.matchAll(/"url":\s*"([^"]+)"/g)].map((m) => m[1]);
 assert.ok(entries.length > 0, "预缓存清单为空");
 for (const url of entries) {
   assert.ok(existsSync(new URL(url, distRoot)), `预缓存文件缺失: ${url}`);
@@ -63,4 +70,14 @@ for (const stale of ["pwa/image/logo.svg", "pwa/image/favicon.ico"]) {
   assert.ok(!existsSync(new URL(stale, distRoot)), `产物里残留已废弃资源: ${stale}`);
 }
 
-console.log(`pwa-check OK: ${entries.length} 个预缓存条目（无重复），架构为纯预缓存 + 导航回退`);
+// 注册侧守卫：sw.js 必须带 updateViaCache:"none"，否则 CDN/浏览器缓存住 sw.js 后
+// 永远发现不了新版本 —— 这是「换了版设备还停在旧版」的另一条根因。
+{
+  const { readdirSync } = await import("node:fs");
+  const assetsDir = new URL("../dist/assets/", import.meta.url);
+  const bundles = readdirSync(assetsDir).filter((name) => name.endsWith(".js"));
+  const hit = bundles.some((name) => readFileSync(new URL(name, assetsDir), "utf8").includes("updateViaCache"));
+  assert.ok(hit, '构建产物里找不到 updateViaCache:"none"（main.js 的 SW 注册被改坏了）');
+}
+
+console.log(`pwa-check OK: ${entries.length} 个预缓存条目（无重复），纯预缓存 + 导航回退 + 升级强制重载`);
