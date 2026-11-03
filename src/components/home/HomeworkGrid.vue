@@ -98,7 +98,9 @@ function measureCards() {
   if (typeof document === "undefined") return;
   const next = {};
   for (const node of document.querySelectorAll(".homework-card[data-key]")) {
-    next[node.dataset.key] = node.offsetHeight;
+    const height = node.offsetHeight;
+    // 布局/字体未就位时会量到 0：0 会让 cardHeight 落回估算值，整版退化成等高切分
+    if (height > 0) next[node.dataset.key] = height;
   }
   // 高度没变就别写 ref，避免测量 → 重排 → 再测量的死循环
   const keys = Object.keys(next);
@@ -132,6 +134,8 @@ function handleResize() {
 onMounted(() => {
   window.addEventListener("resize", handleResize);
   measureCards();
+  // 挂载那一帧布局/字体可能还没稳定：隔两帧再补测一次（有变化才写 ref，不会死循环）
+  requestAnimationFrame(() => requestAnimationFrame(measureCards));
 });
 
 // 内容/字号/视口一变，卡高就变了：量一次再重排列（测量值不变时不会触发更新，不死循环）

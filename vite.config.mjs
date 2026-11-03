@@ -52,8 +52,8 @@ export default defineConfig(({ mode }) => {
           short_name: "Classworks",
           description: "\u8bb0\u5f55\u3001\u67e5\u770b\u5e76\u540c\u6b65\u4f5c\u4e1a",
           lang: "zh-CN",
-          theme_color: "#09090b",
-          background_color: "#09090b",
+          theme_color: "#111111",
+          background_color: "#111111",
           display: "standalone",
           // 带口令启动：PWA 图标点开即为可编辑的白板模式（否则 manifest 的 start_url
           // 只能是裸路径，装出来的图标永远只读，讲台就得另建快捷方式）。

@@ -107,7 +107,6 @@ assert.equal(columnCount(2560), 3);
   const composables = ["useAuth", "useBoard"];
   const pages = [
     "src/pages/index.vue",
-    "src/pages/login.vue",
     "src/pages/settings.vue",
     "src/components/FloatingToolbar.vue",
     "src/components/HomeworkEditDialog.vue",
@@ -186,7 +185,6 @@ assert.equal(columnCount(2560), 3);
     "src/components/HomeworkEditDialog.vue",
     "src/components/AppToast.vue",
     "src/pages/index.vue",
-    "src/pages/login.vue",
   ];
   for (const relative of styled) {
     const source = readFileSync(new URL(`../${relative}`, import.meta.url), "utf8");

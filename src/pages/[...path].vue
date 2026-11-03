@@ -73,7 +73,7 @@ p {
   margin-top: 1.375rem;
 }
 
-/* 原版 v-btn color=primary variant=flat / variant=tonal 的观感 */
+/* 沿用全站按钮观感：实底浅色 / 蓝灰弱化（见 pick-solid 与 SubjectAddCard） */
 .btn-flat,
 .btn-tonal {
   display: inline-flex;
@@ -93,22 +93,22 @@ p {
 }
 
 .btn-flat {
-  background: #2196f3;
-  color: #ffffff;
+  background: #f3f3f3;
+  color: #121212;
 }
 
 .btn-flat:hover {
-  background: #42a5f5;
-  color: #ffffff;
+  background: #ffffff;
+  color: #121212;
 }
 
 .btn-tonal {
-  background: rgba(33, 150, 243, 0.14);
-  color: #90caf9;
+  background: rgba(174, 191, 221, 0.14);
+  color: #aebfdd;
 }
 
 .btn-tonal:hover {
-  background: rgba(33, 150, 243, 0.22);
-  color: #90caf9;
+  background: rgba(174, 191, 221, 0.22);
+  color: #aebfdd;
 }
 </style>

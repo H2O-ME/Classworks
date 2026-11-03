@@ -1,5 +1,5 @@
 // 名单与加权抽签的纯函数（无副作用，便于 `node src/utils/selfcheck.mjs` 直接断言）
-// 与 server/roster.json 是同一份人：那边多带拼音用于建号，前端只点名，不需要拼音。
+// 仅用于点名展示；服务端无账号系统，不再有对应的建号名单。
 const DEFAULT_ROSTER = [
   "邴楷航",
   "常鑫圻",

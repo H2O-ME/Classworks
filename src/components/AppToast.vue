@@ -141,7 +141,7 @@ export default {
 
 .app-toast-action {
   flex: 0 0 auto;
-  min-height: 1.75rem;
+  min-height: 2.4rem;
   padding: 0 0.5625rem;
   border: 1px solid rgba(255, 255, 255, 0.22);
   border-radius: 0.375rem;

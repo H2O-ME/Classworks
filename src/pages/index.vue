@@ -9,11 +9,10 @@
           <div class="date-pill">
             {{ dateLabel }}
           </div>
-          <!-- 身份是标签、入口是按钮：只读时给一个带字的「登录」，不要让用户猜图标 -->
-          <template v-if="signedIn">
+          <template v-if="isBoard">
             <div class="identity-pill">
               <i-mdi-account-circle-outline class="identity-icon" />
-              {{ userLabel }}
+              白板模式
             </div>
             <router-link
               class="settings-button"
@@ -23,14 +22,6 @@
               <i-mdi-cog-outline class="settings-icon" />
             </router-link>
           </template>
-          <router-link
-            v-else
-            class="login-button"
-            to="/login"
-          >
-            <i-mdi-account-arrow-right-outline class="login-icon" />
-            <span>登录</span>
-          </router-link>
         </div>
       </div>
     </header>
@@ -246,7 +237,7 @@ import {
 } from "@/utils/board";
 import { getFontLevel, setFontLevel } from "@/utils/settings";
 
-const { isBoard, user, userLabel, canEdit, refreshIdentity, verifyBoardToken } = useAuth();
+const { isBoard, canEdit, verifyBoardToken } = useAuth();
 const { currentDate, boardData, syncState, hasPending, forbidden, load, saveSubject, retryNow, dispose } =
   useBoard();
 
@@ -263,18 +254,21 @@ const {
 } = useRollCall();
 
 const saveTimer = ref(null);
-const todayKey = formatDateKey(new Date());
+const todayKey = ref(formatDateKey(new Date()));
 const ready = ref(false);
+// 大屏常驻跨零点：todayKey 冻在启动时刻会把「复制到今天」指到昨天，每分钟校正一次
+const todayTimer = setInterval(() => {
+  todayKey.value = formatDateKey(new Date());
+}, 60000);
 
 const gridItems = computed(() => toGridItems(boardData.value));
 const unusedList = computed(() => unusedSubjects(gridItems.value));
-// 当前身份可写的科目：白板/管理员=6 科，课代表=1 科，同学=0 科
+// 当前身份可写的科目：口令验证通过 = 6 科，否则 0 科
 const editableSubjectNames = computed(() => SUBJECTS.filter((name) => canEdit(name)));
 const editableSubjects = computed(() => getDefaultSubjects().filter((subject) => canEdit(subject.name)));
-// 「复制到今天」会重写全部 6 科，只有白板和管理员能做
-const canEditAll = computed(() => isBoard.value || user.value?.role === "admin");
-const signedIn = computed(() => isBoard.value || Boolean(user.value));
-const isToday = computed(() => currentDate.value === todayKey);
+// 「复制到今天」会重写全部 6 科，只有白板口令能做
+const canEditAll = isBoard;
+const isToday = computed(() => currentDate.value === todayKey.value);
 const dateLabel = computed(() => formatDateLabel(currentDate.value));
 const weekdayLabel = computed(() => ["日", "一", "二", "三", "四", "五", "六"][parseDateArg(currentDate.value).getDay()]);
 const titleText = computed(() => (isToday.value ? "今天的作业" : `${dateLabel.value} 的作业`));
@@ -315,6 +309,14 @@ function onToastAction() {
   handler?.();
 }
 
+// 口令验证是进页面时的一次性请求：断网时验不了会一直只读，联网后补验
+function reverifyBoardToken() {
+  verifyBoardToken().then((status) => {
+    // 口令被拒要明说：否则讲台看到全灰只会以为板子坏了，以为是网络问题
+    if (status === "invalid") flash("白板口令不对，当前是只读模式。请检查快捷方式里的 ?key= 参数", { persistent: true });
+  });
+}
+
 // 离线/失败时给一条常驻可重试提示，恢复后自动消失；没有本地改动则只提示连不上
 watch(syncState, (state) => {
   if (state === "offline" || state === "error") {
@@ -327,8 +329,10 @@ watch(syncState, (state) => {
     } else {
       flash(state === "offline" ? "连不上后端，当前显示本地缓存" : "同步失败");
     }
-  } else if (toast.persistent) {
-    toast.show = false;
+  } else {
+    if (toast.persistent) toast.show = false;
+    // 同步恢复说明网络通了：还没验过口令就补验一次，别让大屏永远只读
+    if (state === "idle" && !isBoard.value) reverifyBoardToken();
   }
 });
 
@@ -361,7 +365,7 @@ async function handleSave(payload) {
     saveTimer.value = setTimeout(() => (flashKeys.value = []), 1000);
     flash("已保存");
   } else if (result.unauthorized) {
-    flash("登录已过期，改动只留在本机，请重新登录", { persistent: true });
+    flash("口令无效，改动只留在本机。请检查快捷方式里的 ?key= 参数", { persistent: true });
   }
 }
 
@@ -372,7 +376,7 @@ async function confirmCopyToToday() {
   copying.value = true;
   const source = { ...boardData.value };
   try {
-    await load(todayKey);
+    await load(todayKey.value);
     for (const subject of SUBJECTS) {
       const target = source[subject] || "";
       if ((boardData.value[subject] || "") === target) continue;
@@ -399,14 +403,9 @@ let previousTitle = null;
 onMounted(async () => {
   previousTitle = document.title;
   document.title = "作业看板";
-  // 身份校正与拉数据并行：不阻塞首屏，角色改过时 canEdit 会自己跟着变
-  refreshIdentity();
   // 白板口令必须后端确认后才解锁编辑（?key=see 这类手误不能假可写）
-  verifyBoardToken().then((status) => {
-    // 口令被拒要明说：否则讲台看到全灰只会以为板子坏了，以为是网络问题
-    if (status === "invalid") flash("白板口令不对，当前是只读模式。请检查快捷方式里的 ?key= 参数", { persistent: true });
-  });
-  const requested = formatDateKey(parseDateArg(new URLSearchParams(window.location.search).get("date") || todayKey));
+  reverifyBoardToken();
+  const requested = formatDateKey(parseDateArg(new URLSearchParams(window.location.search).get("date") || todayKey.value));
   // load 的同步前缀先把本地缓存填进 boardData：命中缓存就立刻出内容，没有才等第一次 GET
   const pending = load(requested);
   ready.value = Object.keys(boardData.value).length > 0;
@@ -417,6 +416,7 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   document.title = previousTitle;
   clearTimeout(saveTimer.value);
+  clearInterval(todayTimer);
   dispose();
   closeRollCall();
 });
@@ -434,7 +434,7 @@ onBeforeUnmount(() => {
   font-weight: 600;
 }
 
-/* 当前身份：白板/管理员/课代表/同学，一眼看出这台机器现在能改什么 */
+/* 当前身份：白板口令验证通过时一眼看出这台机器能改什么 */
 .identity-pill {
   display: inline-flex;
   flex: 0 0 auto;
@@ -454,43 +454,10 @@ onBeforeUnmount(() => {
   height: 0.9375rem;
 }
 
-/* 未登录时的入口：带文字的实心按钮，比一个箭头图标直观得多 */
-.login-button {
-  display: inline-flex;
-  min-height: 2.25rem;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 0.375rem;
-  padding: 0 0.875rem;
-  border: 1px solid rgba(174, 191, 221, 0.32);
-  border-radius: 0.5rem;
-  background: rgba(174, 191, 221, 0.14);
-  color: #eaf0f8;
-  font-size: 0.8125rem;
-  font-weight: 700;
-  text-decoration: none;
-  transition:
-    transform 180ms ease,
-    border-color 180ms ease,
-    background-color 180ms ease;
-}
-
-.login-button:hover {
-  transform: translateY(-1px);
-  border-color: rgba(174, 191, 221, 0.55);
-  background: rgba(174, 191, 221, 0.22);
-  color: #ffffff;
-}
-
-.login-icon {
-  width: 1.0625rem;
-  height: 1.0625rem;
-}
-
 .settings-button {
   display: inline-flex;
-  width: 2.25rem;
-  height: 2.25rem;
+  width: 2.4rem;
+  height: 2.4rem;
   align-items: center;
   justify-content: center;
   border: 1px solid rgba(255, 255, 255, 0.08);

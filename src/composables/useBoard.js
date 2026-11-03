@@ -24,8 +24,34 @@ function writeCache(date, state) {
   }
 }
 
+// 待发队列落盘：只存内存的话，切页/刷新就把「已暂存」的改动弄丢
+const PENDING_KEY = "classworks:pending";
+
+const pendingKey = (entry) => `${entry.date}|${entry.subject}`;
+
+function readPendingQueue() {
+  try {
+    const list = JSON.parse(window.localStorage.getItem(PENDING_KEY) || "[]");
+    if (!Array.isArray(list)) return [];
+    return list.filter(
+      (entry) => entry && typeof entry.date === "string" && typeof entry.subject === "string" && typeof entry.content === "string",
+    );
+  } catch {
+    return [];
+  }
+}
+
+function writePendingQueue(entries) {
+  try {
+    window.localStorage.setItem(PENDING_KEY, JSON.stringify(entries));
+  } catch (error) {
+    // 配额满：队列留在内存里继续重试，只是刷新后会丢（与旧行为一致）
+    console.warn("保存待发队列失败:", error);
+  }
+}
+
 export function useBoard() {
-  const { token, boardToken, revokeBoardToken } = useAuth();
+  const { token, revokeBoardToken } = useAuth();
 
   const currentDate = ref(formatDateKey(new Date()));
   const boardData = shallowRef({});
@@ -33,12 +59,16 @@ export function useBoard() {
   const syncState = ref("idle");
   const forbidden = ref("");
 
-  // 重试队列按学科去重：同一科反复保存只保留最后一次内容
+  // 重试队列按「日期|学科」去重：同科跨日期是两条不同改动，不能互相覆盖
   const pending = reactive(new Map());
   let timer = null;
   let tries = 0;
 
   const hasPending = computed(() => pending.size > 0);
+
+  // 上次会话遗留的待发改动捞回来继续重试，别静默丢
+  for (const entry of readPendingQueue()) pending.set(pendingKey(entry), entry);
+  if (pending.size) scheduleRetry();
 
   function replaceState(next) {
     boardData.value = next.board;
@@ -86,8 +116,7 @@ export function useBoard() {
         date: entry.date,
         subject: entry.subject,
         content: entry.content,
-        token: token.value,
-        boardToken: boardToken.value,
+        boardToken: token.value,
       });
       if (entry.date === currentDate.value) {
         boardData.value = { ...boardData.value, [entry.subject]: result?.content ?? entry.content };
@@ -97,6 +126,8 @@ export function useBoard() {
         };
         persistCache();
       }
+      // 同步成功就撤掉队列里的同一条：别让恢复出来的旧稿把刚保存的内容盖回去
+      if (pending.delete(pendingKey(entry))) writePendingQueue([...pending.values()]);
       syncState.value = "idle";
       forbidden.value = "";
       return { ok: true };
@@ -109,7 +140,7 @@ export function useBoard() {
       }
       if (error.status === 401) {
         syncState.value = "error";
-        // 白板口令被服务端否掉：立刻降级只读，别让 UI 继续假装能改
+        // 口令被服务端否掉：立刻降级只读，别让 UI 继续假装能改
         revokeBoardToken();
         return { ok: false, unauthorized: true, message: error.message };
       }
@@ -120,7 +151,8 @@ export function useBoard() {
   }
 
   function enqueue(entry) {
-    pending.set(entry.subject, entry);
+    pending.set(pendingKey(entry), entry);
+    writePendingQueue([...pending.values()]);
     scheduleRetry();
   }
 
@@ -135,10 +167,11 @@ export function useBoard() {
       for (const entry of entries) {
         const result = await submit(entry);
         if (result.retry) {
-          pending.set(entry.subject, entry);
+          pending.set(pendingKey(entry), entry);
           stillFailing = true;
         }
       }
+      writePendingQueue([...pending.values()]);
       if (!stillFailing) {
         tries = 0;
         return;

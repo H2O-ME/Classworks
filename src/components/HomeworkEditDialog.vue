@@ -270,9 +270,9 @@ onBeforeUnmount(() => {
 }
 
 .dialog-header .dialog-close {
-  width: 2rem;
-  height: 2rem;
-  min-width: 2rem;
+  width: 2.4rem;
+  height: 2.4rem;
+  min-width: 2.4rem;
   flex: 0 0 auto;
   padding: 0;
   border: 0;
@@ -354,7 +354,7 @@ onBeforeUnmount(() => {
   height: auto;
   align-items: center;
   gap: 0.375rem;
-  min-height: 2rem;
+  min-height: 2.4rem;
   padding: 0 0.75rem;
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 0.5rem;

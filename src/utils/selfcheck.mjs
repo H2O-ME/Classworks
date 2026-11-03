@@ -6,7 +6,6 @@ import {
   formatDateKey,
   getFontSize,
   resolveEditPermission,
-  roleLabel,
   shiftDate,
   toGridItems,
   unusedSubjects,
@@ -48,24 +47,13 @@ check("字号下限", getFontSize(-99) === 12);
 check("字号上限", getFontSize(99) === 40);
 check("字号基准", getFontSize(0) === 16);
 
-// ── 权限矩阵：4 种身份 × 6 科的写入判定 ──
+// ── 权限矩阵：口令验证通过 = 全科可写，否则只读 ──
 {
-  const board = { isBoard: true, user: null };
-  const admin = { isBoard: false, user: { role: "admin", subject: null } };
-  const repMath = { isBoard: false, user: { role: "rep", subject: "数学" } };
-  const student = { isBoard: false, user: { role: "student", subject: null } };
-  const anon = { isBoard: false, user: null };
+  const board = { isBoard: true };
+  const anon = { isBoard: false };
 
-  check("白板：全科可写", SUBJECTS.every((subject) => resolveEditPermission(board, subject)));
-  check("管理员：全科可写", SUBJECTS.every((subject) => resolveEditPermission(admin, subject)));
-  check("课代表：仅绑定科目可写", resolveEditPermission(repMath, "数学") && !resolveEditPermission(repMath, "语文"));
-  check("普通同学：全科只读", SUBJECTS.every((subject) => !resolveEditPermission(student, subject)));
-  check("未登录：全科只读", SUBJECTS.every((subject) => !resolveEditPermission(anon, subject)));
-  // 白板令牌存在时即使带着学生身份也必须全放：讲台电脑不该被登录态锁住
-  check("白板优先于登录身份", resolveEditPermission({ isBoard: true, user: student.user }, "地理"));
-
-  check("身份文案：课代表带科目", roleLabel({ role: "rep", subject: "物理" }) === "课代表 · 物理");
-  check("身份文案：未登录", roleLabel(null) === "未登录");
+  check("口令通过：全科可写", SUBJECTS.every((subject) => resolveEditPermission(board, subject)));
+  check("口令缺失/未验证：全科只读", SUBJECTS.every((subject) => !resolveEditPermission(anon, subject)));
 }
 
 // ── 加权抽签：weight=0 的名字永远抽不中，且不连续重复 ──

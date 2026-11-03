@@ -1,36 +1,19 @@
 // Classworks 后端：Hono + SQLite(WAL)。接口见 README.md。
 //
 // 权限模型（详见 README「权限矩阵」）：
-//   希沃白板 → URL 带 board_token，换取 X-Board-Token，全科可写，无登录
-//   管理员   → 全科可写
-//   课代表   → 只有绑定科目可写
-//   普通同学 → 只读
+//   希沃白板 → URL 带 key，换 X-Board-Token，全科可写
+//   其他人   → 只读（读接口公开）
 import { Hono } from 'hono'
 import type { Context } from 'hono'
 import { cors } from 'hono/cors'
 import { serve } from '@hono/node-server'
 import { timingSafeEqual } from 'node:crypto'
-import {
-  JWT_SECRET_IS_EPHEMERAL,
-  SUBJECTS,
-  hashPassword,
-  openDb,
-  publicUser,
-  signToken,
-  today,
-  verifyPassword,
-  verifyToken,
-  type UserRow,
-} from './core.js'
+import { SUBJECTS, openDb, today } from './core.js'
 
 const PORT = Number(process.env.PORT) || 3100
 const BOARD_TOKEN = process.env.BOARD_TOKEN ?? ''
 // 逗号分隔；`*` 表示任意源。
 const ORIGINS = (process.env.CORS_ORIGINS ?? '*').split(',').map((s) => s.trim()).filter(Boolean)
-
-// 正式业务 token 30 天：课代表在手机上填一次就不用再管；首登改密的临时 token 只活 10 分钟。
-const ACCESS_TTL = 30 * 24 * 3600
-const TEMP_TTL = 600
 
 const db = openDb()
 const qBoard = db.prepare('SELECT subject, content, updated_at FROM homeworks WHERE date = ?')
@@ -38,11 +21,8 @@ const qGet = db.prepare('SELECT content, updated_at FROM homeworks WHERE date = 
 const qUpsert = db.prepare(`
   INSERT INTO homeworks (date, subject, content, updated_at) VALUES (?, ?, ?, ?)
   ON CONFLICT (date, subject) DO UPDATE SET content = excluded.content, updated_at = excluded.updated_at`)
-const qUserByName = db.prepare('SELECT * FROM users WHERE username = ?')
-const qUserById = db.prepare('SELECT * FROM users WHERE id = ?')
-const qSetPassword = db.prepare('UPDATE users SET password_hash = ?, is_activated = 1 WHERE id = ?')
 
-const MAX = { subject: 16, content: 20000, username: 64, password: 128 }
+const MAX = { subject: 16, content: 20000 }
 
 // 信任边界：所有字段都在这里过一遍，非法返回 400。needSubject 只有写接口需要。
 function parse(input: Record<string, unknown>, needSubject = false) {
@@ -66,10 +46,8 @@ function safeEqual(provided: string, expected: string) {
 // 那台机器只跑一个容器，够用；真要扩多实例就换成 Redis 计数。
 const WINDOW_MS = 60_000
 const SAVE_LIMIT = 30
-// 全班都在学校 NAT 后面，出门 IP 是同一个：按 IP 卡登录次数会把整个班一起锁死。
-// 所以登录的正确维度是「账号」—— 每个账号每分钟最多错 5 次；IP 只留一个很松的兜底防乱刷。
-const LOGIN_FAIL_LIMIT = 5
-const LOGIN_IP_LIMIT = 120
+// 口令校验也要限流：这里不限，猜口令就没有成本
+const AUTH_LIMIT = 20
 const hits = new Map<string, { count: number; resetAt: number }>()
 
 // nginx 反代后 socket 地址恒为 127.0.0.1，必须取 X-Real-IP；直连兜底用 socket
@@ -93,11 +71,6 @@ function overLimit(key: string, limit: number) {
   return hit.count > limit
 }
 
-// 只看不记：已经错够次数就直接挡，不必再验一次密码
-function alreadyOver(key: string, limit: number) {
-  return bucket(key).count >= limit
-}
-
 // 内存计数不该无限增长：顺手清掉过期窗口。每 1000 次调用扫一遍，成本可忽略。
 let sweeps = 0
 function sweepHits() {
@@ -106,27 +79,12 @@ function sweepHits() {
   for (const [key, hit] of hits) if (now >= hit.resetAt) hits.delete(key)
 }
 
-function bearer(c: Context) {
-  const header = c.req.header('Authorization') ?? ''
-  return /^Bearer\s+(.+)$/i.exec(header)?.[1]?.trim()
-}
+type Verdict = { ok: true } | { ok: false; status: 401; error: string }
 
-// token 只带 userId：角色和科目每次回库读，改了权限立刻生效，不用等 30 天过期
-function currentUser(c: Context): UserRow | undefined {
-  const userId = verifyToken(bearer(c))
-  return userId === null ? undefined : (qUserById.get(userId) as UserRow | undefined)
-}
-
-type Verdict = { ok: true; user?: UserRow } | { ok: false; status: 401 | 403; error: string }
-
-function authorize(c: Context, subject: string): Verdict {
+function authorize(c: Context): Verdict {
   const boardToken = c.req.header('X-Board-Token')
   if (BOARD_TOKEN && boardToken && safeEqual(boardToken, BOARD_TOKEN)) return { ok: true }
-  const user = currentUser(c)
-  if (!user) return { ok: false, status: 401, error: '未登录或登录已过期' }
-  if (user.role === 'admin') return { ok: true, user }
-  if (user.role === 'rep' && user.subject === subject) return { ok: true, user }
-  return { ok: false, status: 403, error: `没有「${subject}」的写入权限` }
+  return { ok: false, status: 401, error: '缺少有效的写入口令' }
 }
 
 const app = new Hono()
@@ -136,76 +94,22 @@ app.use(
   cors({
     origin: ORIGINS.includes('*') ? '*' : (o) => (o && ORIGINS.includes(o) ? o : undefined),
     allowMethods: ['GET', 'POST', 'OPTIONS'],
-    allowHeaders: ['Content-Type', 'Authorization', 'X-Board-Token'],
+    allowHeaders: ['Content-Type', 'X-Board-Token'],
     maxAge: 86400,
   }),
 )
 
 app.get('/api/health', (c) => c.json({ ok: true }))
 
-// ── 登录 ──
-app.post('/api/auth/login', async (c) => {
-  sweepHits()
-  // IP 兜底很松（全班共用出口 IP），真正的防撞库按账号算
-  if (overLimit(`login-ip|${clientIp(c)}`, LOGIN_IP_LIMIT)) {
-    c.header('Retry-After', String(WINDOW_MS / 1000))
-    return c.json({ error: '尝试过于频繁，请稍后再试' }, 429)
-  }
-
-  const body = await c.req.json().catch(() => null)
-  const input = body && typeof body === 'object' ? (body as Record<string, unknown>) : null
-  const username = typeof input?.username === 'string' ? input.username.trim().toLowerCase() : ''
-  const password = typeof input?.password === 'string' ? input.password : ''
-  if (!username || !password) return c.json({ error: '请输入账号和密码' }, 400)
-  if (username.length > MAX.username || password.length > MAX.password) return c.json({ error: '账号或密码过长' }, 400)
-
-  const failKey = `login-fail|${username}`
-  if (alreadyOver(failKey, LOGIN_FAIL_LIMIT)) {
-    c.header('Retry-After', String(WINDOW_MS / 1000))
-    return c.json({ error: '密码错误次数过多，请等一分钟再试' }, 429)
-  }
-
-  const user = qUserByName.get(username) as UserRow | undefined
-  // 账号不存在与密码错误给同一个 401：不让人枚举出班里谁注册了
-  if (!user || !verifyPassword(password, user.password_hash)) {
-    overLimit(failKey, LOGIN_FAIL_LIMIT)
-    return c.json({ error: '账号或密码不对' }, 401)
-  }
-
-  if (!user.is_activated) {
-    return c.json({ status: 'REQUIRE_NEW_PASSWORD', tempToken: signToken(user.id, TEMP_TTL), realName: user.real_name })
-  }
-  return c.json({ status: 'SUCCESS', token: signToken(user.id, ACCESS_TTL), user: publicUser(user) })
-})
-
-// ── 首登改密激活 ──
-app.post('/api/auth/activate', async (c) => {
-  const userId = verifyToken(bearer(c))
-  const user = userId === null ? undefined : (qUserById.get(userId) as UserRow | undefined)
-  if (!user) return c.json({ error: '激活凭证无效或已过期' }, 401)
-
-  const body = await c.req.json().catch(() => null)
-  const newPassword = typeof (body as Record<string, unknown> | null)?.newPassword === 'string'
-    ? String((body as Record<string, unknown>).newPassword)
-    : ''
-  if (newPassword.length < 6 || newPassword.length > MAX.password) return c.json({ error: '密码长度需 6–128 位' }, 400)
-
-  qSetPassword.run(hashPassword(newPassword), user.id)
-  return c.json({ status: 'SUCCESS', token: signToken(user.id, ACCESS_TTL), user: publicUser({ ...user, is_activated: 1 }) })
-})
-
-// 前端刷新页面时用它校正身份（角色/科目被管理员改过也能立刻反映）
-app.get('/api/auth/me', (c) => {
-  const user = currentUser(c)
-  if (!user) return c.json({ error: '未登录或登录已过期' }, 401)
-  c.header('Cache-Control', 'no-store, no-cache')
-  return c.json({ user: publicUser(user) })
-})
-
 // 白板口令校验：前端绝不能凭「URL 里有个 key」就解锁全科编辑。
 // 地址栏截断/手误（?key=see）会让 UI 假可写 —— 写接口本来就拒，但画面已经乐观改过了，
 // 用户会以为存上了。所以进页面必须先问后端这个口令到底对不对。
 app.get('/api/auth/board', (c) => {
+  sweepHits()
+  if (overLimit(`auth|${clientIp(c)}`, AUTH_LIMIT)) {
+    c.header('Retry-After', String(WINDOW_MS / 1000))
+    return c.json({ error: '尝试过于频繁，请稍后再试' }, 429)
+  }
   const provided = c.req.header('X-Board-Token')
   if (!BOARD_TOKEN || !provided || !safeEqual(provided, BOARD_TOKEN)) {
     return c.json({ error: '白板口令无效' }, 401)
@@ -226,7 +130,7 @@ app.get('/api/board', (c) => {
   return c.json({ date: parsed.date, subjects })
 })
 
-// ── 写：白板令牌 / 管理员全科，课代表本科，其余 403 ──
+// ── 写：只有白板口令，其余 401 ──
 app.post('/api/board/save', async (c) => {
   const body = await c.req.json().catch(() => null)
   if (!body || typeof body !== 'object') return c.json({ error: '请求体非法' }, 400)
@@ -234,8 +138,7 @@ app.post('/api/board/save', async (c) => {
   if ('error' in parsed) return c.json({ error: parsed.error }, 400)
   const { date, subject, content } = parsed
 
-  const verdict = authorize(c, subject)
-  if (!verdict.ok) return c.json({ error: verdict.error }, verdict.status)
+  if (!authorize(c).ok) return c.json({ error: '缺少有效的写入口令' }, 401)
 
   sweepHits()
   if (overLimit(`save|${clientIp(c)}`, SAVE_LIMIT)) {
@@ -258,6 +161,5 @@ app.onError((err, c) => {
   return c.json({ error: '服务器内部错误' }, 500)
 })
 
-if (!BOARD_TOKEN) console.warn('BOARD_TOKEN 未设置：希沃白板无法写入，只有登录账号能改')
-if (JWT_SECRET_IS_EPHEMERAL) console.warn('JWT_SECRET 未设置：本次启动随机生成，重启后所有人需要重新登录')
+if (!BOARD_TOKEN) console.warn('BOARD_TOKEN 未设置：所有人只读，白板也无法写入')
 serve({ fetch: app.fetch, port: PORT }, (info) => console.log(`Classworks 后端已启动 :${info.port}（DB ${process.env.DB_PATH || 'data/db.sqlite'}）`))

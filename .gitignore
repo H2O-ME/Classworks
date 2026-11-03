@@ -2,6 +2,8 @@
 node_modules
 /dist
 /dev-dist
+# 本地起后端验证时误在根目录生成的 SQLite（真数据在 server/data，已被 server/.gitignore 覆盖）
+/data/
 
 # local env files
 .env.local

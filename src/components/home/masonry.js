@@ -43,7 +43,11 @@ export function distribute(items, count, heightOf, gap = COLUMN_GAP_PX) {
     for (let i = c; i <= n; i += 1) {
       for (let j = c - 1; j < i; j += 1) {
         const worst = Math.max(dp[c - 1][j], spanHeight(j, i));
-        if (worst < dp[c][i]) {
+        // 最高列打平时偏好「末段更矮」的切点：前面的列装得更满，避免某列只剩一张孤卡
+        const better =
+          worst < dp[c][i] ||
+          (worst !== Infinity && worst === dp[c][i] && spanHeight(j, i) < spanHeight(cut[c][i], i));
+        if (better) {
           dp[c][i] = worst;
           cut[c][i] = j;
         }
