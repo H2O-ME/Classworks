@@ -63,6 +63,27 @@ docker compose logs -f    # 看启动与健康检查
 - 访问 `https://<站点>/`（不带 key）验证只读
 - 希沃白板把带 `key` 的地址存成桌面快捷方式，开机即可用（令牌读出后自动从地址栏抹除）
 
+## 四、讲台 Windows 快捷方式（= 轻量「客户端」）
+
+教室电脑（希沃白板，Windows）上用 `win/install.cmd` 一次生成桌面快捷方式：
+
+```powershell
+# 默认线上地址 + seewo 口令，生成桌面快捷方式
+win\install.cmd
+
+# 同时加入开机启动
+win\install.cmd -Startup
+
+# 换地址/口令
+win\install.cmd -Url https://example.com -Key <BOARD_TOKEN>
+```
+
+它用 Edge/Chrome 的 `--app=` 应用窗口模式打开看板 —— 没有地址栏、没有标签栏，看起来就是一个独立客户端，但**业务仍加载线上网页**，所以发版后客户端自动就是新版，不需要重新打包分发。
+
+- 冰点还原：把 `win/` 目录放非还原分区，每天还原后双击 `install.cmd` 重建；配合 `-Startup` 也能省一步。
+- 需要真正离线、全屏锁定、托盘常驻时，才考虑做原生薄壳（Tauri + 只加载远程 URL），见下方说明。
+- 需要正式安装的 PWA：浏览器地址栏右侧「安装」按钮，图标由 `public/pwa/icon.svg` 生成。
+
 ## 注意
 
 - **强制更新机制（2026-11）**：SW 改自写（`injectManifest`，源码 `src/sw.js`）。新版激活时会 `clients.navigate()` **强制重载所有还开着的旧页面**，并 `cleanupOutdatedCaches` 清旧预缓存 —— 教室大屏/PWA 不需要人手动刷新。首次安装不会触发（无旧缓存时才跳过）。
