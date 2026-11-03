@@ -12,7 +12,8 @@ concurrency:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}-server
+  # GHCR 镜像名必须全小写，不能用 github.repository（含大写）
+  IMAGE_NAME: h2o-me/classworks-server
 
 jobs:
   backend:
