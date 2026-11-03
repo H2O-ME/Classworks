@@ -5,6 +5,7 @@ import {
   boardFromApi,
   formatDateKey,
   getFontSize,
+  mergeRemote,
   resolveEditPermission,
   shiftDate,
   toGridItems,
@@ -77,6 +78,47 @@ check("空名单返回 -1", pickRandomIndex([]) === -1);
 check("首次重试 3s", retryDelay(0) === 3000 && retryDelay(1) === 3000);
 check("第二次 6s", retryDelay(2) === 6000);
 check("封顶 60s", retryDelay(20) === 60000);
+
+// ── 多设备轮询合并：远端更新才采纳，待发科不动，远端清空要跟进 ──
+{
+  const dateKey = "20261104|";
+  const base = { local: { 语文: "旧", 数学: "甲" }, localAt: { 语文: 100, 数学: 100 } };
+
+  // 远端更新语文 → 采纳
+  const r1 = mergeRemote({ ...base, remote: { 语文: "新" }, remoteAt: { 语文: 200 }, pendingKeys: [], dateKey });
+  check("轮询: 远端更新的科被采纳", r1?.board.语文 === "新" && r1.updatedAtMap.语文 === 200);
+  check("轮询: 无 pending 时数学保留", r1?.board.数学 === "甲");
+
+  // 语文有待发改动 → 唯一的远端变化被跳过，整体无变化返回 null（不动 board）
+  const r2 = mergeRemote({ ...base, remote: { 语文: "远端" }, remoteAt: { 语文: 200 }, pendingKeys: ["20261104|语文"], dateKey });
+  check("轮询: 待发的科不被远端覆盖（整体无变化返回 null）", r2 === null);
+
+  // 待发科跳过、其余科照常合并
+  const r2b = mergeRemote({
+    local: { 语文: "旧", 数学: "甲" },
+    localAt: { 语文: 100, 数学: 100 },
+    remote: { 语文: "远端", 数学: "乙" },
+    remoteAt: { 语文: 200, 数学: 200 },
+    pendingKeys: ["20261104|语文"],
+    dateKey,
+  });
+  check("轮询: 待发科跳过但其他科照常采纳", r2b?.board.语文 === "旧" && r2b.board.数学 === "乙");
+
+  // 远端时间戳更旧 → 不动，且无变化返回 null
+  const r3 = mergeRemote({ ...base, remote: { 语文: "远端" }, remoteAt: { 语文: 50 }, pendingKeys: [], dateKey });
+  check("轮询: 远端更旧不覆盖且无变化返回 null", r3 === null);
+
+  // 远端清空数学（remote 无、远端时间戳更大）→ 跟进删除
+  const r4 = mergeRemote({
+    local: { 语文: "旧", 数学: "甲" },
+    localAt: { 语文: 100, 数学: 100 },
+    remote: { 语文: "旧" },
+    remoteAt: { 语文: 100, 数学: 300 },
+    pendingKeys: [],
+    dateKey,
+  });
+  check("轮询: 远端清空的科被跟进删除", r4 && !("数学" in r4.board) && r4.board.语文 === "旧");
+}
 
 // ── 时间显示：毫秒与秒级时间戳都能格式化 ──
 check("毫秒时间戳", /^\d{2}-\d{2} \d{2}:\d{2}$/.test(formatTime(1_700_000_000_000)));

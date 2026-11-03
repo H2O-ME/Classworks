@@ -1,6 +1,6 @@
 import { computed, reactive, ref, shallowRef } from "vue";
 import { getBoard, retryDelay, RETRY_MAX_TRIES, saveSubject as postSubject } from "@/api/board";
-import { boardFromApi, formatDateKey } from "@/utils/board";
+import { boardFromApi, formatDateKey, mergeRemote } from "@/utils/board";
 import { useAuth } from "./useAuth";
 
 const CACHE_PREFIX = "classworks:board:";
@@ -214,9 +214,67 @@ export function useBoard() {
     if (pending.size) scheduleRetry();
   }
 
+  // ── 多设备同步：定时静默拉取当前日期，远端更新了就换上 ──
+  // EdgeOne 时代 sync.js 的能力（60s 定时拉取 + 切回页面立即同步）在架构迁移时丢了，这里按新后端补回。
+  // 合并语义：学科级 updatedAt 比对，只接受远端更新的科；本地有待发改动的科一律不动（内容还没落库）。
+  const POLL_MS = 30000;
+  let pollTimer = null;
+  let onRemoteChange = null;
+
+  function setOnRemoteChange(fn) {
+    onRemoteChange = fn;
+  }
+
+  function startPolling() {
+    if (pollTimer || typeof document === "undefined") return;
+    // 后台标签页 setInterval 会被浏览器节流：切回页面时立即补一次
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("focus", onVisibility);
+    pollTimer = setInterval(poll, POLL_MS);
+  }
+
+  function stopPolling() {
+    if (typeof document !== "undefined") document.removeEventListener("visibilitychange", onVisibility);
+    if (typeof window !== "undefined") window.removeEventListener("focus", onVisibility);
+    clearInterval(pollTimer);
+    pollTimer = null;
+  }
+
+  function onVisibility() {
+    if (document.visibilityState === "visible") poll();
+  }
+
+  async function poll() {
+    if (document.visibilityState !== "visible") return;
+    const date = currentDate.value;
+    try {
+      const data = await getBoard(date);
+      // 期间切了日期，晚到的响应不覆盖当前视图
+      if (date !== currentDate.value) return;
+      const next = boardFromApi(data?.subjects);
+      const merged = mergeRemote({
+        local: boardData.value,
+        localAt: updatedAtMap.value,
+        remote: next.board,
+        remoteAt: next.updatedAtMap,
+        pendingKeys: [...pending.keys()],
+        dateKey: pendingKey({ date, subject: "" }),
+      });
+      if (merged) {
+        boardData.value = merged.board;
+        updatedAtMap.value = merged.updatedAtMap;
+        persistCache();
+        onRemoteChange?.();
+      }
+    } catch {
+      // 轮询失败静默：离线提示由 load/submit 链路负责，不该每次失败都弹 toast
+    }
+  }
+
   function dispose() {
     clearTimeout(timer);
     timer = null;
+    stopPolling();
   }
 
   return {
@@ -228,6 +286,9 @@ export function useBoard() {
     load,
     saveSubject,
     retryNow,
+    startPolling,
+    stopPolling,
+    setOnRemoteChange,
     dispose,
   };
 }

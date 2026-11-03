@@ -238,8 +238,19 @@ import {
 import { getFontLevel, setFontLevel } from "@/utils/settings";
 
 const { isBoard, canEdit, verifyBoardToken } = useAuth();
-const { currentDate, boardData, syncState, hasPending, forbidden, load, saveSubject, retryNow, dispose } =
-  useBoard();
+const {
+  currentDate,
+  boardData,
+  syncState,
+  hasPending,
+  forbidden,
+  load,
+  saveSubject,
+  retryNow,
+  startPolling,
+  setOnRemoteChange,
+  dispose,
+} = useBoard();
 
 const {
   visible: rollVisible,
@@ -411,6 +422,9 @@ onMounted(async () => {
   ready.value = Object.keys(boardData.value).length > 0;
   await pending;
   ready.value = true;
+  // 多设备同步：定时静默拉取（EdgeOne 时代 sync.js 的能力，架构迁移时丢了，这里补回）
+  setOnRemoteChange(() => flash("其他设备更新了作业，已同步", { icon: "mdi-cloud-sync-outline" }));
+  startPolling();
 });
 
 onBeforeUnmount(() => {

@@ -81,3 +81,33 @@ export function formatDateLabel(dateKey) {
 export function resolveEditPermission({ isBoard }) {
   return Boolean(isBoard);
 }
+
+// ── 多设备轮询合并（纯函数，selfcheck 直接断言）──
+// 逐科比对 updatedAt，只接受远端更新的科；本地有待发改动（pendingKeys 命中）的科一律不动。
+// 远端清空的科（remote 缺失且远端时间戳 > 本地）也要跟进删除。
+// 无变化返回 null，调用方跳过赋值。dateKey 是 pending 队列键的「日期|」前缀。
+export function mergeRemote({ local, localAt, remote, remoteAt, pendingKeys, dateKey }) {
+  const pendingSet = new Set(pendingKeys);
+  const board = { ...local };
+  const stamps = { ...localAt };
+  let changed = false;
+
+  for (const subject of Object.keys(remote)) {
+    if (pendingSet.has(`${dateKey}${subject}`)) continue;
+    if ((remoteAt[subject] || 0) > (localAt[subject] || 0) && remote[subject] !== local[subject]) {
+      board[subject] = remote[subject];
+      stamps[subject] = remoteAt[subject] || 0;
+      changed = true;
+    }
+  }
+  // 远端清空的科：boardFromApi 已丢弃空内容，remote 缺失即被清空
+  for (const subject of Object.keys(local)) {
+    if (subject in remote || pendingSet.has(`${dateKey}${subject}`)) continue;
+    if ((remoteAt[subject] || 0) > (localAt[subject] || 0)) {
+      delete board[subject];
+      delete stamps[subject];
+      changed = true;
+    }
+  }
+  return changed ? { board, updatedAtMap: stamps } : null;
+}
