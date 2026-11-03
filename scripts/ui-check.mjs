@@ -2,7 +2,7 @@
 // 跑法：node scripts/ui-check.mjs
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { COLUMN_GAP_PX, columnCount, distribute } from "../src/components/home/masonry.js";
+import { balance, COLUMN_GAP_PX, columnCount } from "../src/components/home/masonry.js";
 
 // 断点：<760 1 列，<1240 2 列，其余 3 列（封顶 3：大屏 4 列会压窄卡片，正文难读）
 assert.equal(columnCount(320), 1);
@@ -14,52 +14,57 @@ assert.equal(columnCount(1680), 3);
 assert.equal(columnCount(1868), 3);
 assert.equal(columnCount(2560), 3);
 
-// 列分配：保留学科顺序，切点做 DP，最小化「最高列」。
-// 踩过的坑：贪心（每张卡进当前最矮列）会把两张最高的卡叠在同一列。
-// 线上实况：英语 955px + 地理，最高列 955px 直接超出 1080p 屏，另两列留白 300px。
+// 列分配：自由装箱穷举，最小化「最高列」，同级让各列更均匀。
+// 踩过的坑：① 贪心（每张进当前最矮列）会把两张高卡叠一起；② 保序 DP 在线上
+// 6 科实况里几乎没改善（顺序最优 769px vs 当前 2/2/2 的 772px，差 3px）——
+// 因为英语+物理两张高卡无论怎么切都得占掉大半列。放开顺序后最优 663px。
 {
-  // 两个极端卡：贪心会把 a 单独一列、b 单独一列，最高列取决于最坏那张
   const items = [
     { id: "a", height: 100 },
     { id: "b", height: 20 },
     { id: "c", height: 10 },
   ];
-  const columns = distribute(items, 2, (item) => item.height, 0);
-  // 顺序必须保留（不能让卡片按高度乱跳，老师找科目的顺序会变）
-  assert.deepEqual(
-    columns.flatMap((column) => column.map((item) => item.id)),
-    ["a", "b", "c"],
-  );
-  // 最优切法是 [a] / [b,c]：最高列 100；另一种切法 [a,b]/[c] 最高列 120
-  const heights = columns.map((column) =>
-    column.reduce((sum, item, index) => sum + item.height + (index ? 0 : 0), 0),
-  );
-  assert.equal(Math.max(...heights), 100, "两列时应取「最高列最矮」的切法");
+  const columns = balance(items, 2, (item) => item.height, 0);
+  // 最优放法是 [a] / [b,c]：最高列 100；[a,b]/[c] 是 120
+  const heights = columns.map((column) => column.reduce((sum, item) => sum + item.height, 0));
+  assert.equal(Math.max(...heights), 100, "两列时应取「最高列最矮」的放法");
+  // 列内仍按原顺序（学科顺序自上而下）
+  for (const column of columns) {
+    const ids = column.map((item) => item.id);
+    assert.deepEqual(ids, [...ids].sort((x, y) => x.localeCompare(y)), "列内应保持原顺序");
+  }
 
-  assert.deepEqual(distribute([], 3, () => 1).map((column) => column.length), [0, 0, 0]);
+  assert.deepEqual(balance([], 3, () => 1).map((column) => column.length), [0, 0, 0]);
 
-  // 真实场景回归：就是线上那 6 张卡的高度（含 22.5px 间距）
+  // 线上实况（1868px 宽、29px 字号，截图标尺反推）：
+  // 旧 2/2/2 = 309/772/685（最高 772，中列压到工具栏下）
+  // 保序最优 = 769（几乎没变）；自由装箱 = 685.5/592.5/511.5（最高 685.5）
   const real = [
-    { id: "语文", h: 172 },
-    { id: "数学", h: 172 },
-    { id: "物理", h: 241 },
-    { id: "化学", h: 241 },
-    { id: "英语", h: 855 },
-    { id: "地理", h: 550 },
+    { id: "语文", h: 154 },
+    { id: "数学", h: 155 },
+    { id: "英语", h: 415 },
+    { id: "物理", h: 335 },
+    { id: "化学", h: 153 },
+    { id: "地理", h: 510 },
   ];
-  const laid = distribute(real, 3, (item) => item.h);
+  const laid = balance(real, 3, (item) => item.h);
   const colH = laid.map((column) =>
     column.reduce((sum, item, i) => sum + item.h + (i ? COLUMN_GAP_PX : 0), 0),
   );
-  // 顺序切片只有这几种，最优就是最高列 ≈1306（双语那列），比贪心的 1405 好
+  const tallest = Math.max(...colH);
   assert.ok(
-    Math.max(...colH) < Math.max(...real.map((item) => item.h)) * 2.5,
-    `最高列不该失控（实测 ${Math.round(Math.max(...colH))}px）`,
+    Math.abs(tallest - 685.5) < 1,
+    `线上实况最高列应为 685.5px（实测 ${Math.round(tallest)}px）—— 保序方案只能到 769px`,
   );
-  // 6 张卡摊到 3 列，每列都该有卡（不能空一列留白）
+  // 6 张卡摊到 3 列，每列都该有卡（不能空列留白）
+  assert.ok(laid.every((column) => column.length >= 1), "3 列 6 卡时不该有空列");
+  // 最高的两张卡（英语/地理）不应落在同一列
   assert.ok(
-    laid.every((column) => column.length >= 1),
-    "3 列 6 卡时不该有空列",
+    laid.every((column) => {
+      const ids = column.map((item) => item.id);
+      return !(ids.includes("英语") && ids.includes("地理"));
+    }),
+    "两张最高的卡不该叠在同一列",
   );
 }
 

@@ -74,7 +74,7 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, onUpdated, ref, watch } from "vue";
 import SubjectAddCard from "./SubjectAddCard.vue";
-import { columnCount, distribute } from "./masonry.js";
+import { balance, columnCount } from "./masonry.js";
 
 const props = defineProps({
   sortedItems: { type: Array, required: true },
@@ -111,7 +111,7 @@ function measureCards() {
 }
 
 const columns = computed(() =>
-  distribute(props.sortedItems, columnCountValue.value, cardHeight),
+  balance(props.sortedItems, columnCountValue.value, cardHeight),
 );
 
 // 没量到之前用一个保守估计，量到之后一律用实测值
@@ -136,13 +136,19 @@ onMounted(() => {
   measureCards();
   // 挂载那一帧布局/字体可能还没稳定：隔两帧再补测一次（有变化才写 ref，不会死循环）
   requestAnimationFrame(() => requestAnimationFrame(measureCards));
+  // 网页字体异步到达会改变字宽/换行 → 卡高变，但字体 swap 不触发 Vue 重渲染，必须自己补测
+  document.fonts?.ready.then(measureCards).catch(() => null);
+  document.fonts?.addEventListener?.("loadingdone", measureCards);
 });
 
 // 内容/字号/视口一变，卡高就变了：量一次再重排列（测量值不变时不会触发更新，不死循环）
 onUpdated(measureCards);
 watch(() => props.contentStyle, measureCards, { deep: true });
 
-onBeforeUnmount(() => window.removeEventListener("resize", handleResize));
+onBeforeUnmount(() => {
+  window.removeEventListener("resize", handleResize);
+  document.fonts?.removeEventListener?.("loadingdone", measureCards);
+});
 
 function handleCardClick(key) {
   if (!isEditable(key)) return;
