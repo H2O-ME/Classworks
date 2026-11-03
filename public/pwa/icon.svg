@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!--
+    Classworks 项目图标 2026 重绘
+    语义: 作业看板 —— 深色板上三张错落的作业卡，顶卡带对勾笔触
+    色板与全站一致: 底 #111111 / 卡 #1f1f1f+白描边 / 强调 #aebfdd / 主文 #f3f3f3
+  -->
+  <defs>
+    <clipPath id="round">
+      <rect width="512" height="512" rx="112"/>
+    </clipPath>
+  </defs>
+  <g clip-path="url(#round)">
+    <!-- 深色板底 + 微弱网格线（呼应首页背景） -->
+    <rect width="512" height="512" fill="#111111"/>
+    <g stroke="#ffffff" stroke-opacity="0.05" stroke-width="2">
+      <path d="M0 128h512M0 256h512M0 384h512"/>
+      <path d="M128 0v512M256 0v512M384 0v512"/>
+    </g>
+
+    <!-- 后排卡片（左下，弱化） -->
+    <g transform="rotate(-8 150 330)">
+      <rect x="64" y="256" width="180" height="200" rx="24" fill="#1f1f1f" stroke="#ffffff" stroke-opacity="0.16" stroke-width="4"/>
+      <rect x="92" y="300" width="124" height="14" rx="7" fill="#ffffff" fill-opacity="0.28"/>
+      <rect x="92" y="336" width="94" height="14" rx="7" fill="#ffffff" fill-opacity="0.18"/>
+      <rect x="92" y="372" width="110" height="14" rx="7" fill="#ffffff" fill-opacity="0.12"/>
+    </g>
+
+    <!-- 中排卡片（右下） -->
+    <g transform="rotate(7 340 340)">
+      <rect x="256" y="248" width="192" height="204" rx="24" fill="#1f1f1f" stroke="#ffffff" stroke-opacity="0.2" stroke-width="4"/>
+      <rect x="286" y="292" width="132" height="14" rx="7" fill="#ffffff" fill-opacity="0.3"/>
+      <rect x="286" y="328" width="100" height="14" rx="7" fill="#aebfdd" fill-opacity="0.55"/>
+      <rect x="286" y="364" width="118" height="14" rx="7" fill="#ffffff" fill-opacity="0.16"/>
+    </g>
+
+    <!-- 顶卡（已完成作业，带对勾，视觉焦点） -->
+    <g transform="rotate(-3 240 170)">
+      <rect x="96" y="64" width="240" height="196" rx="28" fill="#191919" stroke="#aebfdd" stroke-opacity="0.65" stroke-width="6"/>
+      <!-- 学科名占位条 -->
+      <rect x="130" y="100" width="88" height="20" rx="10" fill="#f3f3f3"/>
+      <!-- 正文行 -->
+      <rect x="130" y="146" width="164" height="14" rx="7" fill="#ffffff" fill-opacity="0.32"/>
+      <rect x="130" y="180" width="128" height="14" rx="7" fill="#ffffff" fill-opacity="0.2"/>
+      <!-- 对勾: 已完成 -->
+      <path d="M336 96 l26 26 46-52" fill="none" stroke="#aebfdd" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
+  </g>
+</svg>

@@ -280,8 +280,9 @@ function formatContent(content) {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: 0.625rem;
-  line-height: 1.7;
+  /* 段距由页面注入 --line-gap（em，跟随字号缩放）；默认 0.625rem 与旧行为一致 */
+  gap: var(--line-gap, 0.625rem);
+  line-height: inherit;
 }
 
 .content-line {

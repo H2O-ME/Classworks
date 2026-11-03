@@ -7,6 +7,7 @@
     "dev": "vite --host",
     "build": "vite build",
     "preview": "vite preview",
+    "icons": "node scripts/gen-icons.mjs",
     "lint": "eslint . --fix"
   },
   "dependencies": {
@@ -27,6 +28,7 @@
     "eslint": "^9.39.1",
     "eslint-plugin-vue": "^10.6.2",
     "postcss": "^8.5.6",
+    "sharp": "^0.35.5",
     "tailwindcss": "3.4.17",
     "tailwindcss-animate": "^1.0.7",
     "unplugin-auto-import": "^20.3.0",

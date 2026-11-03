@@ -142,9 +142,20 @@ check("空时间戳返回空串", formatTime(0) === "");
   map.set("classworks:settings", JSON.stringify({ fontLevel: 3 }));
   check("新格式 fontLevel 优先", getFontLevel() === 3);
 
+  // 新外观设置：行距/字距/段距 + 越界夹取 + 非法 JSON 回落
+  const { getAppearance, setAppearance, LIMITS } = await import("./settings.js");
+  map.set("classworks:settings", JSON.stringify({ fontLevel: 3, lineHeight: 2.0, letterSpacing: 0.05, paragraphGap: 1.2 }));
+  const app1 = getAppearance();
+  check("外观: 四项都能读回", app1.fontLevel === 3 && app1.lineHeight === 2.0 && app1.letterSpacing === 0.05 && app1.paragraphGap === 1.2);
+
+  map.set("classworks:settings", JSON.stringify({ lineHeight: 99, letterSpacing: -5, paragraphGap: "abc" }));
+  const app2 = getAppearance();
+  check("外观: 越界夹取到上下限", app2.lineHeight === LIMITS.lineHeight.max && app2.letterSpacing === LIMITS.letterSpacing.min);
+  check("外观: 非法数值回落默认", app2.paragraphGap === LIMITS.paragraphGap.def);
+
   map.clear();
-  setFontLevel(5);
-  check("写入后可读回", getFontLevel() === 5);
+  setAppearance({ lineHeight: 1.5 });
+  check("外观: 写入可读回且默认兜底", getAppearance().lineHeight === 1.5 && Number.isFinite(getAppearance().fontLevel));
 
   map.set("classworks:settings", "not json");
   check("非法 JSON 回落 0", getFontLevel() === 0);

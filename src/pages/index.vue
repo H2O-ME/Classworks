@@ -235,7 +235,8 @@ import {
   toGridItems,
   unusedSubjects,
 } from "@/utils/board";
-import { getFontLevel, setFontLevel } from "@/utils/settings";
+import { appearanceStyle, getAppearance, getFontLevel, setFontLevel } from "@/utils/settings";
+import { ensureFont } from "@/utils/fonts";
 
 const { isBoard, canEdit, verifyBoardToken } = useAuth();
 const {
@@ -287,12 +288,21 @@ const emptyTitle = computed(() => (isToday.value ? "今天还没有作业记录"
 const selectedDate = computed(() => parseDateArg(currentDate.value));
 
 const fontLevel = ref(getFontLevel());
+const appearance = ref(getAppearance());
 const fontSize = computed(() => getFontSize(fontLevel.value));
 // 字号档位以 16px 为基准，渲染时换成 rem 才能跟全站 125% 基准一起放大
 // （直接写 px 的话正文会比周围小一圈）。工具栏显示换算后的实际像素。
 const fontScale = 1.25;
 const renderedFontSize = computed(() => Math.round(fontSize.value * fontScale));
-const contentStyle = computed(() => ({ fontSize: `${(fontSize.value / 16).toFixed(4)}rem` }));
+// 外观全量应用：字号 + 字族 + 行距/字距/段距（与设置页预览同一份实现）
+const contentStyle = computed(() => appearanceStyle(appearance.value));
+// 设置页改完保存 → storage 事件跨页同步 + 本页刷新入口
+function refreshAppearance() {
+  appearance.value = getAppearance();
+  fontLevel.value = getFontLevel();
+  ensureFont(appearance.value.fontFamily);
+}
+window.addEventListener("storage", refreshAppearance);
 
 const flashKeys = ref([]);
 const dialogVisible = ref(false);
@@ -425,12 +435,15 @@ onMounted(async () => {
   // 多设备同步：定时静默拉取（EdgeOne 时代 sync.js 的能力，架构迁移时丢了，这里补回）
   setOnRemoteChange(() => flash("其他设备更新了作业，已同步", { icon: "mdi-cloud-sync-outline" }));
   startPolling();
+  // 启动即注入所选字体的 css（按 unicode-range 只拉用到的分片）
+  ensureFont(appearance.value.fontFamily);
 });
 
 onBeforeUnmount(() => {
   document.title = previousTitle;
   clearTimeout(saveTimer.value);
   clearInterval(todayTimer);
+  window.removeEventListener("storage", refreshAppearance);
   dispose();
   closeRollCall();
 });
