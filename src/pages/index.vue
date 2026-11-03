@@ -9,19 +9,21 @@
           <div class="date-pill">
             {{ dateLabel }}
           </div>
-          <template v-if="isBoard">
-            <div class="identity-pill">
-              <i-mdi-account-circle-outline class="identity-icon" />
-              白板模式
-            </div>
-            <router-link
-              class="settings-button"
-              to="/settings"
-              aria-label="打开设置"
-            >
-              <i-mdi-cog-outline class="settings-icon" />
-            </router-link>
-          </template>
+          <div
+            v-if="isBoard"
+            class="identity-pill"
+          >
+            <i-mdi-account-circle-outline class="identity-icon" />
+            白板模式
+          </div>
+          <!-- 设置常驻：字号/字体是本机偏好，只读访客也该能调 -->
+          <router-link
+            class="settings-button"
+            to="/settings"
+            aria-label="打开设置"
+          >
+            <i-mdi-cog-outline class="settings-icon" />
+          </router-link>
         </div>
       </div>
     </header>

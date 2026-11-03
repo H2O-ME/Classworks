@@ -1,0 +1,20 @@
+[package]
+name = "classworks-board"
+version = "0.1.0"
+description = "Classworks 作业看板 - 教室大屏客户端"
+edition = "2021"
+rust-version = "1.77"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+
+[profile.release]
+# 低资源优先：体积小、启动快
+opt-level = "s"
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"
