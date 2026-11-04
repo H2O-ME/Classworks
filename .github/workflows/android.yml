@@ -1,1 +1,114 @@
-name: Android 客户端# 手动触发或推 android-v* 标签。# 安卓构建链（JDK + Android SDK + NDK + Gradle）全在 runner 上装，本机不需要环境。on:  workflow_dispatch:  push:    tags: ["android-v*"]permissions:  contents: writejobs:  apk:    name: 构建 APK    runs-on: ubuntu-latest    steps:      - uses: actions/checkout@v4      - uses: pnpm/action-setup@v4        with:          version: 10      - uses: actions/setup-node@v4        with:          node-version: 22      - uses: actions/setup-java@v4        with:          distribution: temurin          java-version: "17"      - uses: android-actions/setup-android@v3      # NDK 版本与 Tauri v2 模板一致；SDK 34 平台 + build-tools      - name: 安装 Android SDK 组件        run: |          sdkmanager --install "platform-tools" "platforms;android-34" "build-tools;34.0.0" "ndk;27.0.12077973"          echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/27.0.12077973" >> $GITHUB_ENV      - uses: dtolnay/rust-toolchain@stable        with:          targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android      - uses: Swatinem/rust-cache@v2        with:          workspaces: client          key: android      - name: Gradle 缓存        uses: actions/cache@v4        with:          path: |            ~/.gradle/caches            ~/.gradle/wrapper          key: gradle-${{ runner.os }}-${{ hashFiles('client/gen/android/**/*.gradle*') }}          restore-keys: gradle-${{ runner.os }}-      # gen/android 每次由 init 生成，不入库      - name: 生成 Android 工程        working-directory: client        run: pnpm dlx @tauri-apps/cli@^2 android init --ci      # 首次运行没有 keystore 就现场生成，并作为 artifact 存下来（之后存进 Secrets，保证包名签名一致）      - name: 准备签名密钥        working-directory: client/gen/android        env:          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}          STORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}        run: |          if [ -n "$KEYSTORE_BASE64" ]; then            echo "$KEYSTORE_BASE64" | base64 -d > classworks.keystore            echo "使用仓库 Secrets 里的 keystore"            STORE_PASSWORD="$STORE_PASS"          else            keytool -genkeypair -v -keystore classworks.keystore -alias classworks \              -keyalg RSA -keysize 2048 -validity 10000 \              -storepass classworks2026 -keypass classworks2026 \              -dname "CN=Classworks, OU=Class, O=Classworks, L=CN, C=CN"            echo "现场生成 keystore（首次；记得把它存进 Secrets）"            STORE_PASSWORD="classworks2026"            base64 -w0 classworks.keystore > classworks.keystore.b64          fi          cat > keystore.properties <<EOF          storeFile=$(pwd)/classworks.keystore          storePassword=$STORE_PASSWORD          keyAlias=classworks          keyPassword=$STORE_PASSWORD          EOF          echo "KEYSTORE_PASS=$STORE_PASSWORD" >> $GITHUB_ENV      - name: 构建 APK        working-directory: client        run: pnpm dlx @tauri-apps/cli@^2 android build --apk --ci      # 兜底：无论 Gradle 是否套用了 signingConfig，都用 apksigner 再签一次，      # 保证产物一定能装（未签名的 release APK 装不上）      - name: 签名 APK        working-directory: client/gen/android        run: |          APK=$(find app/build/outputs/apk -name "*.apk" | head -1)          echo "原始 APK: $APK"          BT=$(ls -d "$ANDROID_SDK_ROOT"/build-tools/* | tail -1)          mkdir -p signed          "$BT/apksigner" sign --ks classworks.keystore \            --ks-pass "pass:$KEYSTORE_PASS" --key-pass "pass:$KEYSTORE_PASS" \            --ks-key-alias classworks --out "signed/Classworks.apk" "$APK"          "$BT/apksigner" verify --print-certs "signed/Classworks.apk" | head -4      - name: 收集产物        run: |          mkdir -p out          cp client/gen/android/signed/Classworks.apk out/Classworks.apk          ls -la out/          # 首次生成的 keystore 一并上传，方便一次性存进 Secrets          if [ -f client/gen/android/classworks.keystore.b64 ]; then cp client/gen/android/classworks.keystore.b64 out/; fi      - uses: actions/upload-artifact@v4        with:          name: classworks-android-apk          retention-days: 30          path: out/*
+name: Android 客户端
+
+# 手动触发或推 android-v* 标签。
+# 安卓构建链（JDK + Android SDK + NDK + Gradle）全在 runner 上装，本机不需要环境。
+on:
+  workflow_dispatch:
+  push:
+    tags: ["android-v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    name: 构建 APK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: android-actions/setup-android@v3
+
+      - name: 安装 Android SDK 组件
+        run: |
+          sdkmanager --install "platform-tools" "platforms;android-34" "build-tools;34.0.0" "ndk;27.0.12077973"
+          echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/27.0.12077973" >> "$GITHUB_ENV"
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: client
+          key: android
+
+      - name: Gradle 缓存
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('client/gen/android/**/*.gradle*') }}
+          restore-keys: gradle-${{ runner.os }}-
+
+      - name: 生成 Android 工程
+        working-directory: client
+        run: pnpm dlx @tauri-apps/cli@^2 android init --ci
+
+      - name: 准备签名密钥
+        working-directory: client/gen/android
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          STORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > classworks.keystore
+            STORE_PASSWORD="$STORE_PASS"
+            echo "使用仓库 Secrets 里的 keystore"
+          else
+            keytool -genkeypair -v -keystore classworks.keystore -alias classworks \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -storepass classworks2026 -keypass classworks2026 \
+              -dname "CN=Classworks, OU=Class, O=Classworks, L=CN, C=CN"
+            STORE_PASSWORD="classworks2026"
+            base64 -w0 classworks.keystore > classworks.keystore.b64
+            echo "现场生成 keystore（首次；把它存进 Secrets 保证后续签名一致）"
+          fi
+          printf 'storeFile=%s\nstorePassword=%s\nkeyAlias=classworks\nkeyPassword=%s\n' \
+            "$(pwd)/classworks.keystore" "$STORE_PASSWORD" "$STORE_PASSWORD" > keystore.properties
+          echo "KEYSTORE_PASS=$STORE_PASSWORD" >> "$GITHUB_ENV"
+
+      - name: 构建 APK
+        working-directory: client
+        run: pnpm dlx @tauri-apps/cli@^2 android build --apk --ci
+
+      # 兜底：无论 Gradle 是否套用了 signingConfig，都用 apksigner 再签一次，
+      # 保证产物一定能装（未签名的 release APK 装不上）
+      - name: 签名 APK
+        working-directory: client/gen/android
+        run: |
+          APK=$(find app/build/outputs/apk -name "*.apk" | head -1)
+          echo "原始 APK: $APK"
+          BT=$(ls -d "$ANDROID_SDK_ROOT"/build-tools/* | tail -1)
+          mkdir -p signed
+          "$BT/apksigner" sign --ks classworks.keystore \
+            --ks-pass "pass:$KEYSTORE_PASS" --key-pass "pass:$KEYSTORE_PASS" \
+            --ks-key-alias classworks --out "signed/Classworks.apk" "$APK"
+          "$BT/apksigner" verify --print-certs "signed/Classworks.apk" | head -4
+
+      - name: 收集产物
+        run: |
+          mkdir -p out
+          cp client/gen/android/signed/Classworks.apk out/Classworks.apk
+          ls -la out/
+          if [ -f client/gen/android/classworks.keystore.b64 ]; then cp client/gen/android/classworks.keystore.b64 out/; fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: classworks-android-apk
+          retention-days: 30
+          path: out/*
