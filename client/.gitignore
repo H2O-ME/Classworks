@@ -5,3 +5,7 @@ gen/
 updater-key
 updater-key.pub
 
+
+# Tauri Android 工程：每次 CI 由 android init 生成
+gen/
+
