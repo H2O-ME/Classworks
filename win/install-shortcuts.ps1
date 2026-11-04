@@ -1,9 +1,9 @@
-﻿<#
+<#
 .SYNOPSIS
   Classworks 讲台快捷方式安装器（Windows）
 
 .DESCRIPTION
-  在教室电脑上创建「作业看板」桌面快捷方式，用 Edge/Chrome 的应用窗口模式打开
+  在教室电脑上创建「Classworks」桌面快捷方式，用 Edge/Chrome 的应用窗口模式打开
   （没有地址栏、没有标签栏，看起来就是一个独立客户端），可选放进开机启动。
 
   为什么不用打包 exe：看板业务全在网页里，快捷方式直接加载线上地址 —— 发版后
@@ -31,7 +31,7 @@
 param(
   [string]$Url = "https://classworks.tianhw.top",
   [string]$Key = "seewo",
-  [string]$Name = "作业看板",
+  [string]$Name = "Classworks",
   [switch]$Startup,
   [switch]$DryRun
 )
@@ -89,7 +89,7 @@ function New-Shortcut([string]$path) {
   $shortcut.Arguments = $arguments
   $shortcut.WorkingDirectory = Split-Path $browser
   $shortcut.IconLocation = "$browser,0"
-  $shortcut.Description = "Classworks 作业看板"
+  $shortcut.Description = "Classworks"
   $shortcut.Save()
 }
 
@@ -104,5 +104,5 @@ if ($Startup) {
 Write-Host ""
 Write-Host "提示：" -ForegroundColor Cyan
 Write-Host "  · 教室电脑若每天冰点还原，把本目录放到 D 盘等非还原分区，还原后双击 install.cmd 重建即可"
-Write-Host "  · 想把 PWA 装成正式应用（有独立图标、可离线），在浏览器右上角菜单选「安装作业看板」"
+Write-Host "  · 想把 PWA 装成正式应用（有独立图标、可离线），在浏览器右上角菜单选「安装 Classworks」"
 Write-Host "  · 白板口令改了以后要重新运行本脚本（快捷方式里的 key 是写死的）"

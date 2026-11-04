@@ -104,7 +104,7 @@ cd client && pnpm dlx @tauri-apps/cli@^2 build
 # 或推 client-v* 标签自动出包
 ```
 
-产物：`client/target/release/bundle/nsis/作业看板_x.y.z_x64-setup.exe`（安装版）与 `client/target/release/classworks-board.exe`（绿色版，放非还原分区即可）。
+产物：`client/target/release/bundle/nsis/Classworks_x.y.z_x64-setup.exe`（安装版，默认装到 `%LOCALAPPDATA%\Classworks`）与 `client/target/release/classworks-board.exe`（绿色版，放非还原分区即可）。
 
 注意：
 

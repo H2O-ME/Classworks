@@ -333,6 +333,35 @@ function onDateChange() {
   }
 }
 
+/* 窄屏手机（宽度 360–400）:7 个控件按原尺寸会溢出屏幕，压缩并在必要时换行 */
+@media (max-width: 480px) {
+  .floating-toolbar {
+    padding: 0.375rem 0.5rem;
+    max-width: calc(100vw - 0.75rem);
+  }
+
+  .toolbar-buttons {
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.125rem 0.25rem;
+  }
+
+  .toolbar-buttons .tool-btn {
+    width: 2.25rem;
+    height: 2.25rem;
+    min-width: 2.25rem;
+  }
+
+  .font-size-indicator {
+    min-width: 2.75rem;
+    font-size: 0.75rem;
+  }
+
+  .floating-toolbar-container .side-action-btn {
+    bottom: calc(5.75rem + var(--sab, 0px));
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .floating-toolbar,
   .side-action-btn {

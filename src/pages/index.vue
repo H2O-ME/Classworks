@@ -145,10 +145,23 @@
     >
       <DialogContent>
         <div class="pick-card">
-          <DialogTitle class="pick-head">
-            <i-mdi-account-question-outline class="pick-head-icon" />
-            <span>随机点名</span>
-          </DialogTitle>
+          <div class="pick-head-row">
+            <DialogTitle class="pick-head">
+              <i-mdi-account-question-outline class="pick-head-icon" />
+              <span>随机点名</span>
+            </DialogTitle>
+            <!-- 显式关闭键：抽取阶段原先只能点「名单」退回再关，容易误以为卡死 -->
+            <DialogClose as-child>
+              <Button
+                variant="ghost"
+                size="icon"
+                class="pick-close"
+                aria-label="关闭点名"
+              >
+                <i-mdi-close />
+              </Button>
+            </DialogClose>
+          </div>
 
           <div
             v-if="rollStep === 'list'"
@@ -219,7 +232,7 @@ import AppToast from "@/components/AppToast.vue";
 import FloatingToolbar from "@/components/FloatingToolbar.vue";
 import HomeworkEditDialog from "@/components/HomeworkEditDialog.vue";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogClose, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import HomeSkeleton from "@/components/common/HomeSkeleton.vue";
 import HomeworkGrid from "@/components/home/HomeworkGrid.vue";
 import SubjectAddCard from "@/components/home/SubjectAddCard.vue";
@@ -416,16 +429,18 @@ async function confirmCopyToToday() {
 }
 
 function zoom(direction) {
-  const next = direction === "up" ? fontLevel.value + 1 : fontLevel.value - 1;
-  fontLevel.value = Math.max(-4, Math.min(24, next));
-  setFontLevel(fontLevel.value);
+  const next = Math.max(-4, Math.min(24, fontLevel.value + (direction === "up" ? 1 : -1)));
+  fontLevel.value = next;
+  setFontLevel(next);
+  // 正文样式读的是 appearance：写完必须重读，否则工具栏调字号、卡片不动（两处各自为政）
+  appearance.value = getAppearance();
 }
 
 let previousTitle = null;
 
 onMounted(async () => {
   previousTitle = document.title;
-  document.title = "作业看板";
+  document.title = "Classworks";
   // 白板口令必须后端确认后才解锁编辑（?key=see 这类手误不能假可写）
   reverifyBoardToken();
   const requested = formatDateKey(parseDateArg(new URLSearchParams(window.location.search).get("date") || todayKey.value));
@@ -683,6 +698,35 @@ onBeforeUnmount(() => {
   background: #171717;
   box-shadow: 0 1.5rem 3.5rem rgba(0, 0, 0, 0.32);
   text-align: center;
+}
+
+/* 标题行：标题居中 + 右侧关闭键（抽取阶段也要能直接关） */
+.pick-head-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.4rem;
+}
+
+.pick-card .pick-close {
+  position: absolute;
+  top: 50%;
+  right: -0.25rem;
+  width: 2.4rem;
+  height: 2.4rem;
+  padding: 0;
+  border: 0;
+  border-radius: 0.5rem;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.6);
+  box-shadow: none;
+  transform: translateY(-50%);
+}
+
+.pick-card .pick-close:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.9);
 }
 
 .pick-head {

@@ -50,7 +50,7 @@ export default defineConfig(({ mode }) => {
         },
         manifest: {
           id: "/",
-          name: "Classworks \u4f5c\u4e1a\u677f",
+          name: "Classworks",
           short_name: "Classworks",
           description: "\u8bb0\u5f55\u3001\u67e5\u770b\u5e76\u540c\u6b65\u4f5c\u4e1a",
           lang: "zh-CN",

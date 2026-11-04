@@ -27,25 +27,16 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
+          # 缓存 ~/.cargo 与 client/target：第二次起只编改动的 crate
           workspaces: client
+          cache-on-failure: true
+          # 保留历史缓存，避免每次全新编译依赖树
+          save-if: ${{ github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/client-v') }}
 
       # NSIS 打包由 tauri-cli 自己下载，不需要额外装 WiX/NSIS
       - name: 构建（安装包 + 绿色 exe）
         run: pnpm dlx @tauri-apps/cli@^2 build
         working-directory: client
-
-      # 产品名是中文，NSIS 输出文件名带中文前缀；GitHub 上传资产时会丢掉中文，
-      # 变成 "_0.1.0_x64-setup.exe" 这种难看的名字，所以统一改成 ASCII
-      - name: 规范化产物文件名
-        shell: pwsh
-        run: |
-          $setup = Get-ChildItem "client/target/release/bundle/nsis/*.exe" | Select-Object -First 1
-          $version = (Get-Content client/tauri.conf.json -Raw | ConvertFrom-Json).version
-          if ($setup) {
-            $new = "ClassworksBoard_${version}_x64-setup.exe"
-            Copy-Item $setup.FullName "client/target/release/$new"
-            Write-Host "产物: $new"
-          }
 
       - uses: actions/upload-artifact@v4
         with:
@@ -53,20 +44,20 @@ jobs:
           retention-days: 30
           path: |
             client/target/release/classworks-board.exe
-            client/target/release/ClassworksBoard_*_x64-setup.exe
+            client/target/release/bundle/nsis/*.exe
 
       - name: 附加到 GitHub Release
         if: startsWith(github.ref, 'refs/tags/client-v')
         uses: softprops/action-gh-release@v2
         with:
-          name: 作业看板客户端 ${{ github.ref_name }}
+          name: Classworks 客户端 ${{ github.ref_name }}
           body: |
             Windows 客户端（未签名，首次运行会提示「Windows 已保护你的电脑」，点「更多信息 → 仍要运行」）。
 
-            - `ClassworksBoard_x.y.z_x64-setup.exe` —— 安装版（开始菜单 + 卸载项，适合非还原机器）
+            - `Classworks_x.y.z_x64-setup.exe` —— 安装版（开始菜单 + 卸载项，适合非还原机器）
             - `classworks-board.exe` —— 绿色版，放非还原分区（如 `D:\Classworks\`）直接双击，适合冰点还原机器
 
             客户端只加载线上看板，**网页发版后客户端自动就是新版**，不需要重新下载。
           files: |
-            client/target/release/ClassworksBoard_*_x64-setup.exe
+            client/target/release/bundle/nsis/*.exe
             client/target/release/classworks-board.exe
