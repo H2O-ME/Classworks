@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Classworks",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "identifier": "top.tianhw.classworks",
   "build": {
     "frontendDist": "./web"
@@ -29,7 +29,6 @@
   "bundle": {
     "active": true,
     "targets": ["nsis"],
-    // 出更新包需要的 .sig 与 latest.json 由 CI 生成（TAURI_SIGNING_PRIVATE_KEY 注入）
     "createUpdaterArtifacts": true,
     "icon": [
       "icons/32x32.png",
@@ -47,9 +46,7 @@
   },
   "plugins": {
     "updater": {
-      // 更新清单放在自己服务器上：仓库是私有的，GitHub Release 匿名拉不到
       "endpoints": ["https://classworks.tianhw.top/updates/latest.json"],
-      // 校验安装包用的 minisign 公钥（私钥在 GitHub Secrets，别弄丢，丢了以后发不了更新）
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDA1NTY5MDI0OTU4NDcxNTcKUldSWGNZU1ZKSkJXQmNyaTNsVjEzay9seVZxS0dMaDhNcDNWUkc3SU1ZN2JDcmZZbFlHZUQ4UUoK"
     }
   }
