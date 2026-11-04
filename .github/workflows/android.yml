@@ -125,3 +125,19 @@ jobs:
           name: classworks-android-apk
           retention-days: 30
           path: out/*
+
+      # 推 android-v* 标签时挂 Release，手机可直接下载安装
+      # 注意：只传 APK，keystore.b64 绝不能进 Release（那是签名私钥）
+      - name: 附加到 GitHub Release
+        if: startsWith(github.ref, 'refs/tags/android-v')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Classworks Android ${{ github.ref_name }}
+          body: |
+            Android 客户端（Tauri 薄壳，加载线上看板）。
+
+            - 直接安装 `Classworks.apk`；首次需在系统设置里允许「未知来源应用」
+            - 要求 **Android 7.0+**（minSdk 24）
+            - 自签证书，非应用商店分发；升级需覆盖安装同一签名的新版
+            - 页面内容自动更新（网页发版即生效），APK 自身改版才需重新安装
+          files: out/Classworks.apk
