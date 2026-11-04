@@ -10,6 +10,11 @@ on:
 permissions:
   contents: write
 
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   apk:
     name: 构建 APK

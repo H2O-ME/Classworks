@@ -11,6 +11,12 @@ on:
 permissions:
   contents: write
 
+
+concurrency:
+  # 同一标签/分支只跑一个：重复触发直接取消旧的，别把 runner 队列塞满
+  group: client-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     name: 构建 Tauri 客户端
