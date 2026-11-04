@@ -1,6 +1,6 @@
 [package]
 name = "classworks-board"
-version = "0.2.1"
+version = "0.2.2"
 description = "Classworks 教室大屏客户端"
 edition = "2021"
 rust-version = "1.77"
@@ -11,6 +11,7 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 tauri = { version = "2", features = [] }
 tauri-plugin-updater = "2"
+serde_json = "1"
 
 [profile.release]
 # 编译速度优先（CI 每次出包都要全量编）：
