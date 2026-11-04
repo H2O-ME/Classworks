@@ -8,6 +8,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "icons": "node scripts/gen-icons.mjs",
+    "check:client": "node scripts/check-client.mjs",
     "lint": "eslint . --fix"
   },
   "dependencies": {

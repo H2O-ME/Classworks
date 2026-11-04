@@ -109,6 +109,8 @@ cd client && pnpm dlx @tauri-apps/cli@^2 build
 注意：
 
 - **未签名**：首次运行会弹「Windows 已保护你的电脑」，点「更多信息 → 仍要运行」；个别杀软可能误报，需加白名单
+- **自动更新**：启动后台查 `https://classworks.tianhw.top/updates/latest.json`，有新版静默下载+校验签名+安装+重启。发新版 = 推 `client-v*` 标签，CI 自动把 `latest.json` 与安装包发到服务器
+- **安卓**：`minSdkVersion` 显式设为 24（Android 7.0），更老的设备装不上；APK 未签名证书校验见 `client/SIGNING.md`
 - 客户端里白板口令写在 `client/tauri.conf.json` 的窗口 `url` 上（`?key=seewo`），改口令要重新出包；不想重新出包就用 `win/install.cmd` 的快捷方式方案
 - 冰点还原：把绿色 exe 放非还原分区（如 `D:\Classworks\`）
 - 不需要离线使用就不必装：PWA / `--app` 快捷方式零安装、占用更低
