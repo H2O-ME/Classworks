@@ -37,6 +37,47 @@ jobs:
       - name: 构建（安装包 + 绿色 exe）
         run: pnpm dlx @tauri-apps/cli@^2 build
         working-directory: client
+        env:
+          # 更新包签名私钥：没它就不会产出 .sig，客户端更新校验会失败
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+
+      # 更新清单放自己服务器：仓库是私有的，匿名拉不到 GitHub Release 资产
+      - name: 生成 latest.json
+        shell: pwsh
+        run: |
+          $version = (Get-Content client/tauri.conf.json -Raw | ConvertFrom-Json).version
+          $setup = Get-ChildItem "client/target/release/bundle/nsis/*.exe" | Select-Object -First 1
+          if (-not $setup) { throw "找不到安装包" }
+          $sigPath = "$($setup.FullName).sig"
+          if (-not (Test-Path $sigPath)) { throw "缺少 $sigPath（TAURI_SIGNING_PRIVATE_KEY 未生效？）" }
+          $name = "Classworks_${version}_x64-setup.exe"
+          $payload = [ordered]@{
+            version   = $version
+            notes     = "Classworks 客户端 $version"
+            pub_date  = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+            platforms = [ordered]@{
+              "windows-x86_64" = [ordered]@{
+                signature = (Get-Content $sigPath -Raw).Trim()
+                url       = "https://classworks.tianhw.top/updates/$name"
+              }
+            }
+          }
+          $payload | ConvertTo-Json -Depth 6 | Set-Content "client/target/release/latest.json" -Encoding utf8NoBOM
+          Copy-Item $setup.FullName "client/target/release/$name"
+          Write-Host "更新清单: version=$version"
+
+      - name: 发布更新清单与安装包到服务器
+        if: startsWith(github.ref, 'refs/tags/client-v')
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          port: ${{ secrets.SSH_PORT }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.DEPLOY_KEY }}
+          source: "client/target/release/latest.json,client/target/release/*_x64-setup.exe"
+          target: "/www/wwwroot/classworks/updates"
+          strip_components: 4
+          overwrite: true
 
       - uses: actions/upload-artifact@v4
         with:
