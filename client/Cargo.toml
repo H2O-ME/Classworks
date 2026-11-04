@@ -1,6 +1,6 @@
 [package]
 name = "classworks-board"
-version = "0.1.1"
+version = "0.1.2"
 description = "Classworks 作业看板 - 教室大屏客户端"
 edition = "2021"
 rust-version = "1.77"

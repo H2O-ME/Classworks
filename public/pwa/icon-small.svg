@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!--
+    小尺寸专用图标（16/24/32px：任务栏、Alt-Tab、标题栏、浏览器标签）
+    与全站色板一致：#111111 底 / #f3f3f3 浅色实体（同主按钮）/ #aebfdd 蓝灰强调
+    小尺寸只做两件事：拉开明暗对比、放大笔画。不再画三张卡和细描边（16px 会糊成黑块）。
+  -->
+  <rect width="32" height="32" rx="7.5" fill="#111111"/>
+  <!-- 主卡：浅色实底，靠"深底上的亮块"在深色任务栏/浅色桌面都能立住 -->
+  <rect x="4.5" y="6" width="23" height="18.5" rx="3.2" fill="#f3f3f3"/>
+  <!-- 标题条（对应作业卡学科名）-->
+  <rect x="8" y="9.8" width="10.5" height="2.8" rx="1.4" fill="#111111"/>
+  <!-- 正文两行 -->
+  <rect x="8" y="15" width="15" height="2.4" rx="1.2" fill="#7c8aa4"/>
+  <rect x="8" y="19.6" width="11" height="2.4" rx="1.2" fill="#111111" fill-opacity="0.5"/>
+  <!-- 完成对勾：蓝灰强调色加深一档，浅底上也读得出 -->
+  <path d="M19.4 20.8 l2.6 2.7 l4.7 -5.3" fill="none" stroke="#6b7fa6" stroke-width="2.7" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
