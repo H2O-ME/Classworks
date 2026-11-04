@@ -113,15 +113,20 @@ jobs:
           echo "${{ secrets.DEPLOY_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
 
-      - name: 上传前端产物与 compose 配置
+      - name: 部署（过期提交自动跳过）
         run: |
+          # 守卫：排队期间又推了新提交时，这个 run 的代码已经过期。
+          # 若照常部署，会把线上覆盖回旧版本 —— 比不部署更糟。
+          LATEST=$(git ls-remote "https://github.com/${{ github.repository }}.git" refs/heads/main | cut -f1)
+          if [ "$LATEST" != "$GITHUB_SHA" ]; then
+            echo "跳过部署：本 run 的提交 $GITHUB_SHA 已不是 main 最新（$LATEST）"
+            exit 0
+          fi
+
           scp -i ~/.ssh/deploy_key -P ${{ secrets.SSH_PORT }} \
             dist.tgz ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/opt/classworks/frontend-new.tgz
           scp -i ~/.ssh/deploy_key -P ${{ secrets.SSH_PORT }} \
             server/docker-compose.yml ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/opt/classworks/server/docker-compose.yml
-
-      - name: 执行部署（后端拉新镜像 + 前端原子切换）
-        run: |
           ssh -i ~/.ssh/deploy_key -p ${{ secrets.SSH_PORT }} \
             ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} \
             'set -e
