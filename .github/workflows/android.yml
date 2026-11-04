@@ -72,6 +72,17 @@ jobs:
         working-directory: client
         run: pnpm dlx @tauri-apps/cli@^2 android init --ci
 
+      # init 生成的是默认 Tauri 图标；用仓库里准备好的自适应图标覆盖
+      # （android-icons/android/* 由 tauri icon 生成，含 mipmap 各密度 + adaptive xml）
+      - name: 应用应用图标
+        run: |
+          if [ ! -d client/android-icons/android ]; then
+            echo "client/android-icons/android 不存在，保持默认图标" >&2
+          else
+            cp -r client/android-icons/android/. client/gen/android/app/src/main/res/
+            ls client/gen/android/app/src/main/res/mipmap-xxxhdpi/
+          fi
+
       - name: 准备签名密钥
         working-directory: client/gen/android
         env:

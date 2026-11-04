@@ -333,32 +333,42 @@ function onDateChange() {
   }
 }
 
-/* 窄屏手机（宽度 360–400）:7 个控件按原尺寸会溢出屏幕，压缩并在必要时换行 */
+/* 窄屏手机：换行会变成"两行折叠"很难看，改成单行铺满 + 隐藏 px 数字（设置页可看） */
 @media (max-width: 480px) {
   .floating-toolbar {
+    left: 0.5rem;
+    right: 0.5rem;
+    bottom: calc(0.5rem + var(--sab, 0px));
+    max-width: none;
     padding: 0.375rem 0.5rem;
-    max-width: calc(100vw - 0.75rem);
+    transform: none;
+    /* 桌面端的升起动画依赖 translateX(-50%)，手机上已不用居中变换，直接关掉 */
+    animation: none;
+  }
+
+  .floating-toolbar:hover {
+    transform: none;
   }
 
   .toolbar-buttons {
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: 0.125rem 0.25rem;
+    flex-wrap: nowrap;
+    justify-content: space-between;
+    gap: 0.125rem;
   }
 
   .toolbar-buttons .tool-btn {
-    width: 2.25rem;
-    height: 2.25rem;
-    min-width: 2.25rem;
+    width: 2.5rem;
+    height: 2.5rem;
+    min-width: 2.5rem;
   }
 
+  /* px 数字在手机上既挤又没人看，设置页里有精确值 */
   .font-size-indicator {
-    min-width: 2.75rem;
-    font-size: 0.75rem;
+    display: none;
   }
 
   .floating-toolbar-container .side-action-btn {
-    bottom: calc(5.75rem + var(--sab, 0px));
+    bottom: calc(4.25rem + var(--sab, 0px));
   }
 }
 

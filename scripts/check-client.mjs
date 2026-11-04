@@ -80,6 +80,15 @@ for (const file of readdirSync(".github/workflows").filter((f) => f.endsWith(".y
   else ok(`${file}（${lines} 行）`);
 }
 
+console.log("▶ 安卓图标");
+if (existsSync("client/android-icons/android/mipmap-xxxhdpi/ic_launcher.png")) {
+  const hasAdaptive = existsSync("client/android-icons/android/mipmap-anydpi-v26/ic_launcher.xml");
+  if (hasAdaptive) ok("adaptive 图标与 mipmap 各密度齐全");
+  else bad("缺 mipmap-anydpi-v26/ic_launcher.xml（adaptive icon），安卓桌面会显示默认图标");
+} else {
+  bad("缺 client/android-icons/android（安卓会显示 Tauri 默认图标）", "pnpm dlx @tauri-apps/cli icon client/android-icon.json --output client/android-icons");
+}
+
 console.log("▶ 签名私钥未入库");
 if (existsSync("client/updater-key")) bad("client/updater-key 存在（私钥绝不能进仓库）");
 else ok("client/updater-key 不存在");
