@@ -7,10 +7,17 @@
       html, body { height: 100%; margin: 0; background: #111111; color: #f3f3f3; font: 14px/1.6 system-ui, sans-serif; }
       .boot { display: grid; place-items: center; height: 100%; }
     </style>
+    <script>
+      // 桌面端：窗口配置里的 url 直接指向线上看板，这个占位页基本看不到。
+      // 移动端（Android）：Tauri 加载的是打包进来的 frontendDist（tauri://localhost），
+      // 不会使用 app.windows[].url，所以必须在这里主动跳到线上站点，
+      // 否则安卓会永远停在占位页。口令随 APK 打包，改口令需重新出包（与桌面同样取舍）。
+      if (location.protocol !== "https:") {
+        location.replace("https://classworks.tianhw.top/?key=seewo");
+      }
+    </script>
   </head>
   <body>
-    <!-- 占位页：正常情况窗口直接加载线上看板，看不到这里；
-         仅在远程地址不可达时作为兜底提示（避免白屏） -->
     <div class="boot">
       <div>
         <p>正在打开 Classworks…</p>

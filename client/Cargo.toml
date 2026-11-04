@@ -1,6 +1,6 @@
 [package]
 name = "classworks-board"
-version = "0.2.3"
+version = "0.2.4"
 description = "Classworks 教室大屏客户端"
 edition = "2021"
 rust-version = "1.77"
@@ -15,8 +15,12 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 
 [dependencies]
 tauri = { version = "2", features = [] }
-tauri-plugin-updater = "2"
+# serde_json 是 generate_context! 宏展开所需，所有平台都要（不加会报 E0433）
 serde_json = "1"
+
+# updater 只支持桌面端：按 target 引入，安卓构建时不会拉这个 crate
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+tauri-plugin-updater = "2"
 
 [profile.release]
 # 编译速度优先（CI 每次出包都要全量编）：

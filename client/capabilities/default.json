@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "薄壳需要核心窗口能力与更新检查",
+  "description": "薄壳只需要核心窗口能力",
   "windows": ["main"],
-  "permissions": ["core:default", "updater:default"]
+  "permissions": ["core:default"]
 }
